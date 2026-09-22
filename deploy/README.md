@@ -86,18 +86,44 @@ Never use `git add -f` on it.
    ```shell
    git clone https://github.com/Asaya-01/Google-Ads-MCP.git
    cd Google-Ads-MCP
-   cp deploy/config.env.example deploy/config.env
-   cloudshell edit deploy/config.env
    ```
 
-3. Fill in the values in the editor that opens, save, then run:
+3. Write the config file, then deploy — see below.
 
-   ```shell
-   ./deploy/cloudrun.sh
-   ```
+### Writing the config file
+
+Paste this whole block **into the terminal** with your own values substituted,
+then press Enter. Keep `ENDOFCONFIG` flush against the left margin with no
+spaces before it, or the terminal will sit waiting at a `>` prompt.
+
+```shell
+cat > deploy/config.env <<'ENDOFCONFIG'
+GOOGLE_PROJECT_ID=your-project-id
+GOOGLE_ADS_DEVELOPER_TOKEN=your-developer-token
+GOOGLE_ADS_MCP_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_ADS_MCP_OAUTH_CLIENT_SECRET=your-client-secret
+GOOGLE_ADS_LOGIN_CUSTOMER_ID=your-manager-id-or-leave-blank
+REGION=us-central1
+SERVICE=google-ads-mcp
+AR_REPO=mcp-servers
+ENDOFCONFIG
+```
+
+Confirm it landed with `cat deploy/config.env` before going on.
+
+> Prefer a text editor? `cloudshell edit deploy/config.env` opens one — but
+> paste into the **editor pane**, not the terminal. Config lines pasted into a
+> terminal get run as commands, which gives `command not found` errors and
+> leaves the file untouched.
+
+### Deploying
+
+```shell
+./deploy/cloudrun.sh
+```
 
 <details>
-<summary>Prefer your own machine?</summary>
+<summary>Prefer your own machine to Cloud Shell?</summary>
 
 Install the [gcloud CLI](https://cloud.google.com/sdk/docs/install), then:
 
