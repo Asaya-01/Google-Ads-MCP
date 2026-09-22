@@ -196,6 +196,48 @@ each time you deploy.
 - Firestore entries are not expired automatically by this storage backend. It's
   a small amount of data, but worth a periodic cleanup if this runs for years.
 
+## What this changes in your Google Cloud project
+
+Useful when asking an administrator for access. Everything the deploy does is
+**additive** — it creates new resources and never edits or deletes anything
+that already exists in the project.
+
+**Created:**
+
+| Resource | Detail |
+|---|---|
+| 5 APIs enabled | Google Ads, Cloud Run, Cloud Build, Artifact Registry, Firestore |
+| Firestore `(default)` database | Only if one does not already exist. Stores sign-in tokens, nothing else |
+| Artifact Registry repo `mcp-servers` | Holds the built container image |
+| Cloud Run service `google-ads-mcp` | The server itself |
+| One IAM binding | Grants `roles/datastore.user` to the project's default compute service account |
+
+**Not touched:** existing data, BigQuery datasets, other services, other IAM
+bindings, and the Google Ads account itself.
+
+Two things worth knowing before you run it:
+
+- **The Firestore database location is permanent.** A project has exactly one
+  `(default)` Firestore database and its location can never be changed. If the
+  project might need Firestore elsewhere later, pick the location deliberately
+  via `FIRESTORE_LOCATION`. Existing databases are left alone.
+- **The IAM binding widens the default compute service account.** Other
+  workloads in the project run as that same account, so they gain Firestore
+  read/write too. To avoid that, create a dedicated service account, set
+  `RUNTIME_SA` to it, and deploy with `--service-account`.
+
+Also note the developer token and OAuth client secret are stored as plain
+environment variables on the Cloud Run service, so anyone who can view that
+service in the Cloud Console can read them. Move them to Secret Manager if that
+matters for your organisation.
+
+### The Google Ads side is read-only
+
+The server exposes three tools — `search`, `get_resource_metadata` and
+`list_accessible_customers` — and there are no mutate calls anywhere in its
+source. It cannot create, pause, or edit campaigns, budgets, or any other
+Google Ads entity. Connecting it cannot change your advertising.
+
 ## Permissions
 
 Deploying needs more than read access to the Google Cloud project. The simplest
