@@ -141,6 +141,25 @@ anything fails.
 
 When it finishes it prints two URLs. Keep them.
 
+Cloud Run exposes the same service under two hostnames — a
+`<service>-<project-number>.<region>.run.app` form and an older
+`<service>-<hash>-<region>.a.run.app` form. They are interchangeable, but the
+server signs OAuth redirects using whichever one the script recorded, so use
+**the URLs the script printed** in both of the next two steps rather than the
+one `gcloud run deploy` echoed.
+
+### Check the service is running
+
+```shell
+curl -sS -o /dev/null -w "%{http_code}\n" https://YOUR-SERVICE-URL.a.run.app/mcp
+```
+
+`401` is the expected, healthy answer: the server is up and is refusing an
+unauthenticated request, which is exactly what it should do. A `5xx` means the
+container is failing to start — check the logs with
+`gcloud run services logs read google-ads-mcp --region us-central1 --limit 50`
+before going further.
+
 ## Step 4 — Add the redirect URI
 
 Back in **APIs & Services → Credentials**, open the Web application client from
