@@ -1,0 +1,22 @@
+# Keep credentials out of the image. The Dockerfile does `COPY . .`, so without
+# this entry a local `docker build` would bake the developer token and OAuth
+# client secret into an image layer, where they persist even if the file is
+# deleted in a later layer. Cloud Build is covered by .gcloudignore falling back
+# to .gitignore; a local build has no such protection.
+deploy/config.env
+.env
+google-ads.yaml
+.mcp.json
+
+# Build context hygiene
+.git
+.github
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.nox
+*.egg-info
+build
+dist

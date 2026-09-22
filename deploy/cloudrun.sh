@@ -137,8 +137,60 @@ gcloud projects add-iam-policy-binding "$GOOGLE_PROJECT_ID" \
   --condition=None --quiet >/dev/null
 echo "    Granted roles/datastore.user to ${RUNTIME_SA}"
 
-echo "==> [5/7] Building the container image with Cloud Build"
-gcloud builds submit "$REPO_DIR" --tag "$IMAGE" --quiet
+build_with_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "ERROR: docker is not available, so the local build cannot be used." >&2
+    return 1
+  fi
+  echo "    Building locally with Docker and pushing to Artifact Registry."
+  gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+  docker build -t "$IMAGE" "$REPO_DIR"
+  docker push "$IMAGE"
+}
+
+# BUILD_METHOD: auto (default) tries Cloud Build and falls back to a local
+# Docker build if Cloud Build is blocked from its staging bucket; 'docker' and
+# 'cloudbuild' force one or the other.
+BUILD_METHOD="${BUILD_METHOD:-auto}"
+
+echo "==> [5/7] Building the container image (method: ${BUILD_METHOD})"
+if [[ "$BUILD_METHOD" == "docker" ]]; then
+  build_with_docker
+else
+  BUILD_ERR="$(mktemp)"
+  trap 'rm -f "$API_ERR" "$BUILD_ERR"' EXIT
+  if ! gcloud builds submit "$REPO_DIR" --tag "$IMAGE" --quiet 2>&1 | tee "$BUILD_ERR"; then :; fi
+  if grep -qE 'forbidden from accessing the bucket|does not have storage\.|storage\.buckets\.(create|get)|PERMISSION_DENIED.*bucket' "$BUILD_ERR"; then
+    if [[ "$BUILD_METHOD" == "cloudbuild" ]]; then
+      cat >&2 <<'EOM'
+
+========================================================================
+STOPPED: Cloud Build cannot reach its staging bucket.
+
+`gcloud builds submit` uploads the source to gs://<project>_cloudbuild, and
+your account is not allowed to use that bucket. roles/cloudbuild.builds.editor
+does not cover it.
+
+Two ways forward:
+  1. Ask your administrator for roles/storage.admin on the project, then
+     re-run this script.
+  2. Skip Cloud Build entirely and build locally instead:
+       BUILD_METHOD=docker ./deploy/cloudrun.sh
+     This needs no extra permissions - it builds the image on this machine and
+     pushes it straight to Artifact Registry, which you can already write to.
+========================================================================
+EOM
+      exit 1
+    fi
+    echo ""
+    echo "    Cloud Build is blocked from its staging bucket; building locally instead."
+    echo "    (No extra permissions needed - pushing straight to Artifact Registry.)"
+    build_with_docker
+  elif ! gcloud artifacts docker images describe "$IMAGE" --quiet >/dev/null 2>&1; then
+    echo "ERROR: the image was not produced. See the build output above." >&2
+    exit 1
+  fi
+fi
 
 echo "==> [6/7] Deploying to Cloud Run"
 # Note: --allow-unauthenticated is required. Claude's servers must be able to

@@ -256,11 +256,21 @@ broad, these are the individual roles required:
 | `roles/storage.admin` | Possibly needed — see below |
 
 `gcloud builds submit` uploads the source to a Cloud Storage staging bucket
-(`gs://<project>_cloudbuild`). If that bucket does not exist yet, creating it
-needs Storage permissions that `roles/cloudbuild.builds.editor` does not
-include. On a project where Cloud Build has run before, the bucket already
-exists and no extra role is required — so only ask for `roles/storage.admin` if
-the build step fails with a storage or bucket permission error.
+(`gs://<project>_cloudbuild`), which `roles/cloudbuild.builds.editor` does not
+grant access to. If the build step fails with *"forbidden from accessing the
+bucket"*, you do **not** have to ask for another role — the script falls back
+automatically to building the image locally and pushing it straight to Artifact
+Registry, which `roles/artifactregistry.admin` already allows.
+
+Force either method with `BUILD_METHOD`:
+
+```shell
+BUILD_METHOD=docker ./deploy/cloudrun.sh      # always build locally
+BUILD_METHOD=cloudbuild ./deploy/cloudrun.sh  # never fall back
+```
+
+The local build needs a working Docker, which Cloud Shell has. `roles/storage.admin`
+remains the alternative if you would rather use Cloud Build.
 
 If getting these on an existing shared project is slow, creating a **new**
 Google Cloud project is often faster — you are automatically its Owner. You
