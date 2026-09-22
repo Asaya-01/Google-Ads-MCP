@@ -49,7 +49,7 @@ fi
 echo "==> Project: ${GOOGLE_PROJECT_ID}   Region: ${REGION}   Service: ${SERVICE}"
 gcloud config set project "$GOOGLE_PROJECT_ID" --quiet
 
-echo "==> [1/6] Enabling required APIs (can take a minute the first time)"
+echo "==> [1/7] Enabling required APIs (can take a minute the first time)"
 gcloud services enable \
   googleads.googleapis.com \
   run.googleapis.com \
@@ -58,14 +58,25 @@ gcloud services enable \
   firestore.googleapis.com \
   --quiet
 
-echo "==> [2/6] Ensuring a Firestore database exists (stores sign-in tokens)"
+echo "==> [2/7] Ensuring a Firestore database exists (stores sign-in tokens)"
+# Firestore's valid locations are not the same list as Cloud Run's regions, so
+# the deploy region is only a default here. If it is rejected, show the real
+# list rather than failing with a bare error.
+FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-$REGION}"
 if gcloud firestore databases describe --database='(default)' --quiet >/dev/null 2>&1; then
   echo "    Firestore database already exists, skipping."
-else
-  gcloud firestore databases create --location="$REGION" --quiet
+elif ! gcloud firestore databases create --location="$FIRESTORE_LOCATION" --quiet; then
+  echo ""
+  echo "ERROR: Could not create a Firestore database in '${FIRESTORE_LOCATION}'."
+  echo "Firestore supports its own set of locations. Valid values are:"
+  gcloud firestore locations list --format='value(locationId)' 2>/dev/null || true
+  echo ""
+  echo "Pick one, then re-run with it set, for example:"
+  echo "  FIRESTORE_LOCATION=nam5 ./deploy/cloudrun.sh"
+  exit 1
 fi
 
-echo "==> [3/6] Ensuring the Artifact Registry repository exists"
+echo "==> [3/7] Ensuring the Artifact Registry repository exists"
 if gcloud artifacts repositories describe "$AR_REPO" --location="$REGION" --quiet >/dev/null 2>&1; then
   echo "    Repository '${AR_REPO}' already exists, skipping."
 else
@@ -73,10 +84,21 @@ else
     --repository-format=docker --location="$REGION" --quiet
 fi
 
-echo "==> [4/6] Building the container image with Cloud Build"
+echo "==> [4/7] Granting the Cloud Run service account access to Firestore"
+# Done before the deploy so the service can reach Firestore the moment it
+# starts, rather than erroring on the first sign-in while IAM propagates.
+PROJECT_NUMBER="$(gcloud projects describe "$GOOGLE_PROJECT_ID" --format='value(projectNumber)')"
+RUNTIME_SA="${RUNTIME_SA:-${PROJECT_NUMBER}-compute@developer.gserviceaccount.com}"
+gcloud projects add-iam-policy-binding "$GOOGLE_PROJECT_ID" \
+  --member="serviceAccount:${RUNTIME_SA}" \
+  --role="roles/datastore.user" \
+  --condition=None --quiet >/dev/null
+echo "    Granted roles/datastore.user to ${RUNTIME_SA}"
+
+echo "==> [5/7] Building the container image with Cloud Build"
 gcloud builds submit "$REPO_DIR" --tag "$IMAGE" --quiet
 
-echo "==> [5/6] Deploying to Cloud Run"
+echo "==> [6/7] Deploying to Cloud Run"
 # Note: --allow-unauthenticated is required. Claude's servers must be able to
 # reach the endpoint; access is then controlled by the server's own Google
 # OAuth sign-in, which only admits users who already have Google Ads access.
@@ -102,18 +124,13 @@ gcloud run deploy "$SERVICE" \
 SERVICE_URL="$(gcloud run services describe "$SERVICE" \
   --region "$REGION" --format='value(status.url)')"
 
-echo "==> [6/6] Setting the service's own base URL and granting Firestore access"
+echo "==> [7/7] Setting the service's own base URL"
+# The server needs to know its own public address to build the OAuth redirect,
+# and that address only exists once Cloud Run has created the service.
 gcloud run services update "$SERVICE" \
   --region "$REGION" \
   --update-env-vars="GOOGLE_ADS_MCP_BASE_URL=${SERVICE_URL}" \
   --quiet
-
-PROJECT_NUMBER="$(gcloud projects describe "$GOOGLE_PROJECT_ID" --format='value(projectNumber)')"
-RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-gcloud projects add-iam-policy-binding "$GOOGLE_PROJECT_ID" \
-  --member="serviceAccount:${RUNTIME_SA}" \
-  --role="roles/datastore.user" \
-  --condition=None --quiet >/dev/null
 
 cat <<EOF
 
