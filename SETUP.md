@@ -5,6 +5,11 @@ Step-by-step install for connecting the Google Ads MCP server to an MCP client
 [README](README.md) is the full reference; this file is the short path that
 matches how we run it.
 
+> **Deploying to Cloud Run instead?** That's the setup that makes the tools
+> available in Claude on the web and on mobile. Follow
+> [`deploy/README.md`](deploy/README.md) — it replaces steps 1 and 2 below and
+> needs a **Web application** OAuth client rather than a Desktop one.
+
 Everything below is read-only against Google Ads — the server exposes `search`,
 `get_resource_metadata` and `list_accessible_customers`, and no write tools.
 

@@ -26,6 +26,12 @@ classifiers = [
     "Programming Language :: Python"
 ]
 
+# Pin package discovery to the ads_mcp package. Without this, setuptools'
+# flat-layout auto-discovery treats any new top-level directory (such as
+# deploy/) as a second package and refuses to build.
+[tool.setuptools.packages.find]
+include = ["ads_mcp*"]
+
 [project.optional-dependencies]
 dev = [
     "black",

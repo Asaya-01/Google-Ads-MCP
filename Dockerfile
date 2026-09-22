@@ -12,7 +12,9 @@ COPY . .
 
 # Install the project and its dependencies
 # We use --system to install into the system Python environment in the container
-RUN uv pip install --system .
+# The [firestore] extra is required for persisting OAuth tokens across Cloud Run
+# instances and cold starts (GOOGLE_ADS_MCP_STORAGE_TYPE=firestore).
+RUN uv pip install --system .[firestore]
 
 # Expose port 8080 (default for Cloud Run)
 EXPOSE 8080

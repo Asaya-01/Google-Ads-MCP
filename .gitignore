@@ -44,3 +44,4 @@ venv/
 # Local MCP client config may contain account IDs / credential paths
 .mcp.json
 google-ads.yaml
+deploy/config.env

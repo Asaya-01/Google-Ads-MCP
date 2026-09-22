@@ -23,6 +23,11 @@ Kept deliberately minimal so future syncs stay easy:
    [`.mcp.json.example`](.mcp.json.example).
 4. Added a three-line banner at the top of `README.md` pointing at those two
    documents. The rest of the README is untouched.
+5. `Dockerfile`: install `.[firestore]` instead of `.` so the Cloud Run
+   deployment can persist OAuth tokens across cold starts. Upstream's README
+   tells you to make this exact edit for a Firestore-backed deployment.
+6. Added `deploy/` — `cloudrun.sh` (idempotent Cloud Run deploy),
+   `config.env.example`, and a walkthrough in `deploy/README.md`.
 
 No file under `ads_mcp/` or `tests/` has been modified.
 
