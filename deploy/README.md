@@ -253,6 +253,14 @@ broad, these are the individual roles required:
 | `roles/datastore.owner` | Create the Firestore database |
 | `roles/iam.serviceAccountUser` | Run the service as its service account |
 | `roles/resourcemanager.projectIamAdmin` | Grant the runtime account Firestore access |
+| `roles/storage.admin` | Possibly needed — see below |
+
+`gcloud builds submit` uploads the source to a Cloud Storage staging bucket
+(`gs://<project>_cloudbuild`). If that bucket does not exist yet, creating it
+needs Storage permissions that `roles/cloudbuild.builds.editor` does not
+include. On a project where Cloud Build has run before, the bucket already
+exists and no extra role is required — so only ask for `roles/storage.admin` if
+the build step fails with a storage or bucket permission error.
 
 If getting these on an existing shared project is slow, creating a **new**
 Google Cloud project is often faster — you are automatically its Owner. You
