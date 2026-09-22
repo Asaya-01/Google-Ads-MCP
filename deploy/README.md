@@ -24,7 +24,17 @@ When asked what you're building, the honest answer is the simple one:
 > reports. We do not build software for other advertisers and do not manage
 > third-party accounts.
 
-While you're on that page, copy your **developer token**.
+### Finding the developer token
+
+The token lives in the **manager (MCC) account**, not in the client account —
+API Center only appears for manager accounts. If you can see the access level
+but no token, you are almost certainly looking at the client account.
+
+1. In Google Ads, switch the account selector to the **manager account**.
+2. **Admin → API Center** (older UI: the tools icon → **Setup → API Center**).
+3. Scroll the whole page. The token sits in its own card labelled **Developer
+   token**, separate from the access-level card — roughly 22 characters, usually
+   masked with a copy button next to it.
 
 ---
 
@@ -49,25 +59,54 @@ your own email under test users.
 
 ## Step 2 — Fill in the config
 
+If you're using Cloud Shell, Step 3 creates this file for you — skip ahead and
+fill it in there. Otherwise:
+
 ```shell
 cp deploy/config.env.example deploy/config.env
 ```
 
-Open `deploy/config.env` and paste in four values: the project ID, the developer
+Either way, `deploy/config.env` needs four values: the project ID, the developer
 token, and the OAuth client ID and secret. Add your manager (MCC) customer ID
 only if your access to the ads account goes through a manager account.
 
-This file is gitignored, so the secrets stay on your machine.
+This file is gitignored and must stay that way — **this repository is public**,
+so a committed developer token or client secret would be exposed to anyone.
+Never use `git add -f` on it.
 
 ## Step 3 — Deploy
 
-Install the [gcloud CLI](https://cloud.google.com/sdk/docs/install) if you don't
-have it, sign in, then:
+**Easiest route: Google Cloud Shell.** It runs in your browser, already has
+`gcloud` installed and already signed in as you — nothing to install locally.
+
+1. Open [shell.cloud.google.com](https://shell.cloud.google.com) and make sure
+   the right project is selected.
+2. Run:
+
+   ```shell
+   git clone https://github.com/Asaya-01/Google-Ads-MCP.git
+   cd Google-Ads-MCP
+   cp deploy/config.env.example deploy/config.env
+   cloudshell edit deploy/config.env
+   ```
+
+3. Fill in the values in the editor that opens, save, then run:
+
+   ```shell
+   ./deploy/cloudrun.sh
+   ```
+
+<details>
+<summary>Prefer your own machine?</summary>
+
+Install the [gcloud CLI](https://cloud.google.com/sdk/docs/install), then:
 
 ```shell
 gcloud auth login
 ./deploy/cloudrun.sh
 ```
+
+</details>
 
 The script enables the APIs, creates the Firestore database and image
 repository, builds the container, deploys it, and wires up the service's own
