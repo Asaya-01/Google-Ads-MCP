@@ -196,10 +196,36 @@ each time you deploy.
 - Firestore entries are not expired automatically by this storage backend. It's
   a small amount of data, but worth a periodic cleanup if this runs for years.
 
+## Permissions
+
+Deploying needs more than read access to the Google Cloud project. The simplest
+ask is the **Owner** role (`roles/owner`) on the project. Where that is too
+broad, these are the individual roles required:
+
+| Role | Why |
+|---|---|
+| `roles/serviceusage.serviceUsageAdmin` | Enable the APIs |
+| `roles/run.admin` | Create the Cloud Run service |
+| `roles/cloudbuild.builds.editor` | Build the container image |
+| `roles/artifactregistry.admin` | Store the built image |
+| `roles/datastore.owner` | Create the Firestore database |
+| `roles/iam.serviceAccountUser` | Run the service as its service account |
+| `roles/resourcemanager.projectIamAdmin` | Grant the runtime account Firestore access |
+
+If getting these on an existing shared project is slow, creating a **new**
+Google Cloud project is often faster — you are automatically its Owner. You
+then need to create a new OAuth client inside that project and point
+`GOOGLE_PROJECT_ID` at it. The Google Ads developer token is issued by Google
+Ads, not by the Cloud project, so it carries over unchanged.
+
+The project also needs **billing enabled**; Cloud Build and Cloud Run both
+require it.
+
 ## Troubleshooting
 
 | What you see | What it means |
 |---|---|
+| `AUTH_PERMISSION_DENIED` / *does not have permission to access projects instance* | Your Google account lacks the access needed to deploy into that project. The script stops and lists the exact roles to request — see [Permissions](#permissions) above. |
 | `redirect_uri_mismatch` at sign-in | Step 4 was missed, or the URI doesn't match exactly. It must end in `/auth/callback`. |
 | *"developer token is only approved for use with test accounts"* | Explorer access hasn't been granted yet. Check the API Center. |
 | `USER_PERMISSION_DENIED` for a customer ID | Access is via a manager account — set `GOOGLE_ADS_LOGIN_CUSTOMER_ID` in `deploy/config.env` and re-run the script. |

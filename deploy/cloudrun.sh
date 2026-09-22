@@ -50,13 +50,55 @@ echo "==> Project: ${GOOGLE_PROJECT_ID}   Region: ${REGION}   Service: ${SERVICE
 gcloud config set project "$GOOGLE_PROJECT_ID" --quiet
 
 echo "==> [1/7] Enabling required APIs (can take a minute the first time)"
-gcloud services enable \
+# A permissions failure here returns pages of base64 diagnostics that bury the
+# one line that matters, so translate it into the actual ask instead.
+API_ERR="$(mktemp)"
+trap 'rm -f "$API_ERR"' EXIT
+if ! gcloud services enable \
   googleads.googleapis.com \
   run.googleapis.com \
   cloudbuild.googleapis.com \
   artifactregistry.googleapis.com \
   firestore.googleapis.com \
-  --quiet
+  --quiet 2>"$API_ERR"; then
+
+  if grep -qE 'PERMISSION_DENIED|does not have permission|Permission denied' "$API_ERR"; then
+    ACTIVE_ACCOUNT="$(gcloud config get-value account 2>/dev/null || echo 'your account')"
+    cat >&2 <<EOM
+
+========================================================================
+STOPPED: not enough permissions on this project.
+
+  Account: ${ACTIVE_ACCOUNT}
+  Project: ${GOOGLE_PROJECT_ID}
+
+Nothing has been changed. This is a Google Cloud access problem, not a
+problem with your settings or this script.
+
+Ask whoever administers the project to grant that account the Owner role
+(roles/owner) on ${GOOGLE_PROJECT_ID}. If Owner is too broad for your
+organisation, these are the individual roles this deployment needs:
+
+  roles/serviceusage.serviceUsageAdmin   enable the APIs
+  roles/run.admin                        create the Cloud Run service
+  roles/cloudbuild.builds.editor         build the container image
+  roles/artifactregistry.admin           store the built image
+  roles/datastore.owner                  create the Firestore database
+  roles/iam.serviceAccountUser           run the service as its account
+  roles/resourcemanager.projectIamAdmin  grant that account Firestore access
+
+Alternatively, create a new Google Cloud project yourself — you become its
+Owner automatically — then create a new OAuth client in it and set
+GOOGLE_PROJECT_ID in deploy/config.env to the new project.
+
+Re-run this script once access is sorted. It is safe to run again.
+========================================================================
+EOM
+  else
+    cat "$API_ERR" >&2
+  fi
+  exit 1
+fi
 
 echo "==> [2/7] Ensuring a Firestore database exists (stores sign-in tokens)"
 # Firestore's valid locations are not the same list as Cloud Run's regions, so
