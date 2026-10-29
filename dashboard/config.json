@@ -1,0 +1,115 @@
+{
+  "brand": "Asaya",
+  "timezone": "Asia/Kolkata",
+  "currency": "INR",
+
+  "gcp": {
+    "project": "asaya-data-room-487110",
+    "bq_location": "asia-south1",
+    "dataset": "asaya-data-room-487110.Maplemonk"
+  },
+
+  "tabs": [
+    {"id": "overview",  "label": "Overview",  "phase": 1, "enabled": true},
+    {"id": "daily",     "label": "Daily",     "phase": 1, "enabled": true},
+    {"id": "marketing", "label": "Marketing", "phase": 1, "enabled": true},
+    {"id": "products",  "label": "Products",  "phase": 1, "enabled": true},
+    {"id": "d1",        "label": "D-1",       "phase": 1, "enabled": true},
+    {"id": "traffic",   "label": "Traffic",   "phase": 2, "enabled": false},
+    {"id": "webapp",    "label": "Web & App", "phase": 2, "enabled": false},
+    {"id": "calendar",  "label": "Calendar",  "phase": 2, "enabled": false},
+    {"id": "monthly",   "label": "Monthly",   "phase": 2, "enabled": false},
+    {"id": "search",    "label": "Search",    "phase": 2, "enabled": false},
+    {"id": "cohorts",   "label": "Cohorts",   "phase": 3, "enabled": false},
+    {"id": "inventory", "label": "Inventory", "phase": null, "enabled": false, "note": "Ignored for now: no inventory history source."}
+  ],
+
+  "refresh": {
+    "first_run": "07:00",
+    "bq_ready_by": "06:30",
+    "alert_from": "10:00",
+    "retry_minutes": 30,
+    "history_days": 100,
+    "refetch_recent_days": 3,
+    "required_sources": ["shopify_orders", "shopify_order_items", "gokwik_funnel", "gokwik_orders", "google_ads", "shopify_sessions"]
+  },
+
+  "orders": {
+    "exclude_name_regex": "ASAYASS|ASAYAINF"
+  },
+
+  "freebies": {
+    "product_types": ["merch", "freebie"],
+    "minis_regex": "\\bminis\\b",
+    "minis_max_unit_price": 1,
+    "safety_net_regex": "charm|mesh bag|tote bag",
+    "known_types": ["serum", "treatment", "combo", "sunscreen", "moisturiser", "moisturise", "cleanser", "gel", "scrub", "hand cream", "gummies", "freebie", "merch"]
+  },
+
+  "sessions": {
+    "meta_awareness_prefix": "woa_awareness_",
+    "google_sources": ["google", "youtube"],
+    "google_awareness_name_regex": "awareness",
+    "breakdown_limit": 10000,
+    "landing_page_limit": 300
+  },
+
+  "meta": {
+    "graph_api_version": "v24.0",
+    "lookback_days": 7,
+    "accounts": {
+      "act_666565859450360": "Asaya Sales",
+      "act_1040064540569018": "Asaya Top Funnel"
+    },
+    "purchase_action_types": ["omni_purchase", "offsite_conversion.fb_pixel_purchase", "purchase"],
+    "token_secret": "meta-system-user-token"
+  },
+
+  "google_ads": {
+    "account_id": "6548153452"
+  },
+
+  "shopify": {
+    "store": "b1d470.myshopify.com",
+    "api_version": "2026-10",
+    "client_id_secret": "shopify-client-id",
+    "client_secret_secret": "shopify-client-secret"
+  },
+
+  "channels": [
+    {"channel": "No UTM (direct / organic)", "match": {"utm_source": "^(|direct|\\(direct\\)|none|na)$"}},
+    {"channel": "Organic Search", "match": {"utm_source": "^google$", "utm_medium": "^(product_sync|organic|)$"}},
+    {"channel": "Meta Ads",       "match": {"utm_source": "^(facebook|fb|ig|instagram|meta)$", "utm_medium": "^(cpc|paid|paid_social|ppc)$"}},
+    {"channel": "Google Ads",     "match": {"utm_source": "^(google|youtube|yt)$", "utm_medium": "^(cpc|ppc|paid)$"}},
+    {"channel": "Reddit Ads",     "match": {"utm_source": "^reddit$"}},
+    {"channel": "Affiliate",      "match": {"utm_source": "^(affiliate|cashkaro|wishlink|togethr|paytm|sangria_blogs|sangria|analyticsclouds|xpl|smytten|fkm|mma|criteo)$"}},
+    {"channel": "Affiliate",      "match": {"utm_medium": "^(affiliate|cps|coupon|wishlink\\.com|sangria)$"}},
+    {"channel": "CRM",            "match": {"utm_source": "^(kwikengage|kwe|whatsapp|wa|email|klaviyo|bik|bitespeed|nector|verifast|strongmetrics)$"}},
+    {"channel": "CRM",            "match": {"utm_medium": "^(wa|whatsapp|email|sms|automation|crm)$"}},
+    {"channel": "Organic Social", "match": {"utm_source": "^(ig|instagram|facebook|fb|igshopping)$"}},
+    {"channel": "AI Assistants",  "match": {"utm_source": "^(chatgpt\\.com|perplexity|gemini)$"}}
+  ],
+
+  "phases": {
+    "baseline_days": 28,
+    "sale_ratio": 1.6,
+    "grey_ratio": 1.3,
+    "spend_ratio": 1.3,
+    "shoulder_days": 2,
+    "overrides": {}
+  },
+
+  "d1": {
+    "max_window_days": 7,
+    "min_days_between_sales": 20,
+    "window_overrides": null,
+    "drilldown_rows": 15
+  },
+
+  "commentary": {
+    "enabled": true,
+    "model": "claude-opus-5-5",
+    "effort": "high",
+    "api_key_secret": "anthropic-api-key"
+  }
+}

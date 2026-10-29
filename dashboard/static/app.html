@@ -1,0 +1,560 @@
+<title>Asaya D2C Dashboard</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky brand + tab bar; each tab is a vertical stack of sections,
+   summary (tiles, period tables) before detail (charts, then dense tables). */
+:root {
+  --bg: #f3f6f6;            /* page plane: cool porcelain, biased toward the ink-teal accent */
+  --surface: #fbfcfc;       /* cards and chart surface */
+  --ink: #0e1a1c;
+  --ink-2: #4a5759;
+  --muted: #7d898b;
+  --line: #dde4e4;
+  --axis: #c3cccc;
+  --accent: #1d5e63;        /* deep teal: tabs, links, focus */
+  --accent-wash: #e1eeee;
+  --series-1: #2a78d6;      /* Meta / BAU */
+  --series-2: #eb6834;      /* Google / Sale */
+  --good: #006300;
+  --bad: #b42323;
+  --warn-bg: #fdf3dc;
+  --warn-ink: #6b4a00;
+  --bad-bg: #fbe7e5;
+  --good-bg: #e3f2e3;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1213; --surface: #141a1b; --ink: #ecf1f1; --ink-2: #b7c2c3; --muted: #899496;
+    --line: #263032; --axis: #364244; --accent: #6fb7bb; --accent-wash: #1b2b2d;
+    --series-1: #3987e5; --series-2: #d95926; --good: #3cc23c; --bad: #ef7a72;
+    --warn-bg: #3a2f12; --warn-ink: #f4d58a; --bad-bg: #3b1d1b; --good-bg: #16301a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c1213; --surface: #141a1b; --ink: #ecf1f1; --ink-2: #b7c2c3; --muted: #899496;
+  --line: #263032; --axis: #364244; --accent: #6fb7bb; --accent-wash: #1b2b2d;
+  --series-1: #3987e5; --series-2: #d95926; --good: #3cc23c; --bad: #ef7a72;
+  --warn-bg: #3a2f12; --warn-ink: #f4d58a; --bad-bg: #3b1d1b; --good-bg: #16301a;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; }
+h2 { font-size: 17px; font-weight: 600; }
+h3 { font-size: 14px; font-weight: 600; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.bar-inner, main { max-width: 1320px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.bar-inner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding-block: 10px; }
+.brand { display: flex; align-items: baseline; gap: 8px; }
+.brand h1 { font-size: 18px; font-weight: 700; letter-spacing: 0.01em; }
+.brand span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+nav.tabs { display: flex; gap: 2px; overflow-x: auto; flex: 1 1 auto; min-width: 0; }
+nav.tabs a { text-decoration: none; color: var(--ink-2); padding: 6px 12px; border-radius: 999px; font-weight: 500; white-space: nowrap; }
+nav.tabs a[aria-current="page"] { background: var(--accent-wash); color: var(--accent); }
+nav.tabs a:hover { color: var(--ink); }
+.meta-line { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+
+main { padding-block: 20px 48px; display: grid; gap: 20px; }
+section.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; align-content: start; }
+.section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 16px; }
+.sub { color: var(--muted); font-size: 12px; }
+.grid-2 { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); }
+
+.status { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); white-space: nowrap; }
+.chip.ok::before { content: "●"; color: var(--good); font-size: 9px; }
+.chip.missing { background: var(--bad-bg); border-color: transparent; color: var(--bad); }
+.chip.missing::before { content: "▲"; font-size: 9px; }
+.chip.pending { background: var(--warn-bg); border-color: transparent; color: var(--warn-ink); }
+.phase { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 7px; border-radius: 4px; }
+.phase.sale { background: color-mix(in srgb, var(--series-2) 16%, transparent); color: var(--ink); }
+.phase.bau { background: color-mix(in srgb, var(--series-1) 12%, transparent); color: var(--ink-2); }
+
+.tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 4px; align-content: start; }
+.tile .label { color: var(--ink-2); font-size: 12px; }
+.tile .value { font-family: var(--font-display); font-size: 24px; font-weight: 600; line-height: 1.15; }
+.tile .foot { font-size: 12px; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; }
+.na { color: var(--muted); font-size: 12px; }
+.tile .na { font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.up { color: var(--good); }
+.down { color: var(--bad); }
+.flat { color: var(--ink-2); }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+th { position: sticky; top: 0; background: var(--surface); color: var(--ink-2); font-weight: 500; font-size: 12px; }
+th:first-child, td:first-child, td.text, th.text { text-align: left; }
+td.text { white-space: normal; min-width: 180px; max-width: 360px; }
+tbody tr:hover td { background: color-mix(in srgb, var(--accent-wash) 60%, transparent); }
+tr.total td { font-weight: 600; border-top: 2px solid var(--axis); }
+tr.delta td { font-weight: 600; }
+tr.group td { background: var(--accent-wash); color: var(--ink-2); font-size: 12px; font-weight: 600; text-align: left; }
+td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(--muted); }
+.legend-note { font-size: 12px; color: var(--muted); }
+
+.chart-box { position: relative; height: 240px; }
+.chart-legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); }
+.chart-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 2px; gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 12px; border: 0; background: transparent; color: var(--ink-2); padding: 4px 10px; border-radius: 999px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); font-weight: 600; }
+
+.commentary { white-space: pre-wrap; line-height: 1.6; max-width: 80ch; }
+.notes { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 12px; display: grid; gap: 4px; max-width: 110ch; }
+.banner { border-radius: 8px; padding: 10px 12px; background: var(--warn-bg); color: var(--warn-ink); font-size: 13px; }
+.signin { max-width: 420px; margin: 12vh auto; text-align: center; display: grid; gap: 14px; justify-items: center; }
+.empty { color: var(--muted); padding: 24px 0; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<header class="bar">
+  <div class="bar-inner">
+    <div class="brand"><h1>Asaya</h1><span>D2C</span></div>
+    <nav class="tabs" id="tabs" aria-label="Dashboard tabs"></nav>
+    <div class="meta-line" id="meta-line"></div>
+  </div>
+</header>
+<main id="main"><p class="empty">Loading the dashboard…</p></main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+(() => {
+  "use strict";
+  const embedded = window.__DASH__ || null;   // set by the preview build; absent on Cloud Run
+  const state = { config: null, status: null, pages: {}, tab: null, charts: [], drill: "channel", d1View: "table" };
+  const $main = document.getElementById("main");
+
+  // ------------------------------------------------------------ formatting
+  const inGroup = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  function inrCompact(v) {
+    const a = Math.abs(v);
+    if (a >= 1e7) return "Rs " + (v / 1e7).toFixed(2) + " Cr";
+    if (a >= 1e5) return "Rs " + (v / 1e5).toFixed(2) + " L";
+    return "Rs " + inGroup.format(v);
+  }
+  function fmt(v, unit, compact) {
+    if (v === null || v === undefined || Number.isNaN(v)) return null;
+    switch (unit) {
+      case "inr": return compact ? inrCompact(v) : "Rs " + inGroup.format(v);
+      case "int": return inGroup.format(v);
+      case "num": return inGroup.format(Math.round(v));
+      case "pct": return (v * 100).toFixed(2) + "%";
+      case "x": return v.toFixed(2) + "x";
+      default: return String(v);
+    }
+  }
+  const NEUTRAL_DELTA = new Set(["spend", "meta_spend", "google_spend", "perf_spend", "sessions", "awareness_sessions"]);
+  function deltaHtml(d, key) {
+    if (d === null || d === undefined) return '<span class="flat">–</span>';
+    const pct = (d >= 0 ? "+" : "") + (d * 100).toFixed(2) + "%";
+    const arrow = d > 0 ? "▲" : d < 0 ? "▼" : "";
+    const cls = NEUTRAL_DELTA.has(key) || d === 0 ? "flat" : d > 0 ? "up" : "down";
+    return `<span class="${cls}">${arrow} ${pct}</span>`;
+  }
+  function cell(v, unit, reason) {
+    const s = fmt(v, unit);
+    if (s !== null) return esc(s);
+    return `<span class="cell-na" title="Data unavailable: ${esc(reason || "not available")}">n/a</span>`;
+  }
+  const dayLabel = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  const phaseChip = (p) => p ? `<span class="phase ${p}">${p === "sale" ? "Sale" : "BAU"}</span>` : "";
+
+  // ------------------------------------------------------------ charts
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  function destroyCharts() { state.charts.forEach((c) => c.destroy()); state.charts = []; }
+  function axisOpts(unit) {
+    return {
+      grid: { color: css("--line"), drawTicks: false },
+      border: { color: css("--axis") },
+      ticks: { color: css("--muted"), font: { family: css("--font-body"), size: 11 }, padding: 6,
+        callback: (v) => unit === "inr" ? inrCompact(v).replace("Rs ", "") : unit === "pct" ? (v * 100).toFixed(1) + "%" : unit === "x" ? v.toFixed(1) + "x" : inGroup.format(v) },
+    };
+  }
+  function baseChart(canvas, cfg, unit) {
+    if (!window.Chart) { canvas.parentElement.innerHTML = '<p class="na">Charts could not load. The tables below carry the same numbers.</p>'; return; }
+    const chart = new Chart(canvas, {
+      ...cfg,
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: css("--surface"), titleColor: css("--ink"), bodyColor: css("--ink-2"),
+            borderColor: css("--line"), borderWidth: 1, padding: 10, boxPadding: 4,
+            callbacks: { label: (c) => ` ${c.dataset.label}: ${fmt(c.parsed.y, unit, true) ?? "n/a"}` },
+          },
+        },
+        scales: { x: { ...axisOpts(), ticks: { color: css("--muted"), maxRotation: 0, autoSkipPadding: 12, font: { size: 11 } }, grid: { display: false } }, y: axisOpts(unit) },
+        ...(cfg.options || {}),
+      },
+    });
+    state.charts.push(chart);
+  }
+  const barStyle = { borderRadius: { topLeft: 4, topRight: 4 }, borderSkipped: "bottom", maxBarThickness: 24, borderWidth: 0 };
+  function phaseBars(canvas, rows, key, unit, label) {
+    baseChart(canvas, {
+      type: "bar",
+      data: {
+        labels: rows.map((r) => dayLabel(r.date)),
+        datasets: [{
+          label, data: rows.map((r) => r[key]), ...barStyle,
+          backgroundColor: rows.map((r) => r.phase === "sale" ? css("--series-2") : css("--series-1")),
+        }],
+      },
+    }, unit);
+  }
+  const legend = (items) => `<div class="chart-legend">${items.map(([v, l]) => `<span><i style="background:var(${v})"></i>${esc(l)}</span>`).join("")}</div>`;
+
+  // ------------------------------------------------------------ data
+  async function getJSON(url) {
+    const r = await fetch(url, { credentials: "same-origin" });
+    if (r.status === 401 || r.status === 403) { const e = new Error((await r.json().catch(() => ({}))).detail || "Sign in required"); e.auth = r.status; throw e; }
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+    return r.json();
+  }
+  async function loadPage(tab) {
+    if (state.pages[tab]) return state.pages[tab];
+    state.pages[tab] = embedded ? embedded.pages[tab] : await getJSON(`/api/page/${tab}`);
+    return state.pages[tab];
+  }
+
+  // ------------------------------------------------------------ shell
+  function renderTabs() {
+    document.getElementById("tabs").innerHTML = state.config.tabs
+      .map((t) => `<a href="#${t.id}" ${t.id === state.tab ? 'aria-current="page"' : ""}>${esc(t.label)}</a>`).join("");
+  }
+  function renderMeta(page) {
+    const s = state.status || {};
+    const parts = [];
+    if (page?.as_of) parts.push(`D-1 <strong>${dayLabel(page.as_of)}</strong>`);
+    if (page?.generated_at) parts.push(`refreshed ${new Date(page.generated_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} IST`);
+    if (s.complete === false) parts.push(`<span class="chip pending">Waiting on ${Object.keys(s.missing || {}).length} source(s)</span>`);
+    if (embedded) parts.push('<span class="chip pending">Preview build</span>');
+    document.getElementById("meta-line").innerHTML = parts.join(" · ");
+  }
+  function statusStrip() {
+    const s = state.status;
+    if (!s || !s.checks) return "";
+    const missing = s.missing || {};
+    const chips = s.checks.map((c) => {
+      const bad = missing[c.source];
+      return `<span class="chip ${bad ? "missing" : "ok"}" title="${esc(bad || "latest " + c.latest_date)}">${esc(c.source.replace(/_/g, " "))} · ${esc(c.latest_date ? dayLabel(c.latest_date) : "none")}</span>`;
+    });
+    if (missing.shopify_sessions) chips.push(`<span class="chip missing" title="${esc(missing.shopify_sessions)}">shopify sessions</span>`);
+    Object.entries(s.unavailable || {}).forEach(([k, v]) => chips.push(`<span class="chip pending" title="${esc(v)}">${esc(k.replace(/_/g, " "))}: unavailable</span>`));
+    return `<div class="status" aria-label="Data sources">${chips.join("")}</div>`;
+  }
+  function notes(page) {
+    return page.notes?.length ? `<ul class="notes">${page.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : "";
+  }
+  function table(columns, rows, opts = {}) {
+    const head = columns.map((c) => `<th class="${c.text ? "text" : ""}" scope="col">${esc(c.label)}</th>`).join("");
+    const body = rows.map((r) => `<tr class="${r._class || ""}">${columns.map((c) => {
+      if (c.render) return `<td class="${c.text ? "text" : ""}">${c.render(r)}</td>`;
+      return `<td>${cell(r[c.key], c.unit, r.na?.[c.key])}</td>`;
+    }).join("")}</tr>`).join("");
+    return `<div class="table-wrap" ${opts.maxHeight ? `style="max-height:${opts.maxHeight}"` : ""}><table><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${columns.length}" class="text na">No rows for this period.</td></tr>`}</tbody></table></div>`;
+  }
+
+  // ------------------------------------------------------------ tabs
+  const R = {};
+
+  R.overview = (p) => {
+    const tiles = p.tiles.map((t) => `
+      <div class="tile">
+        <div class="label">${esc(t.label)}</div>
+        ${t.value === null ? `<div class="na">Data unavailable: ${esc(t.na || "not available")}</div>`
+          : `<div class="value">${esc(fmt(t.value, t.unit, true))}</div>
+             <div class="foot">${deltaHtml(t.delta, t.key)}<span>vs ${esc(fmt(t.prior, t.unit, true) ?? "n/a")}</span></div>`}
+      </div>`).join("");
+    const phaseCols = [
+      { label: "Phase", text: true, render: (r) => `${phaseChip(r.phase)} <span class="sub">${r.current.days} vs ${r.prior.days} days</span>` },
+      ...[["gmv", "GMV / day", "inr"], ["orders", "Orders / day", "num"], ["sessions", "Sessions / day", "num"], ["aov", "AOV", "inr"], ["cvr", "CVR", "pct"], ["atc_rate", "ATC rate", "pct"], ["mer", "MER", "x"]]
+        .map(([k, l, u]) => ({ label: l, render: (r) => `${r.current[k] === null || r.current[k] === undefined ? '<span class="na">n/a</span>' : esc(fmt(r.current[k], u, true))}<br><span class="sub">${deltaHtml(r.delta[k], k)}</span>` })),
+    ];
+    $main.innerHTML = `
+      <section class="card">
+        <div class="section-head"><h2>Month to date</h2><span class="sub">${dayLabel(p.period.current[0])}–${dayLabel(p.period.current[1])} vs ${dayLabel(p.period.prior[0])}–${dayLabel(p.period.prior[1])}</span></div>
+        ${statusStrip()}
+        <div class="tiles">${tiles}</div>
+      </section>
+      <section class="card">
+        <div class="section-head"><h2>Sale vs sale, BAU vs BAU</h2><span class="sub">Per-day averages, this month vs last month</span></div>
+        ${table(phaseCols, p.phase_panel)}
+      </section>
+      <div class="grid-2">
+        <section class="card"><div class="section-head"><h2>GMV per day</h2>${legend([["--series-1", "BAU day"], ["--series-2", "Sale day"]])}</div><div class="chart-box"><canvas id="c-gmv" aria-label="GMV per day, last 60 days"></canvas></div></section>
+        <section class="card"><div class="section-head"><h2>Orders per day</h2>${legend([["--series-1", "BAU day"], ["--series-2", "Sale day"]])}</div><div class="chart-box"><canvas id="c-orders" aria-label="Orders per day, last 60 days"></canvas></div></section>
+      </div>
+      <section class="card">${notes(p)}</section>`;
+    phaseBars(document.getElementById("c-gmv"), p.trend, "gmv", "inr", "GMV");
+    phaseBars(document.getElementById("c-orders"), p.trend, "orders", "int", "Orders");
+  };
+
+  R.daily = (p) => {
+    const cols = p.columns.map((c) => c.key === "date"
+      ? { label: c.label, text: true, render: (r) => esc(dayLabel(r.date)) }
+      : c.key === "phase" ? { label: c.label, text: true, render: (r) => `<span title="${esc(r.phase_basis || "")}">${phaseChip(r.phase)}</span>` }
+      : c);
+    $main.innerHTML = `
+      <section class="card">
+        <div class="section-head"><h2>Daily</h2><span class="sub">Last ${p.rows.length} days, newest first. Hover “n/a” for the reason.</span></div>
+        ${statusStrip()}
+        ${table(cols, p.rows, { maxHeight: "70vh" })}
+        ${notes(p)}
+      </section>`;
+  };
+
+  R.marketing = (p) => {
+    const periodCols = [
+      { label: "Period", text: true, render: (r) => `<strong>${esc(r.label)}</strong><br><span class="sub">${dayLabel(r.start)}${r.start !== r.end ? "–" + dayLabel(r.end) : ""}</span>` },
+      { key: "gmv", label: "GMV", unit: "inr" }, { key: "meta_spend", label: "Meta spend", unit: "inr" },
+      { key: "google_spend", label: "Google spend", unit: "inr" }, { key: "spend", label: "Total spend", unit: "inr" },
+      { key: "mer", label: "MER", unit: "x" }, { key: "perf_spend", label: "Perf spend", unit: "inr" },
+      { key: "perf_roas", label: "Perf ROAS", unit: "x" },
+      { key: "meta_platform_roas", label: "Meta platform ROAS", unit: "x" }, { key: "google_platform_roas", label: "Google platform ROAS", unit: "x" },
+    ];
+    const typeChip = (t) => `<span class="phase ${t === "Awareness" ? "sale" : "bau"}">${esc(t)}</span>`;
+    const metaCols = [
+      { label: "Campaign", text: true, render: (r) => `${esc(r.campaign)}<br><span class="sub">${esc(r.account)}</span>` },
+      { label: "Type", text: true, render: (r) => typeChip(r.type) },
+      { key: "spend", label: "Spend", unit: "inr" }, { key: "impressions", label: "Impr.", unit: "int" },
+      { key: "ctr", label: "CTR", unit: "pct" }, { key: "purchases", label: "Purchases", unit: "num" },
+      { key: "purchase_value", label: "Purchase value", unit: "inr" }, { key: "roas", label: "Platform ROAS", unit: "x" },
+    ];
+    const googleCols = [
+      { label: "Campaign", text: true, render: (r) => `${esc(r.campaign)}<br><span class="sub">${esc(r.campaign_id)}</span>` },
+      { label: "Type", text: true, render: (r) => typeChip(r.type) },
+      { key: "spend", label: "Spend", unit: "inr" }, { key: "clicks", label: "Clicks", unit: "num" },
+      { key: "ctr", label: "CTR", unit: "pct" }, { key: "conversions", label: "Conv.", unit: "num" },
+      { key: "conversion_value", label: "Conv. value", unit: "inr" }, { key: "roas", label: "Platform ROAS", unit: "x" },
+    ];
+    const chk = p.classification_check;
+    const m = chk.google_match;
+    const metaNA = p.unavailable?.meta;
+    $main.innerHTML = `
+      ${metaNA ? `<div class="banner">Meta Ads: data unavailable. ${esc(metaNA)}. Meta spend, total spend, MER and Perf ROAS stay blank until it is in place.</div>` : ""}
+      <section class="card">
+        <div class="section-head"><h2>Spend and return</h2><span class="sub">Blended MER and Performance ROAS on GMV</span></div>
+        ${table(periodCols, p.periods)}
+      </section>
+      <div class="grid-2">
+        <section class="card"><div class="section-head"><h2>Ad spend per day</h2>${legend([["--series-1", "Meta"], ["--series-2", "Google"]])}</div><div class="chart-box"><canvas id="c-spend" aria-label="Meta and Google spend per day"></canvas></div></section>
+        <section class="card"><div class="section-head"><h2>MER per day</h2><span class="sub">GMV / (Meta + Google spend)</span></div><div class="chart-box"><canvas id="c-mer" aria-label="MER per day"></canvas></div></section>
+      </div>
+      <section class="card"><div class="section-head"><h2>Meta campaigns</h2><span class="sub">Last 7 days</span></div>
+        ${metaNA ? `<p class="na">Data unavailable: ${esc(metaNA)}</p>` : table(metaCols, p.meta_campaigns, { maxHeight: "60vh" })}</section>
+      <section class="card"><div class="section-head"><h2>Google campaigns</h2><span class="sub">Last 7 days, campaigns with spend</span></div>
+        ${table(googleCols, p.google_campaigns, { maxHeight: "60vh" })}</section>
+      <section class="card">
+        <div class="section-head"><h2>Session classification check</h2><span class="sub">${dayLabel(m.start)}–${dayLabel(m.end)}</span></div>
+        <div class="tiles">
+          <div class="tile"><div class="label">Google sessions with a campaign ID that matches GOOGLEADS_CONSOLIDATED</div><div class="value">${esc(fmt(m.match_rate, "pct") ?? "n/a")}</div><div class="foot">${inGroup.format(m.matched)} of ${inGroup.format(m.with_campaign_id)} sessions</div></div>
+          <div class="tile"><div class="label">Google sessions with no campaign ID</div><div class="value">${esc(fmt(m.no_id_share, "pct") ?? "n/a")}</div><div class="foot">of ${inGroup.format(m.google_sessions)} Google sessions</div></div>
+          <div class="tile"><div class="label">Google sessions on Awareness IDs</div><div class="value">${inGroup.format(m.awareness)}</div><div class="foot">${chk.google_awareness_ids} awareness IDs of ${chk.google_known_ids} known</div></div>
+          <div class="tile"><div class="label">Unclassified Google IDs</div><div class="value">${chk.unclassified_google_ids.length}</div><div class="foot">${chk.unclassified_google_ids.length ? "Counted as Perf until they sync. Alerts fire for IDs seen yesterday." : "None in the history window"}</div></div>
+        </div>
+        ${chk.unclassified_google_ids.length ? table([{ key: "campaign_id", label: "Campaign ID", text: true, render: (r) => esc(r.campaign_id) }, { key: "sessions", label: "Sessions", unit: "int" }, { label: "Last seen", render: (r) => esc(r.dates.at(-1)) }], chk.unclassified_google_ids) : ""}
+      </section>
+      <section class="card">${notes(p)}</section>`;
+    const rows = p.spend_trend;
+    const labels = rows.map((r) => dayLabel(r.date));
+    baseChart(document.getElementById("c-spend"), {
+      type: "bar",
+      data: { labels, datasets: [
+        { label: "Meta", data: rows.map((r) => r.meta_spend), backgroundColor: css("--series-1"), ...barStyle, borderRadius: 0, borderWidth: { top: 2 }, borderColor: css("--surface"), stack: "s" },
+        { label: "Google", data: rows.map((r) => r.google_spend), backgroundColor: css("--series-2"), ...barStyle, borderWidth: { top: 2 }, borderColor: css("--surface"), stack: "s" },
+      ] },
+      options: { scales: { x: { stacked: true, grid: { display: false }, ticks: { color: css("--muted"), maxRotation: 0, autoSkipPadding: 12 } }, y: { ...axisOpts("inr"), stacked: true } } },
+    }, "inr");
+    baseChart(document.getElementById("c-mer"), {
+      type: "line",
+      data: { labels, datasets: [{ label: "MER", data: rows.map((r) => r.mer), borderColor: css("--series-1"), backgroundColor: css("--series-1"),
+        borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, spanGaps: false, tension: 0.25 }] },
+    }, "x");
+  };
+
+  R.products = (p) => {
+    const prodCols = [
+      { label: "Product", text: true, render: (r) => `${esc(r.label)}<br><span class="sub">${esc(r.product_type || "(blank type)")}</span>` },
+      { key: "units", label: "Units", unit: "int" }, { label: "Δ units", render: (r) => deltaHtml(r.units_delta, "units") },
+      { key: "revenue", label: "Revenue", unit: "inr" }, { label: "Δ revenue", render: (r) => deltaHtml(r.revenue_delta, "revenue") },
+      { key: "mrp_per_unit", label: "MRP / unit", unit: "inr" },
+      { label: "Landed discount", render: (r) => cell(r.landed_discount, "pct", p.mrp_check.na || "No MRP for this product") },
+    ];
+    const catCols = [
+      { label: "Category (product type)", text: true, render: (r) => esc(r.label) },
+      { key: "units", label: "Units", unit: "int" }, { key: "revenue", label: "Revenue", unit: "inr" },
+      { key: "share", label: "Share", unit: "pct" }, { label: "Δ revenue", render: (r) => deltaHtml(r.revenue_delta, "revenue") },
+      { label: "Landed discount", render: (r) => cell(r.landed_discount, "pct", p.mrp_check.na || "No MRP") },
+    ];
+    const fb = (b) => {
+      const order = [["kept", "Kept"], ["product_type", "Dropped: merch / freebie type"], ["minis", "Dropped: minis (Rs 1 or less)"], ["safety_net", "Dropped: safety net only (charm, mesh bag, tote bag)"]];
+      return table([{ label: "Rule", text: true, render: (r) => esc(r.label) }, { key: "lines", label: "Lines", unit: "int" }, { key: "units", label: "Units", unit: "int" }, { key: "revenue", label: "Revenue", unit: "inr" }],
+        order.map(([k, label]) => ({ label, ...(b[k] || { lines: 0, units: 0, revenue: 0 }) })));
+    };
+    const pt = p.product_types;
+    const mc = p.mrp_check;
+    $main.innerHTML = `
+      <section class="card">
+        <div class="section-head"><h2>Products</h2><span class="sub">${dayLabel(p.period.current[0])}–${dayLabel(p.period.current[1])} vs the 7 days before, freebies excluded</span></div>
+        ${mc.na ? `<div class="banner">MRP: data unavailable. ${esc(mc.na)}. Landed discount stays blank.</div>` : ""}
+        ${table(prodCols, p.products, { maxHeight: "60vh" })}
+      </section>
+      <section class="card"><div class="section-head"><h2>Categories</h2></div>${table(catCols, p.categories)}</section>
+      <div class="grid-2">
+        <section class="card"><div class="section-head"><h2>Freebie filter, last 7 days</h2></div>${fb(p.freebie_check.last_7_days)}
+          ${p.freebie_check.last_7_days.paid_minis_kept.length ? `<p class="legend-note">Paid lines containing "minis" kept as sales: ${p.freebie_check.last_7_days.paid_minis_kept.map((m) => `${esc(m.product)} (${m.lines} lines)`).join(", ")}</p>` : ""}</section>
+        <section class="card"><div class="section-head"><h2>Freebie filter, month to date</h2></div>${fb(p.freebie_check.month_to_date)}
+          ${p.freebie_check.month_to_date.paid_minis_kept.length ? `<p class="legend-note">Paid lines containing "minis" kept as sales: ${p.freebie_check.month_to_date.paid_minis_kept.map((m) => `${esc(m.product)} (${m.lines} lines)`).join(", ")}</p>` : ""}</section>
+      </div>
+      <div class="grid-2">
+        <section class="card"><div class="section-head"><h2>Product types</h2><span class="sub">${esc(pt.review_note)}</span></div>
+          ${table([{ label: "Type", text: true, render: (r) => `${esc(r.product_type)} ${r.needs_review ? '<span class="chip pending">Review</span>' : ""}` },
+                   { key: "catalog_products", label: "Products in catalog", unit: "int" }, { key: "lines_mtd", label: "Order lines MTD", unit: "int" }, { key: "dropped_lines_mtd", label: "Dropped MTD", unit: "int" }], pt.rows)}</section>
+        <section class="card"><div class="section-head"><h2>MRP coverage</h2><span class="sub">Kept units with a Shopify compare-at price, last 7 days</span></div>
+          <div class="tiles"><div class="tile"><div class="label">Units with MRP</div><div class="value">${esc(fmt(mc.coverage, "pct") ?? "n/a")}</div><div class="foot">${inGroup.format(mc.units_with_mrp)} of ${inGroup.format(mc.units)}</div></div></div>
+          ${mc.missing.length ? table([{ label: "Product", text: true, render: (r) => esc(r.product) }, { key: "units_without_mrp", label: "Units without MRP", unit: "int" }], mc.missing) : ""}</section>
+      </div>
+      <section class="card">${notes(p)}</section>`;
+  };
+
+  R.d1 = (p) => {
+    const F = [["sessions", "Sessions", "int"], ["perf_sessions", "Perf sessions", "int"], ["atc", "ATC", "int"], ["ic", "IC", "int"], ["orders", "Orders", "int"], ["gmv", "Revenue", "inr"], ["aov", "AOV", "inr"], ["atc_rate", "Sessions → ATC", "pct"], ["atc_to_ic", "ATC → IC", "pct"], ["cvr", "CVR", "pct"]];
+    const funnelTable = () => {
+      const label = (w, name) => `${name} · ${w.start ? dayLabel(w.start) + (w.start !== w.end ? "–" + dayLabel(w.end) : "") : "no matching period"}`;
+      const rows = [
+        { _group: label(p.prior, p.phase === "sale" ? "Prior: previous sale" : "Prior: BAU days last month") },
+        ...p.prior.rows,
+        { ...p.prior.total, _label: "Prior total", _class: "total", na: p.prior.na },
+        { _group: label(p.current, "Current") },
+        ...p.current.rows,
+        { ...p.current.total, _label: "Current total", _class: "total", na: p.current.na },
+        { _label: "Δ vs prior", _class: "delta", _delta: true },
+      ];
+      const head = `<tr><th class="text" scope="col">Day</th>${F.map(([, l]) => `<th scope="col">${esc(l)}</th>`).join("")}</tr>`;
+      const body = rows.map((r) => {
+        if (r._group) return `<tr class="group"><td colspan="${F.length + 1}">${esc(r._group)}</td></tr>`;
+        const first = r._label ? esc(r._label) : `${esc(dayLabel(r.date))} ${phaseChip(r.phase)}`;
+        return `<tr class="${r._class || ""}"><td class="text">${first}</td>${F.map(([k, , u]) => `<td>${r._delta ? deltaHtml(p.delta[k], k) : cell(r[k], u, r.na?.[k])}</td>`).join("")}</tr>`;
+      }).join("");
+      return `<div class="table-wrap"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+    };
+    const DRILLS = [["channel", "Channel"], ["source", "Source"], ["campaign", "Campaign"], ["landing_page", "Landing page"], ["product", "Product"]];
+    const drillCols = {
+      product: [["units", "Units", "num"], ["revenue", "Revenue", "inr"]],
+      landing_page: [["sessions", "Sessions", "num"], ["atc", "ATC", "num"], ["atc_rate", "Sessions → ATC", "pct"], ["ic", "IC (GoKwik)", "num"], ["converted", "Converted (GoKwik)", "num"]],
+    };
+    const defaultDrill = [["sessions", "Sessions", "num"], ["perf_sessions", "Perf sessions", "num"], ["atc", "ATC", "num"], ["atc_rate", "Sessions → ATC", "pct"], ["ic", "IC", "num"], ["orders", "Orders", "num"], ["gmv", "Revenue", "inr"]];
+    const drillTable = () => {
+      const fields = drillCols[state.drill] || defaultDrill;
+      const rows = p.drilldowns[state.drill] || [];
+      const cols = [{ label: DRILLS.find((d) => d[0] === state.drill)[1], text: true, render: (r) => `${esc(r.key)}${state.drill === "campaign" && r.kind === "awareness" ? ' <span class="phase sale">Awareness</span>' : ""}` },
+        ...fields.map(([k, l, u]) => ({ label: l, render: (r) => `${esc(fmt(r.current[k], u, true) ?? "–")}<br><span class="sub">${esc(fmt(r.prior[k], u, true) ?? "–")} · ${deltaHtml(r.delta[k], k)}</span>` }))];
+      return table(cols, rows, { maxHeight: "65vh" });
+    };
+    const c = p.commentary;
+    const basisNote = p.basis === "per_day" ? "Windows differ in length: counts in the drill-downs are per-day averages." : "Equal windows: drill-downs compare totals.";
+    $main.innerHTML = `
+      <section class="card">
+        <div class="section-head"><h2>D-1 funnel ${phaseChip(p.phase)}</h2><span class="sub">${p.prior.start ? `${dayLabel(p.prior.start)}–${dayLabel(p.prior.end)}` : "no prior window"} vs ${dayLabel(p.current.start)}–${dayLabel(p.current.end)}</span></div>
+        ${statusStrip()}
+        ${p.window_note ? `<div class="banner">${esc(p.window_note)}</div>` : ""}
+        ${funnelTable()}
+      </section>
+      <section class="card">
+        <div class="section-head"><h2>What moved, and why</h2>${c?.model ? `<span class="sub">Written by Claude (${esc(c.model)})</span>` : ""}</div>
+        ${c?.text ? `<div class="commentary">${esc(c.text)}</div>` : `<p class="na">Data unavailable: ${esc(c?.na || "commentary has not been generated yet")}</p>`}
+      </section>
+      <section class="card">
+        <div class="section-head"><h2>Drill-down</h2><span class="sub">Current, then prior · Δ. ${basisNote}</span></div>
+        <div class="seg" role="group" aria-label="Drill-down dimension">${DRILLS.map(([k, l]) => `<button type="button" data-drill="${k}" aria-pressed="${k === state.drill}">${l}</button>`).join("")}</div>
+        <div id="drill">${drillTable()}</div>
+      </section>
+      <section class="card">${notes(p)}</section>`;
+    $main.querySelectorAll("[data-drill]").forEach((b) => b.addEventListener("click", () => {
+      state.drill = b.dataset.drill;
+      $main.querySelectorAll("[data-drill]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+      document.getElementById("drill").innerHTML = drillTable();
+    }));
+  };
+
+  // ------------------------------------------------------------ routing
+  async function show() {
+    const ids = state.config.tabs.map((t) => t.id);
+    const want = location.hash.slice(1);
+    state.tab = ids.includes(want) ? want : ids[0];
+    renderTabs();
+    destroyCharts();
+    $main.innerHTML = '<p class="empty">Loading…</p>';
+    try {
+      const page = await loadPage(state.tab);
+      if (!page) throw new Error("This tab has not been built yet.");
+      renderMeta(page);
+      R[state.tab](page);
+      try { localStorage.setItem("asaya-dash-tab", state.tab); } catch (e) { /* storage blocked */ }
+    } catch (e) {
+      if (e.auth) return signIn(e.message);
+      $main.innerHTML = `<section class="card"><h2>Couldn't load this tab</h2><p>${esc(e.message)}</p></section>`;
+    }
+  }
+
+  function signIn(message) {
+    $main.innerHTML = `<div class="signin"><h2>Sign in to the Asaya dashboard</h2>
+      <p class="sub">${esc(message && message !== "Sign in required" ? message : "Use your Google account. Access is limited to the people on the dashboard allowlist.")}</p>
+      <div id="gsi"></div></div>`;
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client";
+    s.onload = () => {
+      google.accounts.id.initialize({
+        client_id: state.config.google_client_id,
+        callback: async (resp) => {
+          const r = await fetch("/auth/google", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ credential: resp.credential }) });
+          if (r.ok) { state.pages = {}; boot(); } else { signIn((await r.json().catch(() => ({}))).detail || "Sign-in failed"); }
+        },
+      });
+      google.accounts.id.renderButton(document.getElementById("gsi"), { theme: "outline", size: "large", shape: "pill" });
+    };
+    document.head.appendChild(s);
+  }
+
+  async function boot() {
+    try {
+      if (embedded) {
+        state.config = embedded.config; state.status = embedded.status;
+      } else {
+        state.config = await getJSON("/api/config");
+        if (!state.config.dev_mode) await getJSON("/api/me");
+        state.status = await getJSON("/api/status").catch(() => null);
+      }
+    } catch (e) {
+      if (e.auth) return signIn(e.message);
+      $main.innerHTML = `<section class="card"><h2>The dashboard is not reachable</h2><p>${esc(e.message)}</p></section>`;
+      return;
+    }
+    if (!location.hash) { try { const t = localStorage.getItem("asaya-dash-tab"); if (t) history.replaceState(null, "", "#" + t); } catch (e) { /* storage blocked */ } }
+    show();
+  }
+
+  window.addEventListener("hashchange", show);
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  const rerender = () => { if (state.tab && state.pages[state.tab]) { destroyCharts(); R[state.tab](state.pages[state.tab]); } };
+  mq.addEventListener?.("change", rerender);
+  new MutationObserver(rerender).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  boot();
+})();
+</script>

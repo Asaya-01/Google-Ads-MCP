@@ -1,0 +1,10 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+itsdangerous>=2.2
+requests>=2.32
+google-auth>=2.30
+google-cloud-bigquery>=3.25
+google-cloud-storage>=2.17
+google-cloud-firestore>=2.16
+google-cloud-secret-manager>=2.20
+anthropic>=2.3

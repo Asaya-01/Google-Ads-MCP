@@ -45,3 +45,7 @@ venv/
 .mcp.json
 google-ads.yaml
 deploy/config.env
+# Asaya D2C dashboard: deploy settings and anything holding real business data
+dashboard/deploy.env
+dashboard/**/inputs/
+dashboard/**/*preview*.html
