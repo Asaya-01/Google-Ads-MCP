@@ -88,7 +88,6 @@ def build(ctx: Context) -> dict:
 
 def _meta_campaigns(ctx: Context, dates: list[str]) -> list[dict]:
     meta = ctx.data.get("meta") or {}
-    prefix = ctx.cfg["sessions"]["meta_awareness_prefix"]
     agg: dict[tuple, dict] = {}
     for d in dates:
         for r in meta.get(d, []):
@@ -109,7 +108,9 @@ def _meta_campaigns(ctx: Context, dates: list[str]) -> list[dict]:
                         if name is None
                         else (
                             "Awareness"
-                            if name.lower().startswith(prefix)
+                            if rules.is_awareness_name(
+                                name, ctx.cfg["sessions"]
+                            )
                             else "Performance"
                         )
                     ),

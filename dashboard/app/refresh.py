@@ -79,10 +79,7 @@ def collect(
     data["products"] = bq.run(
         "product_daily",
         **orders,
-        freebie_types=fb["product_types"],
-        minis_regex=fb["minis_regex"],
-        minis_max_unit_price=("FLOAT64", fb["minis_max_unit_price"]),
-        safety_net_regex=fb["safety_net_regex"],
+        exclude_product_types=fb["exclude_product_types"],
     )
     data["funnel"] = bq.run("funnel_daily", **window)
     data["google_ads"] = bq.run("google_ads_daily", **window)

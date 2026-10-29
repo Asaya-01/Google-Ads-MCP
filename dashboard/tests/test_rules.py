@@ -39,11 +39,13 @@ def test_session_kind_follows_the_brief():
     scfg = CFG["sessions"]
     aware, known = {"24394676551"}, {"24394676551", "23832479262"}
     kind = lambda s, c: rules.session_kind(s, c, aware, known, scfg)
-    # Meta: campaign name starts with woa_awareness_, any case
+    # Any campaign name containing "awareness", any case, any source
     assert kind("facebook", "WOA_Awareness_TOF_Sales_Skincare_ATC_UAS") == (
         "awareness",
         None,
     )
+    assert kind("facebook", "MG_TOF_awareness_reach") == ("awareness", None)
+    assert kind("google", "Conv_Awareness_Asaya_Traffic") == ("awareness", None)
     assert kind("facebook", "WOA_TOF_Sales_AdvantageSales_Non-offer_ITB") == (
         "perf",
         None,
@@ -66,7 +68,7 @@ def test_google_awareness_set_is_built_from_campaign_names():
         {"campaign_id": "3", "campaign_name": "WOA_Pmax_ITB"},
     ]
     aware, known = rules.google_awareness_ids(
-        campaigns, CFG["sessions"]["google_awareness_name_regex"]
+        campaigns, CFG["sessions"]["awareness_name_regex"]
     )
     assert aware == {"1", "2"}
     assert known == {"1", "2", "3"}

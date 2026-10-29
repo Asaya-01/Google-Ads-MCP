@@ -77,7 +77,7 @@ class Context:
         self.unavailable = dict(data.get("unavailable") or {})
         self.aware_ids, self.known_ids = rules.google_awareness_ids(
             data.get("google_campaigns", []),
-            cfg["sessions"]["google_awareness_name_regex"],
+            cfg["sessions"]["awareness_name_regex"],
         )
         self.google_names = {
             c["campaign_id"]: c["campaign_name"]
@@ -185,7 +185,6 @@ class Context:
         google_latest = self._latest("google_ads")
         funnel_latest = self._latest("gokwik_funnel")
         meta_days = d.get("meta") or {}
-        meta_prefix = self.cfg["sessions"]["meta_awareness_prefix"]
 
         facts = {}
         for day in dates:
@@ -284,9 +283,9 @@ class Context:
                     f["meta_perf_spend"] = sum(
                         r["spend"]
                         for r in rows
-                        if not r["campaign_name"]
-                        .lower()
-                        .startswith(meta_prefix)
+                        if not rules.is_awareness_name(
+                            r["campaign_name"], self.cfg["sessions"]
+                        )
                     )
             else:
                 reason = self.unavailable.get("meta", NA["meta"])

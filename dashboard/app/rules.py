@@ -79,13 +79,15 @@ def session_kind(
 ) -> tuple[str, str | None]:
     """Classify a session as "awareness" or "perf".
 
+    Awareness: the UTM campaign name contains "awareness" (any case, any
+    source), or a Google campaign ID whose campaign name contains it.
     Returns (kind, unclassified_google_id). The second value is set when a
     Google session carries a campaign ID that GOOGLEADS_CONSOLIDATED does not
     know yet; it counts as Perf until the campaign syncs.
     """
     source = (utm_source or "").strip().lower()
     campaign = (utm_campaign or "").strip()
-    if campaign.lower().startswith(cfg["meta_awareness_prefix"].lower()):
+    if is_awareness_name(campaign, cfg):
         return "awareness", None
     if source in cfg["google_sources"] and _NUMERIC_ID.match(campaign):
         if campaign in google_awareness_ids:
@@ -108,13 +110,9 @@ def google_awareness_ids(
     return aware, known
 
 
-def is_meta_awareness(campaign_name: str, cfg: dict) -> bool:
-    return (
-        (campaign_name or "")
-        .strip()
-        .lower()
-        .startswith(cfg["meta_awareness_prefix"].lower())
-    )
+def is_awareness_name(campaign_name: str, cfg: dict) -> bool:
+    """True when a campaign name marks it as Awareness (Meta or Google)."""
+    return bool(_rx(cfg["awareness_name_regex"]).search(campaign_name or ""))
 
 
 # ---------------------------------------------------------------- phases

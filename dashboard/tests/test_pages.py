@@ -272,7 +272,7 @@ def test_missing_meta_is_unavailable_not_zero(built_without_meta):
 def test_perf_sessions_drop_awareness_campaigns(built_with_meta):
     _, ctx = built_with_meta
     f = ctx.facts[D1]
-    # Meta woa_awareness_ (30,000) + Google ID 24394676551 (2,000) are Awareness
+    # Meta "awareness" campaign (30,000) + Google ID 24394676551 (2,000) are Awareness
     assert f["awareness_sessions"] == 32000
     assert f["perf_sessions"] == f["sessions"] - 32000
     assert f["perf_spend"] == 100000.0 + 20000.0
@@ -285,12 +285,21 @@ def test_unknown_google_ids_are_flagged(built_with_meta):
     assert [u["campaign_id"] for u in flagged] == ["29999999999"]
 
 
-def test_freebies_are_dropped_from_products(built_with_meta):
+def test_excluded_product_types_are_dropped(built_with_meta):
     pages, _ = built_with_meta
     p = pages["products"]
     assert [r["label"] for r in p["products"]] == ["Underarm Spray"]
     assert p["products"][0]["landed_discount"] == pytest.approx(1 - 799 / 899)
-    assert p["freebie_check"]["last_7_days"]["product_type"]["lines"] > 0
+    excluded = {
+        e["product_type"]: e
+        for e in p["freebie_check"]["last_7_days"]["excluded"]
+    }
+    assert excluded["freebie"]["lines"] > 0
+    assert {"freebie", "merch", "book", "gummies", "(blank)"} == set(excluded)
+    flags = {
+        r["product_type"]: r["excluded"] for r in p["product_types"]["rows"]
+    }
+    assert flags["freebie"] is True and flags["serum"] is False
     review = {
         r["product_type"]
         for r in p["product_types"]["rows"]

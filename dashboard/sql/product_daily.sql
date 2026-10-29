@@ -1,14 +1,10 @@
--- Line items on valid orders, aggregated per day and product, with the reason
--- a line is treated as a freebie (NULL = kept). The app drops freebie lines
--- from units and product tables and logs how many lines each rule caught.
+-- Line items on valid orders, aggregated per day and product. A line is
+-- excluded from units and product tables when its product type is in
+-- @exclude_product_types (freebie, merch, book, gummies, blank); drop_reason
+-- is then 'product_type', otherwise NULL (kept).
 --
--- Freebie rules, first match wins:
---   product_type  product type is in @freebie_types (merch, freebie)
---   minis         title or SKU matches @minis_regex, and the unit price is at
---                 most @minis_max_unit_price (NULL disables the price guard).
---                 The guard exists because paid kits such as "Travel Kit
---                 (4 minis + Pouch)" share a SKU with the free gift version.
---   safety_net    title matches @safety_net_regex (charm, mesh bag, tote bag)
+-- Lines whose product no longer exists in Shopify_All_products get the type
+-- '(no product match)', so they are never mistaken for the blank type.
 --
 -- Revenue = TOTAL_SALES, which sums to the order total_price (GMV).
 WITH latest AS (
@@ -35,12 +31,10 @@ lines AS (
     i.PRODUCT_ID AS product_id,
     IFNULL(i.SKU, '') AS sku,
     IFNULL(i.PRODUCT_NAME, '') AS product_title,
-    IFNULL(p.product_type, '') AS product_type,
+    IF(p.product_id IS NULL, '(no product match)', p.product_type) AS product_type,
     i.QUANTITY AS quantity,
     i.TOTAL_SALES AS revenue,
-    i.LINE_ITEM_SALES AS gross_sales,
-    SAFE_DIVIDE(i.LINE_ITEM_SALES, NULLIF(i.QUANTITY, 0)) AS unit_price,
-    REGEXP_CONTAINS(LOWER(CONCAT(IFNULL(i.PRODUCT_NAME, ''), ' ', IFNULL(i.SKU, ''))), @minis_regex) AS is_minis
+    i.LINE_ITEM_SALES AS gross_sales
   FROM `{{dataset}}.Shopify_All_orders_items` i
   JOIN valid_orders v ON v.order_id = i.ORDER_ID
   LEFT JOIN products p ON p.product_id = i.PRODUCT_ID
@@ -49,11 +43,7 @@ lines AS (
 classified AS (
   SELECT
     *,
-    CASE
-      WHEN product_type IN UNNEST(@freebie_types) THEN 'product_type'
-      WHEN is_minis AND (@minis_max_unit_price IS NULL OR IFNULL(unit_price, 0) <= @minis_max_unit_price) THEN 'minis'
-      WHEN REGEXP_CONTAINS(LOWER(product_title), @safety_net_regex) THEN 'safety_net'
-    END AS drop_reason
+    IF(product_type IN UNNEST(@exclude_product_types), 'product_type', NULL) AS drop_reason
   FROM lines
 )
 SELECT
@@ -63,10 +53,9 @@ SELECT
   ANY_VALUE(product_title) AS product_title,
   product_type,
   drop_reason,
-  is_minis AND drop_reason IS NULL AS paid_minis_kept,
   COUNT(*) AS line_count,
   SUM(quantity) AS units,
   SUM(revenue) AS revenue,
   SUM(gross_sales) AS gross_sales
 FROM classified
-GROUP BY date, product_id, sku, product_type, drop_reason, paid_minis_kept
+GROUP BY date, product_id, sku, product_type, drop_reason

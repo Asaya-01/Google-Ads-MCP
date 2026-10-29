@@ -55,8 +55,8 @@ def build(ctx: Context, days: int = 45) -> dict:
         ],
         "rows": rows,
         "notes": [
-            "Perf sessions = all sessions minus Awareness sessions (Meta campaigns starting woa_awareness_, "
-            'Google campaign IDs whose name contains "awareness").',
+            "Perf sessions = all sessions minus Awareness sessions: any campaign whose name contains "
+            '"awareness" (Meta or Google; Google sessions are matched by campaign ID).',
             "IC = GoKwik checkouts started. CVR = orders / all sessions. MER = GMV / (Meta + Google spend). "
             "Perf ROAS = GMV / spend on non-awareness campaigns.",
             "Phase (sale / BAU) is inferred from the GMV spike against the BAU median and Meta spend scale; "

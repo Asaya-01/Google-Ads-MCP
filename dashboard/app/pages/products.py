@@ -19,6 +19,7 @@ def build(ctx: Context) -> dict:
     mtd, _ = month_to_date(ctx.d1)
     lines = ctx.data.get("products", [])
     catalog = ctx.data.get("catalog")
+    excluded = ctx.cfg["freebies"]["exclude_product_types"]
     mrp_na = (
         None
         if catalog
@@ -75,11 +76,11 @@ def build(ctx: Context) -> dict:
         "products": products,
         "categories": categories,
         "freebie_check": {
-            "last_7_days": _freebies(by_date, last7),
-            "month_to_date": _freebies(by_date, mtd),
+            "last_7_days": _freebies(by_date, last7, excluded),
+            "month_to_date": _freebies(by_date, mtd, excluded),
         },
         "product_types": _types(
-            by_date, mtd, catalog, ctx.cfg["freebies"]["known_types"]
+            by_date, mtd, catalog, ctx.cfg["freebies"]["known_types"], excluded
         ),
         "mrp_check": {
             "units": units_total,
@@ -89,8 +90,8 @@ def build(ctx: Context) -> dict:
             "na": mrp_na,
         },
         "notes": [
-            'Freebie lines are dropped: product type merch or freebie; title or SKU containing "minis" '
-            "when the line is priced at Rs 1 or less; charms, mesh bags and tote bags as a safety net.",
+            "Lines are excluded from units and product tables when the product type is freebie, merch, "
+            "book, gummies or blank. GMV and orders are not affected.",
             "Revenue = line total sales (sums to GMV). MRP = Shopify compare-at price today, applied to all "
             "past dates. Landed discount = 1 - revenue / (units x MRP), on units that have an MRP.",
             "Bundles (combo) use the bundle's own compare-at price.",
@@ -169,32 +170,31 @@ def _compare(cur: dict, prev: dict) -> list[dict]:
     return sorted(rows, key=lambda r: -r["revenue"])
 
 
-def _freebies(by_date, dates) -> dict:
-    out = {"kept": {"lines": 0, "units": 0, "revenue": 0.0}}
-    paid_minis = defaultdict(lambda: {"lines": 0, "units": 0, "revenue": 0.0})
+def _freebies(by_date, dates, excluded: list[str]) -> dict:
+    """Kept lines, and the lines dropped for each excluded product type."""
+    zero = lambda: {"lines": 0, "units": 0, "revenue": 0.0}
+    kept, dropped = zero(), {t: zero() for t in excluded}
     for d in dates:
         for r in by_date.get(d, []):
-            bucket = out.setdefault(
-                r["drop_reason"] or "kept",
-                {"lines": 0, "units": 0, "revenue": 0.0},
+            b = (
+                dropped.setdefault(r["product_type"], zero())
+                if r["drop_reason"]
+                else kept
             )
-            bucket["lines"] += r["line_count"]
-            bucket["units"] += r["units"]
-            bucket["revenue"] += r["revenue"]
-            if r.get("paid_minis_kept"):
-                pm = paid_minis[r["product_title"]]
-                pm["lines"] += r["line_count"]
-                pm["units"] += r["units"]
-                pm["revenue"] += r["revenue"]
-    out["paid_minis_kept"] = [
-        {"product": k, **v}
-        for k, v in sorted(paid_minis.items(), key=lambda kv: -kv[1]["revenue"])
-    ]
-    out.setdefault("safety_net", {"lines": 0, "units": 0, "revenue": 0.0})
-    return out
+            b["lines"] += r["line_count"]
+            b["units"] += r["units"]
+            b["revenue"] += r["revenue"]
+    return {
+        "kept": kept,
+        "excluded": [
+            {"product_type": t or "(blank)", **v} for t, v in dropped.items()
+        ],
+    }
 
 
-def _types(by_date, dates, catalog, known: list[str]) -> dict:
+def _types(
+    by_date, dates, catalog, known: list[str], excluded: list[str]
+) -> dict:
     seen = defaultdict(lambda: {"lines": 0, "units": 0, "dropped_lines": 0})
     for d in dates:
         for r in by_date.get(d, []):
@@ -211,7 +211,8 @@ def _types(by_date, dates, catalog, known: list[str]) -> dict:
             "catalog_products": catalog_types.get(t),
             "lines_mtd": seen[t]["lines"] if t in seen else 0,
             "dropped_lines_mtd": seen[t]["dropped_lines"] if t in seen else 0,
-            "needs_review": t not in known,
+            "excluded": t in excluded,
+            "needs_review": t not in known and t not in excluded,
         }
         for t in all_types
     ]
@@ -219,6 +220,6 @@ def _types(by_date, dates, catalog, known: list[str]) -> dict:
         "rows": sorted(
             rows, key=lambda r: (not r["needs_review"], -r["lines_mtd"])
         ),
-        "review_note": "Types marked for review are neither a known sellable type nor a freebie type. "
-        "Confirm with the D2C lead whether each should be excluded (e.g. Gift, Sample) or kept.",
+        "review_note": "Excluded types are left out of units and product tables. Types marked "
+        "for review are new: add each to freebies.known_types or exclude_product_types in config.json.",
     }

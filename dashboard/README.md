@@ -48,17 +48,16 @@ never as zero.
   `created_at`. Used for every order metric.
 - **GMV** = `total_price` on valid orders. Refunds and returns are not subtracted.
 - **Product revenue** = line `TOTAL_SALES`, which sums to GMV exactly.
-- **Freebie lines** are dropped from units and product tables when: product
-  type is `merch` or `freebie`; or title/SKU contains the word "minis" **and the
-  line is priced at Rs 1 or less**; or (safety net) the title is a charm, mesh
-  bag or tote bag. The price guard exists because the paid "Travel Kit
-  (4 minis + Pouch)" shares a SKU with its free gift version; without it, real
-  sales would be dropped. Set `freebies.minis_max_unit_price` to `null` to
-  apply the rule exactly as written.
-- **Sessions**: Shopify ShopifyQL. **Awareness** = Meta campaign name starting
-  `woa_awareness_` (any case), or a Google campaign ID whose
-  `GOOGLEADS_CONSOLIDATED` name contains "awareness" (set rebuilt every run,
-  paused campaigns included). **Perf sessions** = all sessions minus Awareness.
+- **Excluded lines**: lines whose product type is `freebie`, `merch`, `book`,
+  `gummies` or blank are left out of units and product tables
+  (`freebies.exclude_product_types`). GMV and orders are not affected. Lines
+  whose product no longer exists show as `(no product match)` and are kept.
+  New product types are flagged for review on the Products tab.
+- **Sessions**: Shopify ShopifyQL. **Awareness** = any campaign whose name
+  contains "awareness" (any case, Meta or Google). Google sessions carry a
+  campaign ID, so they are matched to names in `GOOGLEADS_CONSOLIDATED` (set
+  rebuilt every run, paused campaigns included). The same rule splits Meta
+  and Google spend into Awareness and Performance. **Perf sessions** = all sessions minus Awareness.
   Google IDs missing from `GOOGLEADS_CONSOLIDATED` count as Perf, are listed on
   the Marketing tab and raise an alert when seen on D-1.
 - **IC** = GoKwik checkouts started (historical S3 report before 27 Oct, mail
@@ -74,7 +73,8 @@ never as zero.
   1.6× the median of the previous 28 BAU days; between 1.3× and 1.6× it is a
   sale when Meta spend is also at least 1.3× its BAU median, or when it sits
   within 2 days of a sale day (a sale's opening or tail). Every day carries
-  its reason; override any day in `phases.overrides`.
+  its reason; override any day in `phases.overrides` (30 Sep – 4 Oct 2026 are
+  set to BAU there: the September sale ran 25–29 Sep).
 - **D-1 windows**: current = the run of same-phase days ending yesterday (up
   to 7). Prior = BAU days of the previous month closest by day of month (BAU),
   or the first days of the previous sale at least 20 days earlier (sale).
@@ -137,19 +137,14 @@ STORE_DIR=/path/to/store DEV_USER_EMAIL=you@example.com uvicorn app.main:app --p
 - Order attribution through GoKwik covers about 99% of valid orders.
 - GoKwik funnel and orders reports are continuous across the 26/27 Oct switch.
 - Shopify session totals from the per-UTM breakdown equal Shopify's day totals.
+- Meta campaign-level spend for 22–28 Oct adds up to each account's daily total;
+  every Asaya Top Funnel campaign is an Awareness campaign.
 
 ## Open items
 
 - Meta system-user token (Marketing tab Meta figures, MER, Perf ROAS, sale
   detection's spend signal).
 - Anthropic API key for the D-1 commentary.
-- Confirm with the D2C lead: the freebie price guard on "minis"; product types
-  `book`, blank, `gummies` and `combo` (see Products → Product types); whether
-  25 Sep – 4 Oct was one sale; and that `WOA_Awareness_TOF_Sales_*` campaigns
-  (most Meta sessions) should count as Awareness.
-- `GOOGLEADS_CONSOLIDATED` has 22 campaigns with "awareness" in the name, not
-  the 38 the brief counted in Google Ads; the other 16 never appear in the
-  table (no delivery), so they cannot affect sessions today.
 - `GOOGLEADS_CONSOLIDATED` has no rows for 7 Oct; Google spend for that day
   shows as unavailable.
 - GoKwik daily S3 drop (the mail CSV is still manual).

@@ -81,7 +81,7 @@ section.card { background: var(--surface); border: 1px solid var(--line); border
 
 .tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
 .tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 4px; align-content: start; }
-.tile .label { color: var(--ink-2); font-size: 12px; }
+.tile .label { color: var(--ink-2); font-size: 12px; overflow-wrap: anywhere; }
 .tile .value { font-family: var(--font-display); font-size: 24px; font-weight: 600; line-height: 1.15; }
 .tile .foot { font-size: 12px; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; }
 .na { color: var(--muted); font-size: 12px; }
@@ -95,7 +95,7 @@ table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-nu
 th, td { padding: 6px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
 th { position: sticky; top: 0; background: var(--surface); color: var(--ink-2); font-weight: 500; font-size: 12px; }
 th:first-child, td:first-child, td.text, th.text { text-align: left; }
-td.text { white-space: normal; min-width: 180px; max-width: 360px; }
+td.text { white-space: normal; overflow-wrap: anywhere; min-width: 180px; max-width: 360px; }
 tbody tr:hover td { background: color-mix(in srgb, var(--accent-wash) 60%, transparent); }
 tr.total td { font-weight: 600; border-top: 2px solid var(--axis); }
 tr.delta td { font-weight: 600; }
@@ -402,29 +402,25 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       { key: "share", label: "Share", unit: "pct" }, { label: "Δ revenue", render: (r) => deltaHtml(r.revenue_delta, "revenue") },
       { label: "Landed discount", render: (r) => cell(r.landed_discount, "pct", p.mrp_check.na || "No MRP") },
     ];
-    const fb = (b) => {
-      const order = [["kept", "Kept"], ["product_type", "Dropped: merch / freebie type"], ["minis", "Dropped: minis (Rs 1 or less)"], ["safety_net", "Dropped: safety net only (charm, mesh bag, tote bag)"]];
-      return table([{ label: "Rule", text: true, render: (r) => esc(r.label) }, { key: "lines", label: "Lines", unit: "int" }, { key: "units", label: "Units", unit: "int" }, { key: "revenue", label: "Revenue", unit: "inr" }],
-        order.map(([k, label]) => ({ label, ...(b[k] || { lines: 0, units: 0, revenue: 0 }) })));
-    };
+    const fb = (b) => table(
+      [{ label: "Product type", text: true, render: (r) => esc(r.label) }, { key: "lines", label: "Lines", unit: "int" }, { key: "units", label: "Units", unit: "int" }, { key: "revenue", label: "Revenue", unit: "inr" }],
+      [{ label: "Kept", ...b.kept }, ...b.excluded.map((e) => ({ label: `Excluded: ${e.product_type}`, ...e }))]);
     const pt = p.product_types;
     const mc = p.mrp_check;
     $main.innerHTML = `
       <section class="card">
-        <div class="section-head"><h2>Products</h2><span class="sub">${dayLabel(p.period.current[0])}–${dayLabel(p.period.current[1])} vs the 7 days before, freebies excluded</span></div>
+        <div class="section-head"><h2>Products</h2><span class="sub">${dayLabel(p.period.current[0])}–${dayLabel(p.period.current[1])} vs the 7 days before, excluded product types left out</span></div>
         ${mc.na ? `<div class="banner">MRP: data unavailable. ${esc(mc.na)}. Landed discount stays blank.</div>` : ""}
         ${table(prodCols, p.products, { maxHeight: "60vh" })}
       </section>
       <section class="card"><div class="section-head"><h2>Categories</h2></div>${table(catCols, p.categories)}</section>
       <div class="grid-2">
-        <section class="card"><div class="section-head"><h2>Freebie filter, last 7 days</h2></div>${fb(p.freebie_check.last_7_days)}
-          ${p.freebie_check.last_7_days.paid_minis_kept.length ? `<p class="legend-note">Paid lines containing "minis" kept as sales: ${p.freebie_check.last_7_days.paid_minis_kept.map((m) => `${esc(m.product)} (${m.lines} lines)`).join(", ")}</p>` : ""}</section>
-        <section class="card"><div class="section-head"><h2>Freebie filter, month to date</h2></div>${fb(p.freebie_check.month_to_date)}
-          ${p.freebie_check.month_to_date.paid_minis_kept.length ? `<p class="legend-note">Paid lines containing "minis" kept as sales: ${p.freebie_check.month_to_date.paid_minis_kept.map((m) => `${esc(m.product)} (${m.lines} lines)`).join(", ")}</p>` : ""}</section>
+        <section class="card"><div class="section-head"><h2>Excluded product types, last 7 days</h2></div>${fb(p.freebie_check.last_7_days)}</section>
+        <section class="card"><div class="section-head"><h2>Excluded product types, month to date</h2></div>${fb(p.freebie_check.month_to_date)}</section>
       </div>
       <div class="grid-2">
         <section class="card"><div class="section-head"><h2>Product types</h2><span class="sub">${esc(pt.review_note)}</span></div>
-          ${table([{ label: "Type", text: true, render: (r) => `${esc(r.product_type)} ${r.needs_review ? '<span class="chip pending">Review</span>' : ""}` },
+          ${table([{ label: "Type", text: true, render: (r) => `${esc(r.product_type)} ${r.excluded ? '<span class="chip">Excluded</span>' : ""}${r.needs_review ? '<span class="chip pending">Review</span>' : ""}` },
                    { key: "catalog_products", label: "Products in catalog", unit: "int" }, { key: "lines_mtd", label: "Order lines MTD", unit: "int" }, { key: "dropped_lines_mtd", label: "Dropped MTD", unit: "int" }], pt.rows)}</section>
         <section class="card"><div class="section-head"><h2>MRP coverage</h2><span class="sub">Kept units with a Shopify compare-at price, last 7 days</span></div>
           <div class="tiles"><div class="tile"><div class="label">Units with MRP</div><div class="value">${esc(fmt(mc.coverage, "pct") ?? "n/a")}</div><div class="foot">${inGroup.format(mc.units_with_mrp)} of ${inGroup.format(mc.units)}</div></div></div>

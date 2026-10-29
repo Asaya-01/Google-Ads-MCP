@@ -39,17 +39,13 @@
   },
 
   "freebies": {
-    "product_types": ["merch", "freebie"],
-    "minis_regex": "\\bminis\\b",
-    "minis_max_unit_price": 1,
-    "safety_net_regex": "charm|mesh bag|tote bag",
-    "known_types": ["serum", "treatment", "combo", "sunscreen", "moisturiser", "moisturise", "cleanser", "gel", "scrub", "hand cream", "gummies", "freebie", "merch"]
+    "exclude_product_types": ["freebie", "merch", "book", "gummies", ""],
+    "known_types": ["serum", "treatment", "combo", "sunscreen", "moisturiser", "moisturise", "cleanser", "gel", "scrub", "hand cream"]
   },
 
   "sessions": {
-    "meta_awareness_prefix": "woa_awareness_",
+    "awareness_name_regex": "awareness",
     "google_sources": ["google", "youtube"],
-    "google_awareness_name_regex": "awareness",
     "breakdown_limit": 10000,
     "landing_page_limit": 300
   },
@@ -96,7 +92,9 @@
     "grey_ratio": 1.3,
     "spend_ratio": 1.3,
     "shoulder_days": 2,
-    "overrides": {}
+    "overrides": {
+      "2026-09-30": "bau", "2026-10-01": "bau", "2026-10-02": "bau", "2026-10-03": "bau", "2026-10-04": "bau"
+    }
   },
 
   "d1": {
