@@ -125,7 +125,7 @@ if [[ -n "${ALERT_EMAIL:-}" ]]; then
     CHANNEL="$(gcloud beta monitoring channels create --display-name "Asaya dashboard alerts" --type email \
                 --channel-labels "email_address=${ALERT_EMAIL}" --format 'value(name)' "${P[@]}")"
   fi
-  if ! gcloud alpha monitoring policies list --filter 'displayName="Asaya D2C dashboard alert"' \
+  if ! gcloud alpha monitoring policies list --filter 'display_name="Asaya D2C dashboard alert"' \
          --format 'value(name)' "${P[@]}" | grep -q .; then
     POLICY="$(mktemp)"
     cat > "$POLICY" <<JSON
@@ -141,7 +141,7 @@ if [[ -n "${ALERT_EMAIL:-}" ]]; then
     }
   }],
   "notificationChannels": ["${CHANNEL}"],
-  "documentation": {"content": "Open the job's logs and look for entries with alert=asaya-dashboard-alert."}
+  "documentation": {"mimeType": "text/markdown", "content": "Open the job's logs and look for entries with alert=asaya-dashboard-alert."}
 }
 JSON
     gcloud alpha monitoring policies create --policy-from-file "$POLICY" "${P[@]}"
