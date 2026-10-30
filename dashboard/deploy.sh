@@ -100,7 +100,7 @@ gcloud run deploy "$SERVICE" --image "$IMAGE" --region "$REGION" --service-accou
 
 echo "==> [8/9] Refresh job ${JOB} and schedule"
 gcloud run jobs deploy "$JOB" --image "$IMAGE" --region "$REGION" --service-account "$SA" \
-  --set-env-vars "$ENV_VARS" --command python --args "-m,app.refresh" \
+  --set-env-vars "$ENV_VARS" --command python --args=-m,app.refresh \
   --memory 2Gi --task-timeout 1800 --max-retries 0 "${P[@]}"
 gcloud run jobs add-iam-policy-binding "$JOB" --region "$REGION" --member "serviceAccount:$SA" \
   --role roles/run.invoker "${P[@]}" >/dev/null
