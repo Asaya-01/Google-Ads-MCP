@@ -3,6 +3,8 @@ import datetime as dt
 from app import rules, settings
 
 CFG = settings.config()
+# The real config pins 2026 sale dates; detection tests need it bare.
+PHASES = {**CFG["phases"], "overrides": {}}
 
 
 def test_ratio_never_divides_by_zero_or_missing():
@@ -106,9 +108,7 @@ def test_phases_flag_spikes_and_use_spend_in_the_grey_zone():
         + [100_000]
         + [100_000] * 5
     )
-    phases = rules.detect_phases(
-        _series("2026-08-01", gmv, spend), CFG["phases"]
-    )
+    phases = rules.detect_phases(_series("2026-08-01", gmv, spend), PHASES)
     days = sorted(phases)
     assert all(phases[d]["phase"] == "bau" for d in days[28:40])
     assert all(phases[d]["phase"] == "sale" for d in days[40:45])
@@ -131,9 +131,7 @@ def test_grey_days_next_to_a_sale_are_its_shoulders():
     spend = (
         [100_000] * 40 + [100_000] + [250_000] * 2 + [100_000] * 3 + [100_000]
     )
-    phases = rules.detect_phases(
-        _series("2026-08-01", gmv, spend), CFG["phases"]
-    )
+    phases = rules.detect_phases(_series("2026-08-01", gmv, spend), PHASES)
     days = sorted(phases)
     assert phases[days[40]]["phase"] == "sale"  # opening shoulder
     assert phases[days[43]]["phase"] == "sale"  # tail, 1 day out
@@ -145,7 +143,7 @@ def test_grey_days_next_to_a_sale_are_its_shoulders():
 
 
 def test_phase_override_wins():
-    cfg = {**CFG["phases"], "overrides": {"2026-08-05": "sale"}}
+    cfg = {**PHASES, "overrides": {"2026-08-05": "sale"}}
     phases = rules.detect_phases(_series("2026-08-01", [500_000] * 10), cfg)
     assert phases["2026-08-05"] == {
         "phase": "sale",
@@ -153,6 +151,18 @@ def test_phase_override_wins():
         "gmv_ratio": 1.0,
         "spend_ratio": None,
     }
+
+
+def test_overrides_feed_the_baseline_of_later_days():
+    # 10 days at 500k, a 700k plateau the override says is BAU, then a 750k
+    # day. With the plateau counted as BAU the baseline sits near 600k, so
+    # 750k is BAU-level. Detection alone would call the plateau a sale.
+    gmv = [500_000] * 10 + [900_000] * 5 + [750_000]
+    days = _series("2026-08-01", gmv)
+    plateau = {d["date"]: "bau" for d in days[10:15]}
+    cfg = {**PHASES, "overrides": plateau}
+    phases = rules.detect_phases(days, cfg)
+    assert phases["2026-08-16"]["phase"] == "bau"
 
 
 def _phases(sale_days: set[str], start="2026-08-01", end="2026-10-28"):

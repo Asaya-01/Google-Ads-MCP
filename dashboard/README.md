@@ -73,8 +73,11 @@ never as zero.
   1.6× the median of the previous 28 BAU days; between 1.3× and 1.6× it is a
   sale when Meta spend is also at least 1.3× its BAU median, or when it sits
   within 2 days of a sale day (a sale's opening or tail). Every day carries
-  its reason; override any day in `phases.overrides` (30 Sep – 4 Oct 2026 are
-  set to BAU there: the September sale ran 25–29 Sep).
+  its reason. Days listed in `phases.overrides` win and also feed later days'
+  baselines. Sep and Oct 2026 are set from the media-plan calendars and the
+  confirmed actuals: sale 10-14 Sep, 25-28 Sep, 13-18 Oct, 22-26 Oct; all
+  other days in those months BAU. Add new months there as sales are confirmed;
+  detection covers days with no override.
 - **D-1 windows**: current = the run of same-phase days ending yesterday (up
   to 7). Prior = BAU days of the previous month closest by day of month (BAU),
   or the first days of the previous sale at least 20 days earlier (sale).

@@ -168,6 +168,10 @@ def detect_phases(days: list[dict], cfg: dict) -> dict[str, dict]:
                 phase, basis = "bau", "grey zone; Meta spend at BAU level"
         else:
             phase, basis = "bau", "revenue at BAU level"
+        if day["date"] in overrides:
+            # Applied here too, so later days' BAU baseline uses the real
+            # labels, not what detection guessed for a known sale.
+            phase, basis = overrides[day["date"]], "manual override"
         out[day["date"]] = {
             "phase": phase,
             "basis": basis,

@@ -9,6 +9,7 @@ from app import rules, settings
 from app.pages import build_all
 
 CFG = settings.config()
+CFG = {**CFG, "phases": {**CFG["phases"], "overrides": {}}}
 D1 = "2026-10-28"
 START = "2026-08-01"
 
