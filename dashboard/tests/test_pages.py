@@ -331,3 +331,20 @@ def test_a_google_sync_gap_is_unavailable_not_zero():
     assert f["google_spend"] is None and f["mer"] is None
     assert "sync gap" in f["na"]["google_spend"]
     assert ctx.facts["2026-10-08"]["google_spend"] == 25000.0
+
+
+def test_a_sync_gap_gives_a_labelled_partial_google_total():
+    data = _dataset(with_meta=True)
+    data["google_ads"] = [
+        r for r in data["google_ads"] if r["date"] != "2026-10-07"
+    ]
+    pages, _ = build_all(data, CFG, ["marketing"])
+    periods = {p["label"]: p for p in pages["marketing"]["periods"]}
+    mtd = periods["Month to date"]
+    assert mtd["google_spend"] is None and mtd["mer"] is None
+    part = mtd["google_partial"]
+    assert part["excluded"] == ["2026-10-07"]
+    assert part["spend"] == 25000.0 * part["days"]
+    assert part["platform_roas"] == pytest.approx(60000 / 25000)
+    # Complete periods carry no partial figure
+    assert "google_partial" not in periods["D-1"]

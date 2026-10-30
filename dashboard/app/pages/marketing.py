@@ -44,6 +44,8 @@ def build(ctx: Context) -> dict:
             w.get("google_platform_value"), w.get("google_spend")
         )
         row["na"] = {k: v for k, v in w["na"].items() if k in PERIOD_FIELDS}
+        if row["google_spend"] is None:
+            row["google_partial"] = _google_partial(ctx, dates)
         periods.append(row)
 
     spend_trend = [
@@ -83,6 +85,27 @@ def build(ctx: Context) -> dict:
         "unavailable": {
             k: v for k, v in ctx.unavailable.items() if k == "meta"
         },
+    }
+
+
+def _google_partial(ctx: Context, dates: list[str]) -> dict | None:
+    """Google spend and platform ROAS over the days that have data, when only
+    some days in the period are missing. Shown labelled with the excluded
+    days; blended figures (MER, totals) stay unavailable."""
+    have = [
+        d for d in dates if ctx.facts.get(d, {}).get("google_spend") is not None
+    ]
+    missing = [d for d in dates if d not in have]
+    if not have or not missing:
+        return None
+    spend = sum(ctx.facts[d]["google_spend"] for d in have)
+    values = [ctx.facts[d].get("google_platform_value") for d in have]
+    value = sum(values) if None not in values else None
+    return {
+        "spend": spend,
+        "platform_roas": rules.ratio(value, spend),
+        "days": len(have),
+        "excluded": missing,
     }
 
 

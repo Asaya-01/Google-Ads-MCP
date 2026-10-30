@@ -323,11 +323,19 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     const periodCols = [
       { label: "Period", text: true, render: (r) => `<strong>${esc(r.label)}</strong><br><span class="sub">${dayLabel(r.start)}${r.start !== r.end ? "–" + dayLabel(r.end) : ""}</span>` },
       { key: "gmv", label: "GMV", unit: "inr" }, { key: "meta_spend", label: "Meta spend", unit: "inr" },
-      { key: "google_spend", label: "Google spend", unit: "inr" }, { key: "spend", label: "Total spend", unit: "inr" },
+      { label: "Google spend", render: (r) => partialCell(r, "google_spend", "spend", "inr") }, { key: "spend", label: "Total spend", unit: "inr" },
       { key: "mer", label: "MER", unit: "x" }, { key: "perf_spend", label: "Perf spend", unit: "inr" },
       { key: "perf_roas", label: "Perf ROAS", unit: "x" },
-      { key: "meta_platform_roas", label: "Meta platform ROAS", unit: "x" }, { key: "google_platform_roas", label: "Google platform ROAS", unit: "x" },
+      { key: "meta_platform_roas", label: "Meta platform ROAS", unit: "x" }, { label: "Google platform ROAS", render: (r) => partialCell(r, "google_platform_roas", "platform_roas", "x") },
     ];
+    // A period with some Google days missing shows the days that exist, labelled.
+    const partialCell = (r, key, pkey, unit) => {
+      const part = r.google_partial;
+      if (r[key] !== null && r[key] !== undefined || !part || part[pkey] === null || part[pkey] === undefined) return cell(r[key], unit, r.na?.[key]);
+      const ex = part.excluded;
+      const label = ex.length <= 3 ? "excl. " + ex.map(dayLabel).join(", ") : `${part.days} of ${part.days + ex.length} days`;
+      return `${esc(fmt(part[pkey], unit))}<br><span class="sub" title="Google data is missing for: ${esc(ex.join(", "))}">${esc(label)}</span>`;
+    };
     const typeChip = (t) => `<span class="phase ${t === "Awareness" ? "sale" : "bau"}">${esc(t)}</span>`;
     const metaCols = [
       { label: "Campaign", text: true, render: (r) => `${esc(r.campaign)}<br><span class="sub">${esc(r.account)}</span>` },
