@@ -389,7 +389,9 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       ] },
       options: { scales: { x: { stacked: true, grid: { display: false }, ticks: { color: css("--muted"), maxRotation: 0, autoSkipPadding: 12 } }, y: { ...axisOpts("inr"), stacked: true } } },
     }, "inr");
-    baseChart(document.getElementById("c-mer"), {
+    if (!rows.some((r) => r.mer !== null && r.mer !== undefined)) {
+      document.getElementById("c-mer").parentElement.innerHTML = `<p class="na">Data unavailable: ${esc(metaNA || "MER needs both Meta and Google spend")}.</p>`;
+    } else baseChart(document.getElementById("c-mer"), {
       type: "line",
       data: { labels, datasets: [{ label: "MER", data: rows.map((r) => r.mer), borderColor: css("--series-1"), backgroundColor: css("--series-1"),
         borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, spanGaps: false, tension: 0.25 }] },
