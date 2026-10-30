@@ -148,7 +148,9 @@ STORE_DIR=/path/to/store DEV_USER_EMAIL=you@example.com uvicorn app.main:app --p
 - Meta system-user token (Marketing tab Meta figures, MER, Perf ROAS, sale
   detection's spend signal).
 - Anthropic API key for the D-1 commentary.
-- `GOOGLEADS_CONSOLIDATED` has no rows for 7 Oct; Google spend for that day
-  shows as unavailable.
+- `GOOGLEADS_CONSOLIDATED` has no rows for 7 Oct because the Google Ads account
+  had no budget that day. It is recorded as a real zero in
+  `google_ads.zero_spend_dates`. Any other day with no rows in the synced range
+  still shows as a sync gap (unavailable, with a labelled partial total).
 - GoKwik daily S3 drop (the mail CSV is still manual).
 - Phase 2 (Traffic, Web & App, Calendar, Monthly, Search) and Phase 3 (Cohorts).

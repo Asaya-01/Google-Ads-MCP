@@ -9,7 +9,12 @@ from app import rules, settings
 from app.pages import build_all
 
 CFG = settings.config()
-CFG = {**CFG, "phases": {**CFG["phases"], "overrides": {}}}
+CFG = {
+    **CFG,
+    "phases": {**CFG["phases"], "overrides": {}},
+    # Real config pins 2026 dates; these tests build their own gaps.
+    "google_ads": {**CFG["google_ads"], "zero_spend_dates": {}},
+}
 D1 = "2026-10-28"
 START = "2026-08-01"
 
@@ -348,3 +353,28 @@ def test_a_sync_gap_gives_a_labelled_partial_google_total():
     assert part["platform_roas"] == pytest.approx(60000 / 25000)
     # Complete periods carry no partial figure
     assert "google_partial" not in periods["D-1"]
+
+
+def test_a_confirmed_zero_spend_day_is_zero_not_unavailable():
+    data = _dataset(with_meta=True)
+    data["google_ads"] = [
+        r for r in data["google_ads"] if r["date"] != "2026-10-07"
+    ]
+    cfg = {
+        **CFG,
+        "google_ads": {
+            **CFG["google_ads"],
+            "zero_spend_dates": {"2026-10-07": "No budget that day"},
+        },
+    }
+    pages, ctx = build_all(data, cfg, ["marketing"])
+    f = ctx.facts["2026-10-07"]
+    assert f["google_spend"] == 0.0 and "google_spend" not in f["na"]
+    mtd = {p["label"]: p for p in pages["marketing"]["periods"]}[
+        "Month to date"
+    ]
+    assert mtd["google_spend"] == 25000.0 * 27
+    assert "google_partial" not in mtd
+    assert pages["marketing"]["zero_spend_days"] == [
+        {"date": "2026-10-07", "reason": "No budget that day"}
+    ]

@@ -250,6 +250,16 @@ class Context:
                     f["google_perf_spend"],
                     f["google_platform_value"],
                 ) = google[day]
+            elif (
+                day in self.cfg["google_ads"].get("zero_spend_dates", {})
+                and google_latest
+                and day <= google_latest
+            ):
+                # Confirmed in config: the account had no budget, so no rows
+                # is a real zero, not a sync gap.
+                f["google_spend"] = f["google_perf_spend"] = f[
+                    "google_platform_value"
+                ] = 0.0
             else:
                 # No rows at all inside the synced range is a sync gap, not zero spend.
                 reason = (

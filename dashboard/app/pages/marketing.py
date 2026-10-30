@@ -82,6 +82,13 @@ def build(ctx: Context) -> dict:
             "MER = GMV / total ad spend. Performance ROAS = GMV / spend on non-awareness campaigns. "
             "Platform ROAS is each platform's own attributed purchase value / its spend.",
         ],
+        "zero_spend_days": [
+            {"date": d, "reason": why}
+            for d, why in sorted(
+                ctx.cfg["google_ads"].get("zero_spend_dates", {}).items()
+            )
+            if d in ctx.facts
+        ],
         "unavailable": {
             k: v for k, v in ctx.unavailable.items() if k == "meta"
         },

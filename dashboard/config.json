@@ -62,7 +62,10 @@
   },
 
   "google_ads": {
-    "account_id": "6548153452"
+    "account_id": "6548153452",
+    "zero_spend_dates": {
+      "2026-10-07": "No budget in the Google Ads account that day, so spend was zero"
+    }
   },
 
   "shopify": {

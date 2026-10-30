@@ -378,7 +378,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
         </div>
         ${chk.unclassified_google_ids.length ? table([{ key: "campaign_id", label: "Campaign ID", text: true, render: (r) => esc(r.campaign_id) }, { key: "sessions", label: "Sessions", unit: "int" }, { label: "Last seen", render: (r) => esc(r.dates.at(-1)) }], chk.unclassified_google_ids) : ""}
       </section>
-      <section class="card">${notes(p)}</section>`;
+      <section class="card">${notes(p)}${(p.zero_spend_days || []).length ? `<ul class="notes">${p.zero_spend_days.map((z) => `<li>Google spend on ${esc(dayLabel(z.date))} is zero: ${esc(z.reason)}.</li>`).join("")}</ul>` : ""}</section>`;
     const rows = p.spend_trend;
     const labels = rows.map((r) => dayLabel(r.date));
     baseChart(document.getElementById("c-spend"), {
