@@ -1,0 +1,82 @@
+/* Retention tab */
+.ret-controls { gap: 14px; }
+.ret-row { display: grid; gap: 8px; }
+.ret-lab { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.ret-dates { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: end; }
+.ret-dates label, .ret-picks label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.ret-dates input[type=date], .ret-picks select { font: inherit; font-size: 15px; color: var(--ink); background: var(--surface); border: 1.5px solid var(--axis); border-radius: 10px; padding: 9px 12px; min-width: 0; }
+.ret-picks { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+.ret-picks select { width: 100%; font-weight: 600; }
+.ret-picks label[hidden] { display: none; }
+.ret-slider { position: relative; flex: 1 1 280px; min-width: 220px; height: 30px; }
+.ret-slider .rail { position: absolute; left: 2px; right: 2px; top: 12px; height: 6px; border-radius: 3px; background: var(--line); }
+.ret-slider .railfill { position: absolute; top: 0; height: 100%; border-radius: 3px; background: var(--accent); }
+.ret-slider input[type=range] { position: absolute; inset: 0; width: 100%; margin: 0; -webkit-appearance: none; appearance: none; background: none; pointer-events: none; height: 30px; }
+.ret-slider input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; pointer-events: auto; height: 22px; width: 22px; border-radius: 50%; background: var(--accent); border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--accent); cursor: grab; }
+.ret-slider input[type=range]::-moz-range-thumb { pointer-events: auto; height: 16px; width: 16px; border-radius: 50%; background: var(--accent); border: 3px solid var(--surface); cursor: grab; }
+.ret-sum { margin: 0; font-size: 14px; color: var(--ink-2); max-width: 100ch; line-height: 1.55; }
+.ret-sum b { color: var(--ink); }
+.seg button { font-size: 13.5px; padding: 6px 12px; }
+
+.rbadges { display: flex; flex-wrap: wrap; gap: 6px; }
+.rbadge { font-size: 12.5px; font-weight: 600; border-radius: 6px; padding: 3px 10px; background: var(--accent-wash); color: var(--ink-2); white-space: nowrap; }
+.rbadge.warn { background: var(--warn-bg); color: var(--warn-ink); }
+.ruler { overflow-x: auto; }
+.ruler svg, .rfunnel svg { display: block; width: 100%; height: auto; min-width: 560px; }
+.rfunnel { overflow-x: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 14px 12px 8px; }
+.rwho { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.rwho > div { background: var(--surface); padding: 14px 16px; }
+.rwho .rv { font-size: 28px; }
+.rfigs { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.rfig { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 3px; align-content: start; }
+.rv { font-family: var(--font-body); font-size: 32px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.rl { font-size: 14px; font-weight: 600; }
+.rn { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.rfig.good .rv { color: var(--good); } .rfig.bad .rv { color: var(--bad); }
+
+.ret-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.ret-tabs button { font: inherit; font-weight: 600; font-size: 14px; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 8px 16px; cursor: pointer; }
+.ret-tabs button:hover { color: var(--ink); }
+.ret-tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.ret-panel { gap: 16px; }
+.ret-panel h3 { font-family: var(--font-display); font-size: 21px; font-weight: 600; }
+.ret-panel h4 { font-family: var(--font-display); font-size: 17px; font-weight: 600; margin-top: 10px; }
+.rsub { margin: -6px 0 0; color: var(--muted); font-size: 14px; max-width: 78ch; line-height: 1.55; }
+.rhow { background: var(--bg); border-radius: 10px; padding: 10px 14px; }
+.rhow summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--accent); }
+.rhow div { margin-top: 8px; font-size: 13.5px; color: var(--ink-2); line-height: 1.55; max-width: 90ch; }
+.rnote { border-radius: 12px; padding: 16px 18px; font-size: 14.5px; line-height: 1.6; border-left: 5px solid var(--good); background: var(--good-bg); max-width: 110ch; }
+.rnote.alt { border-left-color: var(--series-1); background: color-mix(in srgb, var(--series-1) 10%, var(--surface)); }
+.rnote b { font-weight: 700; }
+
+.rbars { display: grid; gap: 10px; }
+.rbar { display: grid; grid-template-columns: minmax(110px, 190px) 1fr minmax(80px, 120px); gap: 14px; align-items: center; }
+.rbar .k { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.rbar .track { height: 30px; background: var(--line); border-radius: 7px; overflow: hidden; display: block; }
+.rbar .fill { display: block; height: 100%; background: var(--accent); border-radius: 7px; }
+.rbars.alt .fill { background: var(--series-1); }
+.rbar .v { font-size: 13.5px; color: var(--ink-2); text-align: right; font-variant-numeric: tabular-nums; }
+
+.rtbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+.rtbl { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+.rtbl th, .rtbl td { padding: 10px 14px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.rtbl td:first-child { white-space: normal; min-width: 160px; font-weight: 600; }
+.rtbl th { background: var(--bg); color: var(--ink-2); font-size: 12.5px; font-weight: 600; }
+.rtbl th.n, .rtbl td.n { text-align: right; }
+.rtbl th button { all: unset; cursor: pointer; font: inherit; }
+.rtbl th button:hover { color: var(--ink); text-decoration: underline; }
+.rtbl tbody tr:last-child td { border-bottom: 0; }
+.rtbl tr.click { cursor: pointer; }
+.rtbl tr.click:hover td { background: var(--accent-wash); }
+.rtbl .rank { width: 1%; color: var(--muted); font-weight: 400; }
+.rempty { color: var(--muted); padding: 18px 14px; }
+.hm { display: inline-block; border-radius: 6px; padding: 3px 8px; min-width: 76px; text-align: right; }
+.hm .abs { color: var(--muted); font-size: 11.5px; margin-left: 6px; font-weight: 400; }
+.rcsv { all: unset; cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--accent); justify-self: start; padding: 2px 0; }
+.rcsv:hover { text-decoration: underline; }
+@media (max-width: 620px) {
+  .rbar { grid-template-columns: 96px 1fr 76px; gap: 8px; }
+  .rv { font-size: 27px; }
+  .ret-dates input[type=date] { width: 100%; }
+  .ret-dates label { flex: 1 1 140px; }
+}

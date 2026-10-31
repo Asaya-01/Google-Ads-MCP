@@ -143,6 +143,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
 .signin { max-width: 420px; margin: 12vh auto; text-align: center; display: grid; gap: 14px; justify-items: center; }
 .empty { color: var(--muted); padding: 24px 0; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+/*__RETENTION_CSS__*/
 </style>
 
 <header class="bar">
@@ -155,6 +156,9 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
 <main id="main"><p class="empty">Loading the dashboard…</p></main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+/*__RETENTION_ENGINE__*/
+</script>
 <script>
 (() => {
   "use strict";
@@ -522,6 +526,8 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       </section>
       <section class="card">${notes(p)}</section>`;
   };
+
+  /*__RETENTION_UI__*/
 
   R.products = (p) => {
     const prodCols = [

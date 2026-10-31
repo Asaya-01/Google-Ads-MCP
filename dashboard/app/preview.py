@@ -49,8 +49,10 @@ def load_inputs(directory: str, d1: str, history_days: int) -> dict:
     return data
 
 
-def render(pages: dict, status: dict, out: str) -> None:
-    fragment = (settings.STATIC_DIR / "app.html").read_text(encoding="utf-8")
+def render(
+    pages: dict, status: dict, out: str, census: dict | None = None
+) -> None:
+    fragment = settings.app_fragment()
     payload = {
         "config": {
             "brand": settings.config()["brand"],
@@ -62,6 +64,8 @@ def render(pages: dict, status: dict, out: str) -> None:
         "status": status,
         "pages": pages,
     }
+    if census is not None:
+        payload["census"] = census
     blob = json.dumps(payload, separators=(",", ":"), default=str).replace(
         "</", "<\\/"
     )
@@ -81,6 +85,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--inputs", required=True)
     parser.add_argument("--d1", required=True)
     parser.add_argument("--out", required=True)
+    parser.add_argument(
+        "--census", help="a retention census JSON file to embed"
+    )
     args = parser.parse_args(argv)
     cfg = settings.config()
     data = load_inputs(args.inputs, args.d1, cfg["refresh"]["history_days"])
@@ -105,7 +112,19 @@ def main(argv: list[str] | None = None) -> int:
         "complete": True,
         "unclassified_google_ids": ctx.unclassified_google_rows(),
     }
-    render(pages, status, args.out)
+    census = None
+    if args.census:
+        census = json.loads(
+            pathlib.Path(args.census).read_text(encoding="utf-8")
+        )
+        pages["retention"] = {
+            "title": "Retention",
+            "as_of": args.d1,
+            "generated_at": now,
+            "checks": census.get("checks", []),
+            "stats": census.get("stats", {}),
+        }
+    render(pages, status, args.out, census)
     print(f"Wrote {args.out}")
     return 0
 

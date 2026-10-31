@@ -126,7 +126,7 @@ SHELL_HEAD = (
 def index():
     # static/app.html is a page fragment; the same file is used for the
     # offline preview, so the document shell is added here.
-    fragment = (settings.STATIC_DIR / "app.html").read_text(encoding="utf-8")
+    fragment = settings.app_fragment()
     return HTMLResponse(
         SHELL_HEAD + fragment + "</body></html>",
         headers={"Cache-Control": "no-cache"},

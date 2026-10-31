@@ -144,6 +144,32 @@ falls back to BigQuery in the meantime.
   3 hours), and a failed Cloud Run execution (a Cloud Monitoring policy, created
   best-effort by `deploy.sh`).
 
+## Retention
+
+The Retention tab is a rebuild of the retention artifact, on all-time data.
+
+- **Census** (`python -m app.retention.job`, daily 09:30 IST, Cloud Run job
+  `asaya-d2c-retention`): reads every valid order and line from the BigQuery
+  copy of Shopify (back to Sep 2023), maps each line to a product with
+  `retention_catalog.json`, merges orders under 24 hours apart, and stores
+  per-customer purchase timelines (IDs only: no names, emails or phones) as
+  `retention/census.json`. Customers with one order are kept as daily counts.
+- **Rules** carried over from the artifact: freebies, merch, minis, gifts,
+  travel kits, books and gummies never count; combos stay whole; each customer
+  counts once per product; a customer is followed for the chosen horizon from
+  their own first order, with the window end trimmed so everyone had the full
+  time. Unmapped paid products go to an "Other" bucket, listed on the tab.
+- **Engine** (`static/retention_engine.js`): the artifact's engine, ported
+  without changes to the logic. On the artifact's own data it returns
+  identical output across 240 comparisons (8 windows x 6 horizons x 5
+  calculations). `tests/test_retention.py` also checks that the Python census
+  and the engine agree on an independent count.
+- **Checks** shown on the tab: BigQuery's order count against Shopify's own
+  all-time count, and the census customers against BigQuery.
+- **Editing the catalogue**: change `retention_catalog.json` (rules are plain
+  regexes that also work in BigQuery) and rebuild; the Data and method panel
+  lists what is left out and what is unmapped.
+
 ## Local development
 
 ```

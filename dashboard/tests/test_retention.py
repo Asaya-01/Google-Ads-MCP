@@ -112,3 +112,85 @@ def test_a_customer_with_no_counted_lines_is_not_in_the_census():
         ]
     )
     assert c["stats"]["customers"] == 1
+
+
+# ---- the builder and the JavaScript engine agree --------------------------
+import json
+import pathlib
+import random
+import shutil
+import subprocess
+
+import pytest
+
+ENGINE = (
+    pathlib.Path(__file__).resolve().parents[1]
+    / "static"
+    / "retention_engine.js"
+)
+
+
+def _synthetic():
+    """200 customers with 1-4 orders, at least 3 days apart, and the answer
+    worked out independently of both implementations."""
+    rng = random.Random(7)
+    titles = [UAS, ASS, ITB]
+    rows, truth = [], {}
+    start = dt.date(2025, 1, 1)
+    oid = 0
+    for c in range(200):
+        d = start + dt.timedelta(days=rng.randrange(0, 300))
+        days = [d]
+        for _ in range(rng.choice([0, 0, 1, 1, 2, 3])):
+            days.append(days[-1] + dt.timedelta(days=rng.randrange(3, 120)))
+        days = [x for x in days if x <= dt.date(2026, 3, 31)]
+        truth[str(c)] = days
+        for day in days:
+            oid += 1
+            rows.append(
+                (
+                    str(oid),
+                    str(c),
+                    at(day.isoformat()),
+                    rng.choice(titles),
+                    "x",
+                    "serum",
+                    400.0,
+                )
+            )
+    return rows, truth
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node is not installed")
+def test_the_engine_reproduces_an_independent_count_from_the_built_census(
+    tmp_path,
+):
+    rows, truth = _synthetic()
+    census = census_for(rows)
+    f = tmp_path / "census.json"
+    f.write_text(json.dumps(census))
+    script = (
+        "const P=JSON.parse(require('fs').readFileSync(process.argv[1]));"
+        f"const E=require('{ENGINE}')(P);"
+        "const r=E.computeBrand(0,E.NDAYS,90);"
+        "console.log(JSON.stringify({n1:r.n[1],cb:r.cb[90],ch:r.ch[90],nd:E.NDAYS}));"
+    )
+    out = json.loads(
+        subprocess.run(
+            ["node", "-e", script, str(f)],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    )
+    epoch = min(d[0] for d in truth.values())
+    ndays = (THROUGH - epoch).days
+    assert out["nd"] == ndays
+    cohort = [d for d in truth.values() if (d[0] - epoch).days <= ndays - 90]
+    repeated = [d for d in cohort if len(d) > 1 and (d[1] - d[0]).days <= 90]
+    assert out["cb"] == len(cohort) and out["ch"] == len(repeated)
+    assert out["n1"] == len(cohort)  # one count per customer in the cohort
+
+
+def census_for(rows):
+    return rb.build(rows, CAT, TYPES, THROUGH)

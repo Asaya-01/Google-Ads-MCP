@@ -23,3 +23,18 @@ def env(name: str, default: str | None = None) -> str | None:
 
 def enabled_tabs() -> list[dict]:
     return [t for t in config()["tabs"] if t.get("enabled")]
+
+
+def app_fragment() -> str:
+    """static/app.html with the retention engine, UI and styles inlined (kept
+    in their own files so the engine can be tested on its own in Node)."""
+    html = (STATIC_DIR / "app.html").read_text(encoding="utf-8")
+    for marker, name in (
+        ("/*__RETENTION_CSS__*/", "retention.css"),
+        ("/*__RETENTION_ENGINE__*/", "retention_engine.js"),
+        ("/*__RETENTION_UI__*/", "retention_ui.js"),
+    ):
+        html = html.replace(
+            marker, (STATIC_DIR / name).read_text(encoding="utf-8")
+        )
+    return html
