@@ -293,3 +293,39 @@ def test_the_engine_values_customers_like_an_independent_sum(tmp_path):
     assert out["v"]["cust"] == len(truth) == out["months"]
     assert out["v"]["firstAov"] == pytest.approx(400)
     assert out["v"]["repAov"] == pytest.approx(400)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node is not installed")
+def test_value_can_be_scoped_to_customers_acquired_on_one_product(tmp_path):
+    rows = [
+        line("1", "A", "2025-01-10", UAS),
+        line("2", "A", "2025-01-30", ASS),
+        line("3", "B", "2025-01-11", ASS),
+        line("4", "C", "2025-01-12", UAS),
+        line("5", "D", "2025-01-13", ITB),
+    ]
+    c = census(rows)
+    f = tmp_path / "census.json"
+    f.write_text(json.dumps(c))
+    code = Catalog().classify(UAS, "x", 400.0, "serum", TYPES)[0].code
+    script = (
+        "const P=JSON.parse(require('fs').readFileSync(process.argv[1]));"
+        f"const E=require('{ENGINE}')(P);"
+        f"const i=P.skus.findIndex((s)=>s[0]==='{code}');"
+        "const all=E.computeValue(0,E.NDAYS,90);"
+        "const v=E.computeValue(0,E.NDAYS,90,i);"
+        "const m=E.computeMonthly(0,E.NDAYS,i);"
+        "console.log(JSON.stringify({all:all.cust,v,m:m.reduce((s,x)=>s+x.n,0)}));"
+    )
+    out = json.loads(
+        subprocess.run(
+            ["node", "-e", script, str(f)],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    )
+    assert out["all"] == 4 and out["v"]["cust"] == 2 and out["m"] == 2
+    assert out["v"]["size"] is None
+    ltv90 = next(x for x in out["v"]["ltv"] if x["h"] == 90)
+    assert ltv90["per"] == pytest.approx((800 + 400) / 2)

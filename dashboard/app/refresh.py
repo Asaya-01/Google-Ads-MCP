@@ -37,6 +37,7 @@ from . import (
     health,
     meta,
     reconcile,
+    rules,
     secrets,
     settings,
 )
@@ -212,10 +213,41 @@ def collect(
             if rows is not None:
                 cached[day] = rows
         data["meta"] = cached
+    data["google_id_names"] = _google_id_names(cfg, data, store, gsrc)
     data["reconcile"] = _reconcile(
         cfg, data, d1, d1_date, gsrc, shop, token, missing
     )
     return data, missing
+
+
+def _google_id_names(cfg: dict, data: dict, store, gsrc: dict | None) -> dict:
+    """Campaign names for Google IDs seen in sessions that the BigQuery copy
+    does not know, so the check table reads as names, not numbers. Names that
+    were found are cached; best effort, never fails the run."""
+    try:
+        scfg = cfg["sessions"]
+        aware, known = rules.google_awareness_ids(
+            data.get("google_campaigns") or [], scfg["awareness_name_regex"]
+        )
+        unknown: set[str] = set()
+        for payload in (data.get("sessions") or {}).values():
+            for r in payload["rows"]:
+                _, u = rules.session_kind(
+                    r["utm_source"], r["utm_campaign"], aware, known, scfg
+                )
+                if u:
+                    unknown.add(u)
+        names = store.get_json("cache/google_names.json") or {}
+        todo = [i for i in unknown if i not in names]
+        if todo and gsrc:
+            found = google_ads.fetch_campaign_names(
+                cfg["google_ads"], gsrc["creds"], todo
+            )
+            names.update({k: v for k, v in found.items() if v})
+            store.put_json("cache/google_names.json", names)
+        return {i: names[i] for i in unknown if i in names}
+    except Exception:
+        return {}
 
 
 def _reconcile(

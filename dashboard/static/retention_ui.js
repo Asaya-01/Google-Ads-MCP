@@ -4,7 +4,7 @@
 
 const RET = {
   eng: null, census: null, A: 0, B: 0, HZ: 90, tab: "brand", code: null, vsel: "all",
-  res: [], resV: [], sort: { key: "base", dir: -1 }, meta: null,
+  res: [], resV: [], vscope: "all", sort: { key: "base", dir: -1 }, meta: null,
 };
 const RET_TABS = [
   ["brand", "Brand-wide"], ["value", "Revenue & LTV"], ["matrix", "Products compared"], ["journey", "Product journey"],
@@ -170,6 +170,8 @@ function retShell(p) {
   $r("r-panel").addEventListener("click", (ev) => {
     const s = ev.target.closest("th[data-sort]");
     if (s) { const k = s.dataset.sort; RET.sort = { key: k, dir: RET.sort.key === k ? -RET.sort.dir : -1 }; retRender(); return; }
+    const sc = ev.target.closest("button[data-scope]");
+    if (sc) { RET.vscope = sc.dataset.scope; retRenderPanel(); return; }
     const row = ev.target.closest("tr[data-code]");
     if (row) { RET.code = row.dataset.code; RET.vsel = "all"; retSyncVariants(); retTab("journey"); window.scrollTo({ top: 0, behavior: "smooth" }); return; }
     const c = ev.target.closest("button[data-csv]"); if (c) rDownload(c.dataset.csv);
@@ -330,13 +332,16 @@ function retBrand() {
 }
 
 function retValue() {
-  const e = RET.eng, v = e.computeValue(RET.A, RET.B, RET.HZ);
-  if (v.empty) return `<h3>Revenue and lifetime value</h3><p class="na">No customers acquired in this window.</p>`;
+  const e = RET.eng, r0 = RET.res.find((x) => x.code === RET.code);
+  const scoped = RET.vscope === "product" && !!r0, who = scoped ? `customers acquired on ${r0.name}` : "new customers";
+  const v = e.computeValue(RET.A, RET.B, RET.HZ, scoped ? r0.i : undefined);
+  const scopeCtl = `<div class="seg" id="r-vscope" style="margin:6px 0 12px"><button type="button" data-scope="all" aria-pressed="${!scoped}">All new customers</button>${r0 ? `<button type="button" data-scope="product" aria-pressed="${scoped}">Acquired on ${esc(r0.name)}</button>` : ""}</div>`;
+  if (v.empty) return `<h3>Revenue and lifetime value</h3>${scopeCtl}<p class="na">No ${esc(who)} in this window.</p>`;
   const L = (h) => v.ltv.find((q) => q.h === h) || {};
   const l90 = L(90), l365 = L(365), l180 = L(180);
   const hz = RET.HZ;
   const figs = [
-    rFig(rRs(v.firstAov), "First-order value", `average across ${rN(v.cust)} new customers`),
+    rFig(rRs(v.firstAov), "First-order value", `average across ${rN(v.cust)} ${esc(who)}`),
     rFig(rRs(v.repAov), "Repeat-order value", `${rN(v.repOrders)} repeat orders${hz != null ? ` within ${hz} days` : ""}`),
     rFig(rRs(l90.per), "Value per customer at 90 days", l90.n ? `${rN(l90.n)} ${l90.n === 1 ? "customer" : "customers"} with a full 90 days` : "no cohort has had 90 days yet"),
     rFig(rRs(l365.per), "Value per customer at 12 months", l365.n ? `${rN(l365.n)} ${l365.n === 1 ? "customer" : "customers"} with a full year` : "no cohort has had a year yet"),
@@ -345,9 +350,9 @@ function retValue() {
   rCsv("value-ltv", ["Day", "Value per customer Rs", "First order Rs", "Multiple of first order", "Cohort"], v.ltv.map((q) => [q.h, q.per == null ? "" : Math.round(q.per), q.first == null ? "" : Math.round(q.first), q.lift == null ? "" : q.lift.toFixed(2), q.n]));
   const ltvTbl = rTable([{ t: "By day" }, { t: "Value per customer", n: 1 }, { t: "of which first order", n: 1 }, { t: "Multiple", n: 1 }, { t: "Cohort", n: 1 }], v.ltv.map((q) => `<tr><td>${q.h} days</td><td class="n">${q.n ? `<b>${rRs(q.per)}</b>` : "—"}</td><td class="n">${rRs(q.first)}</td><td class="n">${q.lift == null ? "—" : q.lift.toFixed(2) + "x"}</td><td class="n">${rN(q.n)}</td></tr>`), { csv: "value-ltv" });
   const bl = { 1: "1 product", 2: "2 products", 3: "3 or more products" };
-  rCsv("value-size", ["First order contained", "Customers", "First-order value Rs", "Value at 90 days Rs"], v.size.map((q) => [bl[q.z], q.n, q.first == null ? "" : Math.round(q.first), q.ltv90 == null ? "" : Math.round(q.ltv90)]));
-  const sizeTbl = rTable([{ t: "First order contained" }, { t: "Customers", n: 1 }, { t: "First-order value", n: 1 }, { t: "Value at 90 days", n: 1 }], v.size.map((q) => `<tr><td>${bl[q.z]}</td><td class="n">${rN(q.n)}</td><td class="n">${rRs(q.first)}</td><td class="n">${rRs(q.ltv90)}</td></tr>`), { csv: "value-size" });
-  const months = e.computeMonthly(RET.A, RET.B);
+  if (v.size) rCsv("value-size", ["First order contained", "Customers", "First-order value Rs", "Value at 90 days Rs"], v.size.map((q) => [bl[q.z], q.n, q.first == null ? "" : Math.round(q.first), q.ltv90 == null ? "" : Math.round(q.ltv90)]));
+  const sizeTbl = !v.size ? "" : rTable([{ t: "First order contained" }, { t: "Customers", n: 1 }, { t: "First-order value", n: 1 }, { t: "Value at 90 days", n: 1 }], v.size.map((q) => `<tr><td>${bl[q.z]}</td><td class="n">${rN(q.n)}</td><td class="n">${rRs(q.first)}</td><td class="n">${rRs(q.ltv90)}</td></tr>`), { csv: "value-size" });
+  const months = e.computeMonthly(RET.A, RET.B, scoped ? r0.i : undefined);
   rCsv("value-monthly", ["Month", "New customers", "First-order value Rs", "Repeat in 90 days %", "30d Rs", "90d Rs", "180d Rs", "365d Rs"], months.map((m) => [m.label, m.n, m.aov == null ? "" : Math.round(m.aov), m.again90 == null ? "" : m.again90.toFixed(2), ...m.ltv.filter((q) => [30, 90, 180, 365].includes(q.h)).map((q) => (q.per == null ? "" : Math.round(q.per)))]));
   const cellv = (q) => (q.per == null ? '<td class="n na-cell">—</td>' : `<td class="n">${rRs(q.per)}</td>`);
   const monthTbl = rTable([{ t: "Month acquired" }, { t: "New customers", n: 1 }, { t: "First order", n: 1 }, { t: "Repeat in 90d", n: 1 }, { t: "30 days", n: 1 }, { t: "90 days", n: 1 }, { t: "180 days", n: 1 }, { t: "12 months", n: 1 }],
@@ -362,24 +367,24 @@ function retValue() {
   const prodTbl = rTable([hd("Acquired on", "name"), hd("Customers", "n"), hd("First order", "aov"), hd("90 days", "ltv90"), hd("180 days", "ltv180"), hd("12 months", "ltv365")],
     pv.map((r) => `<tr class="click" data-code="${esc(r.code)}" tabindex="0" title="Open the journey for ${esc(r.name)}"><td>${esc(r.name)}</td><td class="n">${rN(r.n)}</td><td class="n">${rRs(r.aov)}</td><td class="n">${rRs(r.ltv90)}</td><td class="n">${rRs(r.ltv180)}</td><td class="n">${rRs(r.ltv365)}</td></tr>`), { csv: "value-products", empty: "No product has 300 or more acquisitions in this window." });
   const ranked = pv.filter((r) => r.ltv90 != null).sort((p, q) => q.ltv90 - p.ltv90);
-  let sum = `<b>Summary.</b> ${rN(v.cust)} new customers in this window spent an average of <b>${rRs(v.firstAov)}</b> on their first order. `;
+  let sum = `<b>Summary.</b> ${rN(v.cust)} ${esc(who)} in this window spent an average of <b>${rRs(v.firstAov)}</b> on their first order. `;
   if (v.repAov != null) sum += `Repeat orders average ${rRs(v.repAov)}${v.repShare != null ? `, and repeat orders make up ${v.repShare.toFixed(0)}% of the revenue these customers brought in${hz != null ? ` within ${hz} days` : ""}` : ""}. `;
   if (l90.n) sum += `By day 90 a customer is worth ${rRs(l90.per)} (${l90.lift.toFixed(2)}x their first order)${l365.n ? `, and ${rRs(l365.per)} by 12 months (${l365.lift.toFixed(2)}x)` : ""}.`;
   let act = "<b>Insight and action.</b> ";
   if (l90.n) act += `Everything above first-order value is retention revenue: ${rRs(l90.per - l90.first)} per customer in the first 90 days. Set the allowable acquisition cost against ${rRs(l90.per)}, not against the first order alone. `;
-  const one = v.size[0], three = v.size[2];
-  if (one.ltv90 && three.ltv90 && three.n) act += `Customers whose first basket held 3 or more products are worth ${rRs(three.ltv90)} at 90 days against ${rRs(one.ltv90)} for single-product baskets (${(three.ltv90 / one.ltv90).toFixed(1)}x). `;
+  const one = v.size && v.size[0], three = v.size && v.size[2];
+  if (one && one.ltv90 && three.ltv90 && three.n) act += `Customers whose first basket held 3 or more products are worth ${rRs(three.ltv90)} at 90 days against ${rRs(one.ltv90)} for single-product baskets (${(three.ltv90 / one.ltv90).toFixed(1)}x). `;
   if (ranked.length > 1) act += `Among products with enough customers, ${esc(ranked[0].name)} brings in the most valuable customers (${rRs(ranked[0].ltv90)} at 90 days) and ${esc(ranked[ranked.length - 1].name)} the least (${rRs(ranked[ranked.length - 1].ltv90)}). `;
   act += "Monthly cohorts show a dash until they have had the full time, so a recent month is never compared on a horizon it has not reached.";
   return `
     <h3>What a customer is worth</h3>
+    ${scopeCtl}
     <p class="rsub">Order value is what the customer paid for the whole order: every line after discounts, with shipping and tax, the same basis as Shopify's Total sales (September 2026 matches within 0.5%). A customer's value within a number of days counts their first order and everything after it. Only customers who have had the full number of days are counted.</p>
     <div class="rfigs">${figs}</div>
     <h4>Value per customer over time</h4>
     ${curve.length ? rBars(curve, (r) => rRs(r[1])) : ""}
     ${ltvTbl}
-    <h4>First-order basket size against value</h4>
-    ${sizeTbl}
+    ${v.size ? `<h4>First-order basket size against value</h4>${sizeTbl}` : ""}
     <h4>Monthly cohorts</h4>
     <p class="rsub">Each row is everyone first ordering in that month. A dash means the month has not yet had that long.</p>
     ${monthTbl}

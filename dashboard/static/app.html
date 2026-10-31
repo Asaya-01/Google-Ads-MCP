@@ -462,7 +462,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
           <div class="tile"><div class="label">Google sessions on Awareness IDs</div><div class="value">${inGroup.format(m.awareness)}</div><div class="foot">${chk.google_awareness_ids} awareness IDs of ${chk.google_known_ids} known</div></div>
           <div class="tile"><div class="label">Unclassified Google IDs</div><div class="value">${chk.unclassified_google_ids.length}</div><div class="foot">${chk.unclassified_google_ids.length ? "Counted as Perf until they sync. Alerts fire for IDs seen yesterday." : "None in the history window"}</div></div>
         </div>
-        ${chk.unclassified_google_ids.length ? table([{ key: "campaign_id", label: "Campaign ID", text: true, render: (r) => esc(r.campaign_id) }, { key: "sessions", label: "Sessions", unit: "int" }, { label: "Last seen", render: (r) => esc(r.dates.at(-1)) }], chk.unclassified_google_ids) : ""}
+        ${chk.unclassified_google_ids.length ? table([{ label: "Campaign", text: true, render: (r) => `${r.name ? esc(r.name) : '<span class="na" title="Google Ads has no campaign with this ID in the World of Asaya account, so it is probably an old or removed campaign from another account">Name not found in Google Ads</span>'}<br><span class="sub">ID ${esc(r.campaign_id)}</span>` }, { key: "sessions", label: "Sessions", unit: "int" }, { label: "Last seen", render: (r) => esc(r.dates.at(-1)) }], chk.unclassified_google_ids) : ""}
       </section>
       <section class="card">${notes(p)}${(p.zero_spend_days || []).length ? `<ul class="notes">${p.zero_spend_days.map((z) => `<li>Google spend on ${esc(dayLabel(z.date))} is zero: ${esc(z.reason)}.</li>`).join("")}</ul>` : ""}</section>`;
     const rows = p.spend_trend;

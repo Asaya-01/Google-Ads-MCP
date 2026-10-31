@@ -133,3 +133,22 @@ def fetch_day_total(cfg: dict, creds: dict, day: str) -> float:
         sum(int((r.get("metrics") or {}).get("costMicros") or 0) for r in rows)
         / 1_000_000
     )
+
+
+def fetch_campaign_names(
+    cfg: dict, creds: dict, ids: list[str]
+) -> dict[str, str]:
+    """Names for campaign IDs the BigQuery copy does not know, including
+    removed campaigns. IDs Google does not return are simply absent."""
+    ids = [i for i in ids if str(i).isdigit()]
+    if not ids:
+        return {}
+    rows = _search_stream(
+        cfg,
+        creds,
+        "SELECT campaign.id, campaign.name FROM campaign "
+        f"WHERE campaign.id IN ({', '.join(ids)})",
+    )
+    return {
+        str(r["campaign"]["id"]): r["campaign"].get("name") or "" for r in rows
+    }

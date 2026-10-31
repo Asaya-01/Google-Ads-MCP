@@ -374,7 +374,8 @@
     // timelines. A customer's value inside h days counts the first order too.
     const LTV_H = [30, 60, 90, 180, 365];
 
-    function computeValue(a, b, hz) {
+    function computeValue(a, b, hz, sku) {
+      const scoped = sku !== undefined && sku !== null;
       const bE = acqEnd(b, hz);
       const OBS = hz == null ? Infinity : hz;
       const ltv = {};
@@ -383,7 +384,8 @@
       const t = { cust: 0, first: 0, hzN: 0, hzFirst: 0, repOrders: 0, repRev: 0, repCust: 0 };
       for (let m = 0; m < MULTI.length; m++) {
         const tl = MULTI[m], f0 = tl[0][0];
-        if (PREFLAG[m] || f0 < a || f0 > b) continue;
+        if ((!scoped && PREFLAG[m]) || f0 < a || f0 > b) continue;
+        if (scoped && tl[0][1].indexOf(sku) < 0) continue; // acquired on this product
         t.cust++; t.first += tl[0][2];
         const z = Math.min(tl[0][1].length, 3);
         size[z].n++; size[z].first += tl[0][2];
@@ -404,7 +406,9 @@
           if (h === 90) { size[z].n90++; size[z].rev90 += r; }
         }
       }
-      for (const [d, z, cN, , rev] of SB) {
+      // one-time buyers: all of them, or those whose only order held the product
+      const ones = scoped ? (SINGLES[sku] || []).map(([d, cN, cP, rev]) => [d, 1, cN + cP, 0, rev]) : SB;
+      for (const [d, z, cN, , rev] of ones) {
         if (d < a || d > b) continue;
         t.cust += cN; t.first += rev;
         size[z].n += cN; size[z].first += rev;
@@ -424,12 +428,13 @@
         hzPer: per(t.hzFirst + t.repRev, t.hzN),
         ltv: LTV_H.map((h) => ({ h, n: ltv[h].n, per: per(ltv[h].rev, ltv[h].n), first: per(ltv[h].first, ltv[h].n),
           lift: ltv[h].first ? ltv[h].rev / ltv[h].first : null })),
-        size: [1, 2, 3].map((z) => ({ z, n: size[z].n, first: per(size[z].first, size[z].n), n90: size[z].n90, ltv90: per(size[z].rev90, size[z].n90) })),
+        size: scoped ? null : [1, 2, 3].map((z) => ({ z, n: size[z].n, first: per(size[z].first, size[z].n), n90: size[z].n90, ltv90: per(size[z].rev90, size[z].n90) })),
       };
     }
 
     // monthly acquisition cohorts: value per customer once the month is fully mature
-    function computeMonthly(a, b) {
+    function computeMonthly(a, b, sku) {
+      const scoped = sku !== undefined && sku !== null;
       const months = new Map();
       const slot = (d) => {
         const dt = dayToDate(d), key = dt.getUTCFullYear() * 100 + dt.getUTCMonth() + 1;
@@ -457,10 +462,12 @@
       };
       for (let m = 0; m < MULTI.length; m++) {
         const tl = MULTI[m], f0 = tl[0][0];
-        if (PREFLAG[m] || f0 < a || f0 > b) continue;
+        if ((!scoped && PREFLAG[m]) || f0 < a || f0 > b) continue;
+        if (scoped && tl[0][1].indexOf(sku) < 0) continue;
         add(f0, 1, tl[0][2], f0, tl);
       }
-      for (const [d, , cN, , rev] of SB) if (d >= a && d <= b) add(d, cN, rev, d, null);
+      const ones = scoped ? (SINGLES[sku] || []).map(([d, cN, cP, rev]) => [d, 1, cN + cP, 0, rev]) : SB;
+      for (const [d, , cN, , rev] of ones) if (d >= a && d <= b) add(d, cN, rev, d, null);
       return [...months.values()].sort((x, y) => x.key - y.key).map((c) => ({
         key: c.key, label: c.label, n: c.n, aov: c.n ? c.first / c.n : null,
         again90: c.base90 ? (100 * c.again90) / c.base90 : null,

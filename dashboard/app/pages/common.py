@@ -370,7 +370,13 @@ class Context:
     def unclassified_google_rows(self) -> list[dict]:
         return sorted(
             (
-                {**v, "dates": sorted(v["dates"])}
+                {
+                    **v,
+                    "dates": sorted(v["dates"]),
+                    "name": (self.data.get("google_id_names") or {}).get(
+                        v["campaign_id"]
+                    ),
+                }
                 for v in self.unclassified_google.values()
             ),
             key=lambda r: -r["sessions"],

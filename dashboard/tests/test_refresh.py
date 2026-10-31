@@ -145,3 +145,49 @@ def test_google_api_sets_the_d1_check_from_its_own_rows(monkeypatch):
         "latest_date": "2026-10-30",
         "d1_rows": 1,
     }
+
+
+def test_unknown_google_ids_get_their_names_and_misses_stay_blank(monkeypatch):
+    from app import google_ads
+
+    monkeypatch.setattr(
+        google_ads,
+        "_search_stream",
+        lambda cfg, creds, q: [
+            {"campaign": {"id": "23983075569", "name": "Old Pmax"}}
+        ],
+    )
+    assert google_ads.fetch_campaign_names(
+        {}, {}, ["23983075569", "22903421011", "x"]
+    ) == {"23983075569": "Old Pmax"}
+
+    class Store:
+        def __init__(self):
+            self.saved = {}
+
+        def get_json(self, path):
+            return self.saved.get(path)
+
+        def put_json(self, path, value):
+            self.saved[path] = value
+
+    cfg = refresh.settings.config()
+    data = {
+        "google_campaigns": [],
+        "sessions": {
+            "2026-10-30": {
+                "rows": [
+                    {
+                        "utm_source": "google",
+                        "utm_campaign": c,
+                        "sessions": 3,
+                    }
+                    for c in ("23983075569", "22903421011")
+                ]
+            }
+        },
+    }
+    store = Store()
+    names = refresh._google_id_names(cfg, data, store, {"creds": {}})
+    assert names == {"23983075569": "Old Pmax"}
+    assert store.saved["cache/google_names.json"] == {"23983075569": "Old Pmax"}
