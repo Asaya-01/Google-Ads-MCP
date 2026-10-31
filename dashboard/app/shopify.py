@@ -7,6 +7,7 @@ emails or phone numbers are requested anywhere in this module.
 
 from __future__ import annotations
 
+import datetime as dt
 import time
 
 import requests
@@ -85,6 +86,22 @@ class Shopify:
         if data["parseErrors"]:
             raise ShopifyError("ShopifyQL: " + "; ".join(data["parseErrors"]))
         return (data.get("tableData") or {}).get("rows") or []
+
+    def orders_count(self, day: str) -> int:
+        """Shopify's own count of orders created on one IST day (test orders
+        excluded), used to check the BigQuery copy is complete."""
+        nxt = (dt.date.fromisoformat(day) + dt.timedelta(days=1)).isoformat()
+        query = (
+            f"created_at:>='{day}T00:00:00+05:30' AND "
+            f"created_at:<'{nxt}T00:00:00+05:30' AND test:false"
+        )
+        data = self.graphql(
+            "query($q: String!) { ordersCount(query: $q) { count precision } }",
+            {"q": query},
+        )["ordersCount"]
+        if data.get("precision") != "EXACT":
+            raise ShopifyError("Shopify returned an approximate order count")
+        return int(data["count"])
 
     def sessions_day(self, day: str, limit: int) -> dict:
         """Sessions, add-to-cart and reached-checkout sessions for one IST day:

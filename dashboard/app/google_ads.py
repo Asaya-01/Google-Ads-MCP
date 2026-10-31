@@ -118,3 +118,18 @@ def fetch_campaigns(cfg: dict, creds: dict) -> list[dict]:
         }
         for r in rows
     ]
+
+
+def fetch_day_total(cfg: dict, creds: dict, day: str) -> float:
+    """Spend for one day from the account's own total, to check the
+    campaign-level rows add up."""
+    rows = _search_stream(
+        cfg,
+        creds,
+        "SELECT metrics.cost_micros FROM customer "
+        f"WHERE segments.date = '{day}'",
+    )
+    return (
+        sum(int((r.get("metrics") or {}).get("costMicros") or 0) for r in rows)
+        / 1_000_000
+    )

@@ -29,7 +29,17 @@ import time
 import sys
 from zoneinfo import ZoneInfo
 
-from . import alerts, bq, commentary, google_ads, meta, secrets, settings
+from . import (
+    alerts,
+    bq,
+    commentary,
+    google_ads,
+    health,
+    meta,
+    reconcile,
+    secrets,
+    settings,
+)
 from .pages import build_all
 from .shopify import Shopify
 from .store import default_store
@@ -105,6 +115,7 @@ def collect(
 
     # Shopify: sessions per day (cached, recent days re-pulled) and MRP
     scfg = cfg["shopify"]
+    shop = None
     try:
         client_id = secrets.get_secret(scfg["client_id_secret"])
         client_secret = secrets.get_secret(scfg["client_secret_secret"])
@@ -187,7 +198,85 @@ def collect(
             if rows is not None:
                 cached[day] = rows
         data["meta"] = cached
+    data["reconcile"] = _reconcile(
+        cfg, data, d1, d1_date, gsrc, shop, token, missing
+    )
     return data, missing
+
+
+def _reconcile(
+    cfg: dict,
+    data: dict,
+    d1: str,
+    d1_date: dt.date,
+    gsrc: dict | None,
+    shop,
+    meta_token: str | None,
+    missing: dict,
+) -> list[dict]:
+    """Our D-1 against each source system's own total. A check that cannot
+    run is recorded as such and never blocks the day."""
+    rules_ = cfg["refresh"]["reconcile"]
+    out: list[dict] = []
+
+    def run_check(key, label, unit, fn):
+        try:
+            ours, theirs = fn()
+        except Exception as exc:
+            out.append(
+                {
+                    "key": key,
+                    "label": label,
+                    "unit": unit,
+                    "ours": None,
+                    "theirs": None,
+                    "block": False,
+                    "ok": None,
+                    "diff": None,
+                    "diff_pct": None,
+                    "note": f"Could not check: {exc}",
+                }
+            )
+            return
+        out.append(
+            reconcile.compare(key, label, unit, ours, theirs, rules_[key])
+        )
+
+    if shop and "shopify_orders" not in missing:
+        run_check(
+            "orders",
+            "Orders, BigQuery vs Shopify",
+            "int",
+            lambda: (
+                bq.run("orders_check", d1=d1_date)[0]["orders"],
+                shop.orders_count(d1),
+            ),
+        )
+    meta_rows = (data.get("meta") or {}).get(d1)
+    if meta_token and meta_rows and "meta_ads" not in missing:
+        run_check(
+            "meta_spend",
+            "Meta spend, rows vs account total",
+            "inr",
+            lambda: (
+                sum(r["spend"] for r in meta_rows),
+                meta.day_total(meta_token, cfg["meta"], d1),
+            ),
+        )
+    if gsrc and "google_ads" not in missing:
+        run_check(
+            "google_spend",
+            "Google spend, rows vs account total",
+            "inr",
+            lambda: (
+                sum(r["spend"] for r in gsrc["rows"] if r["date"] == d1),
+                google_ads.fetch_day_total(
+                    cfg["google_ads"], gsrc["creds"], d1
+                ),
+            ),
+        )
+    missing.update(reconcile.failed(out))
+    return out
 
 
 def _google_from_api(
@@ -220,6 +309,7 @@ def _google_from_api(
     return {
         "rows": rows,
         "campaigns": campaigns,
+        "creds": creds,
         "check": {
             "source": "google_ads",
             "latest_date": max(dates) if dates else None,
@@ -335,6 +425,23 @@ def run(
         checks=data["checks"],
         unclassified_google_ids=unclassified,
     )
+    arrived = status.setdefault("arrived", {})
+    for key in health.KEYS:
+        if key not in missing and key not in arrived:
+            arrived[key] = generated_at
+    if status["complete"]:
+        status.setdefault("completed_at", generated_at)
+    past = [
+        store.get_json(f"status/{day}.json")
+        for day in _days(
+            dt.date.fromisoformat(d1) - dt.timedelta(days=7),
+            dt.date.fromisoformat(d1) - dt.timedelta(days=1),
+        )
+    ]
+    page = health.build(
+        cfg, data, missing, status, [status] + past[::-1], generated_at
+    )
+    store.put_json("pages/health.json", page)
     if (
         missing
         and now.time() >= _hhmm(cfg["refresh"]["alert_from"])
@@ -372,6 +479,29 @@ def run(
     return 0
 
 
+def _alert_crash(exc: Exception) -> None:
+    """Email once every few hours when the job itself crashes, so stale pages
+    do not go unnoticed. Never raises: the crash is the thing being reported."""
+    now = dt.datetime.now(IST)
+    try:
+        store = default_store()
+        last = (store.get_json("status/crash.json") or {}).get("alerted")
+        if last and (now - dt.datetime.fromisoformat(last)) < dt.timedelta(
+            hours=3
+        ):
+            return
+        store.put_json("status/crash.json", {"alerted": now.isoformat()})
+    except Exception:
+        pass
+    alerts.send(
+        f"Asaya dashboard: the refresh job crashed at {now:%H:%M} IST",
+        [
+            f"{type(exc).__name__}: {str(exc)[:400]}",
+            "The pages keep showing the last good refresh. The job retries every 30 minutes.",
+        ],
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -391,7 +521,13 @@ def main(argv: list[str] | None = None) -> int:
         help="also write the collected inputs to this directory (real data: keep it private)",
     )
     args = parser.parse_args(argv)
-    return run(args.date, args.force, args.meta_backfill_days, args.dump_inputs)
+    try:
+        return run(
+            args.date, args.force, args.meta_backfill_days, args.dump_inputs
+        )
+    except Exception as exc:
+        _alert_crash(exc)
+        raise
 
 
 if __name__ == "__main__":

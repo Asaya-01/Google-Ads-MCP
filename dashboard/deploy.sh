@@ -147,6 +147,31 @@ JSON
     gcloud alpha monitoring policies create --policy-from-file "$POLICY" "${P[@]}"
     rm -f "$POLICY"
   fi
+  # A crashed or killed job (the app also emails when Python itself fails).
+  # Best effort: a problem here must not stop the deploy.
+  if ! gcloud alpha monitoring policies list --filter 'display_name="Asaya D2C refresh job failed"' \
+         --format 'value(name)' "${P[@]}" | grep -q .; then
+    POLICY="$(mktemp)"
+    cat > "$POLICY" <<JSON
+{
+  "displayName": "Asaya D2C refresh job failed",
+  "combiner": "OR",
+  "conditions": [{
+    "displayName": "Refresh execution failed",
+    "conditionThreshold": {
+      "filter": "metric.type=\"run.googleapis.com/job/completed_execution_count\" AND resource.type=\"cloud_run_job\" AND resource.label.job_name=\"${JOB}\" AND metric.label.result=\"failed\"",
+      "comparison": "COMPARISON_GT", "thresholdValue": 0, "duration": "0s",
+      "aggregations": [{"alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_SUM"}]
+    }
+  }],
+  "notificationChannels": ["${CHANNEL}"],
+  "documentation": {"mimeType": "text/markdown", "content": "The Asaya refresh job failed. Open the job's executions in Cloud Run: the pages keep showing the last good refresh until it succeeds."}
+}
+JSON
+    gcloud alpha monitoring policies create --policy-from-file "$POLICY" "${P[@]}" \
+      || echo "WARNING: could not create the job-failure alert policy (the app still emails on crashes)"
+    rm -f "$POLICY"
+  fi
 fi
 
 if [[ -n "${FIRST_ALLOWED_EMAIL:-}" ]]; then

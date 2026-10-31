@@ -100,3 +100,31 @@ def fetch_all(
     for account_id in cfg["accounts"]:
         rows.extend(fetch_insights(token, cfg, account_id, since, until, level))
     return rows
+
+
+def day_total(token: str, cfg: dict, day: str) -> float:
+    """Spend for one day straight from each account's own total (no campaign
+    or ad breakdown), to check the row-level pull did not drop anything."""
+    total = 0.0
+    for account_id in cfg["accounts"]:
+        url = (
+            f"https://graph.facebook.com/{cfg['graph_api_version']}"
+            f"/{account_id}/insights"
+        )
+        params = {
+            "level": "account",
+            "time_increment": 1,
+            "time_range": json.dumps({"since": day, "until": day}),
+            "fields": "date_start,spend",
+            "access_token": token,
+        }
+        for attempt in range(4):
+            resp = requests.get(url, params=params, timeout=120)
+            if resp.status_code < 500 and resp.status_code != 429:
+                break
+            time.sleep(2**attempt)
+        body = resp.json()
+        if "error" in body:
+            raise MetaError(body["error"].get("message", "Meta API error"))
+        total += sum(float(r.get("spend") or 0) for r in body.get("data", []))
+    return total

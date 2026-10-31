@@ -398,6 +398,51 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     }, "x");
   };
 
+  R.health = (p) => {
+    const hhmm = (iso) => iso ? new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" }) : null;
+    const srcCols = [
+      { label: "Source", text: true, render: (r) => `<strong>${esc(r.label)}</strong><br><span class="sub">${esc(r.origin)}</span>` },
+      { label: "Status", text: true, render: (r) => (r.state === "ok" ? '<span class="chip ok">Arrived</span>' : '<span class="chip missing">Waiting</span>') + (r.note ? `<br><span class="sub">${esc(r.note)}</span>` : "") },
+      { label: "Latest day", render: (r) => esc(r.latest_date ? dayLabel(r.latest_date) : "none") },
+      { label: "D-1 rows", render: (r) => esc(fmt(r.d1_rows, "int") ?? "–") },
+      { label: "Arrived (IST)", render: (r) => esc(hhmm(r.arrived_at) || "–") },
+    ];
+    const recCols = [
+      { label: "Check", text: true, render: (r) => esc(r.label) },
+      { label: "Ours", render: (r) => esc(fmt(r.ours, r.unit, true) ?? "–") },
+      { label: "Source says", render: (r) => esc(fmt(r.theirs, r.unit, true) ?? "–") },
+      { label: "Difference", render: (r) => r.diff === null || r.diff === undefined ? "–" : esc(fmt(r.diff, r.unit, true) ?? "–") + (r.diff_pct === null || r.diff_pct === undefined ? "" : ` <span class="sub">(${(r.diff_pct * 100).toFixed(2)}%)</span>`) },
+      { label: "Result", text: true, render: (r) => r.ok === true ? '<span class="chip ok">Matches</span>'
+          : r.ok === false ? `<span class="chip missing" title="${esc(r.note || "")}">Differs${r.block ? " · holds the day open" : ""}</span>`
+          : `<span class="chip pending" title="${esc(r.note || "")}">Not checked</span>` },
+    ];
+    const labels = p.source_labels || {};
+    const histCols = [
+      { label: "Day", text: true, render: (r) => `<strong>${esc(dayLabel(r.day))}</strong>` },
+      { label: "Complete (IST)", render: (r) => r.complete ? esc(hhmm(r.completed_at) || "yes") : '<span class="cell-na" title="Not complete when last run">–</span>' },
+      ...Object.entries(labels).map(([k, l]) => ({ label: l, render: (r) => esc(hhmm(r.arrived?.[k]) || "–") })),
+    ];
+    const waiting = (p.waiting_on || []).map((k) => labels[k] || k.replace(/_/g, " ")).join(", ");
+    const head = p.complete
+      ? `<p><span class="chip ok">All sources are in for ${esc(dayLabel(p.as_of))}</span> <span class="sub">${p.attempts ?? "?"} runs so far</span></p>`
+      : `<div class="banner">Waiting on: ${esc(waiting)}. Each run rebuilds the pages with whatever is present, and an email goes out from 10:00 IST if this is still open.</div>`;
+    $main.innerHTML = `
+      <section class="card">
+        <div class="section-head"><h2>Sources for D-1</h2><span class="sub">${esc(dayLabel(p.as_of))}</span></div>
+        ${head}
+        ${table(srcCols, p.sources)}
+      </section>
+      <section class="card">
+        <div class="section-head"><h2>Cross-checks</h2><span class="sub">Our copy against each source's own total</span></div>
+        ${p.reconcile?.length ? table(recCols, p.reconcile) : '<p class="na">No cross-check has run yet for this day.</p>'}
+      </section>
+      <section class="card">
+        <div class="section-head"><h2>Last days</h2><span class="sub">When each source first had the day</span></div>
+        ${table(histCols, p.history || [])}
+      </section>
+      <section class="card">${notes(p)}</section>`;
+  };
+
   R.products = (p) => {
     const prodCols = [
       { label: "Product", text: true, render: (r) => `${esc(r.label)}<br><span class="sub">${esc(r.product_type || "(blank type)")}</span>` },

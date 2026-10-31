@@ -128,6 +128,22 @@ Secrets (Secret Manager, never in code or chat):
 version, change `api_version`; the Marketing tab then shows the API error and
 falls back to BigQuery in the meantime.
 
+## Data health and alerts
+
+- **Data health tab** (`pages/health.json`): each source's latest day, D-1
+  rows, state and arrival time, the cross-checks, and the last week's arrival
+  times. Arrival times are recorded in `status/<day>.json`.
+- **Cross-checks** (`refresh.reconcile` in `config.json`): D-1 orders in
+  BigQuery against Shopify's own count (`ordersCount`, test orders excluded),
+  and Meta and Google spend rows against each account's own total. A check
+  marked `block` keeps the day open until it agrees (orders only today); the
+  others show on the Data health tab. A check that cannot run never blocks.
+- **Alerts** (all through the same `ALERT_EMAIL` channel):
+  data still missing at 10:00 IST (names the source and the reason in the log),
+  new Google campaign IDs, the refresh job crashing (the app emails once every
+  3 hours), and a failed Cloud Run execution (a Cloud Monitoring policy, created
+  best-effort by `deploy.sh`).
+
 ## Local development
 
 ```
