@@ -7,6 +7,8 @@ WITH mail AS (
     Date, UTM_Source, UTM_Medium, UTM_Campaign, UTM_Content, UTM_Term, Landing_Page, Origin_Referrer,
     Checkout_Started, Address_Landed, Payment_Step_Reached, Sessions_Converted
   FROM `{{dataset}}.Asaya_Gokwik_Analytics_Funnel_Report_csv_from_mail`
+  -- A day can be loaded several times (live refresh): keep only its newest load (rows of one load land within seconds of each other).
+  QUALIFY _airbyte_emitted_at >= TIMESTAMP_SUB(MAX(_airbyte_emitted_at) OVER (PARTITION BY Date), INTERVAL 10 MINUTE)
 ),
 hist AS (
   SELECT

@@ -144,6 +144,32 @@ falls back to BigQuery in the meantime.
   3 hours), and a failed Cloud Run execution (a Cloud Monitoring policy, created
   best-effort by `deploy.sh`).
 
+## Today (live)
+
+The Today tab shows today so far, next to yesterday and a typical day, and
+refreshes itself every 3 minutes in the browser. D-1 is untouched: the live job
+(`python -m app.live`, Cloud Run job `asaya-d2c-live`, every 15 minutes from
+06:00 to 23:45 IST) only writes `pages/live.json`.
+
+- **Shopify**: today's orders from the Admin API (same valid-order rule as D-1)
+  and hourly sessions from ShopifyQL. Near real time.
+- **Meta and Google Ads**: campaign-level spend and value for today and
+  yesterday. Platforms report 15 to 60 minutes late and attribute purchases
+  later, so today's ROAS reads low; spend is shown as a share of yesterday's.
+  Awareness campaigns stay out of ROAS, as everywhere else.
+- **GoKwik checkout**: the newest BigQuery load of today's rows, with its age
+  on screen. For this to be useful the load must run through the day (planned
+  every 30 minutes) and each load must hold the whole day so far; rows of one
+  load are told apart by `_airbyte_emitted_at` within 10 minutes of the newest.
+  Rates are compared, not counts.
+- **Comparisons**: the same time yesterday, and the median of the last four
+  same-weekday days of the same phase (sale with sale, BAU with BAU). Today's
+  phase is taken from yesterday's unless `phases.overrides` names today.
+- Baselines (hourly orders from BigQuery, hourly sessions from Shopify) are
+  cached once a day in `cache/live/baseline.json`.
+- Every source shows its own freshness chip; a failed source says why instead
+  of showing zero, and a view older than 30 minutes warns on screen.
+
 ## Retention
 
 The Retention tab is a rebuild of the retention artifact, on all-time data.

@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import datetime as dt
 import time
+from zoneinfo import ZoneInfo
 
 import requests
 
+IST = ZoneInfo("Asia/Kolkata")
 SESSION_DIMENSIONS = (
     "referrer_source, referrer_name, utm_source, utm_medium, utm_campaign"
 )
@@ -152,6 +154,63 @@ class Shopify:
             }
             for r in rows
         ]
+
+    def orders_between(self, start: str, end: str) -> list[dict]:
+        """Orders created from `start` up to (not including) `end`, as ISO
+        timestamps with offset. Only the name, time, flags and total are
+        requested: no customer details."""
+        query = """
+        query($q: String!, $after: String) {
+          orders(first: 250, after: $after, query: $q, sortKey: CREATED_AT) {
+            pageInfo { hasNextPage endCursor }
+            nodes { name createdAt cancelledAt test
+                    totalPriceSet { shopMoney { amount } } }
+          }
+        }"""
+        q = f"created_at:>='{start}' AND created_at:<'{end}'"
+        out: list[dict] = []
+        after = None
+        while True:
+            page = self.graphql(query, {"q": q, "after": after})["orders"]
+            for n in page["nodes"]:
+                out.append(
+                    {
+                        "name": n["name"],
+                        "created_at": n["createdAt"],
+                        "cancelled": n.get("cancelledAt") is not None,
+                        "test": bool(n.get("test")),
+                        "total": float(
+                            (
+                                (n.get("totalPriceSet") or {}).get("shopMoney")
+                                or {}
+                            ).get("amount")
+                            or 0
+                        ),
+                    }
+                )
+            if not page["pageInfo"]["hasNextPage"]:
+                return out
+            after = page["pageInfo"]["endCursor"]
+
+    def sessions_hourly(self, day: str) -> list[list[int]]:
+        """Sessions, sessions with add-to-cart and sessions that reached
+        Shopify checkout for each IST hour of one day: three lists of 24."""
+        rows = self.shopifyql(
+            "FROM sessions SHOW sessions, sessions_with_cart_additions, "
+            "sessions_that_reached_checkout TIMESERIES hour "
+            f"SINCE {day} UNTIL {day}"
+        )
+        out = [[0] * 24 for _ in range(3)]
+        for r in rows:
+            at = dt.datetime.fromisoformat(
+                str(r["hour"]).replace("Z", "+00:00")
+            ).astimezone(IST)
+            if at.date().isoformat() != day:
+                continue
+            out[0][at.hour] = _int(r.get("sessions"))
+            out[1][at.hour] = _int(r.get("sessions_with_cart_additions"))
+            out[2][at.hour] = _int(r.get("sessions_that_reached_checkout"))
+        return out
 
     def catalog(self) -> dict:
         """MRP per variant (MRP = compareAtPrice, today's value) and the

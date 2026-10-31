@@ -11,6 +11,7 @@
 
   "tabs": [
     {"id": "overview",  "label": "Overview",  "phase": 1, "enabled": true},
+    {"id": "live",      "label": "Today",     "phase": 1, "enabled": true},
     {"id": "daily",     "label": "Daily",     "phase": 1, "enabled": true},
     {"id": "marketing", "label": "Marketing", "phase": 1, "enabled": true},
     {"id": "products",  "label": "Products",  "phase": 1, "enabled": true},
@@ -39,6 +40,14 @@
       "google_spend": {"pct": 0.005, "min_abs": 50, "block": false}
     },
     "required_sources": ["shopify_orders", "shopify_order_items", "gokwik_funnel", "gokwik_orders", "google_ads", "shopify_sessions"]
+  },
+
+  "live": {
+    "typical_weeks": 8,
+    "typical_days": 4,
+    "min_typical_days": 2,
+    "refresh_seconds": 180,
+    "stale_minutes": {"shopify": 20, "ads": 60, "gokwik": 90}
   },
 
   "pulse": {

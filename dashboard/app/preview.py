@@ -88,6 +88,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--census", help="a retention census JSON file to embed"
     )
+    parser.add_argument(
+        "--live", help="a live page JSON file (app.live output) to embed"
+    )
     args = parser.parse_args(argv)
     cfg = settings.config()
     data = load_inputs(args.inputs, args.d1, cfg["refresh"]["history_days"])
@@ -112,6 +115,10 @@ def main(argv: list[str] | None = None) -> int:
         "complete": True,
         "unclassified_google_ids": ctx.unclassified_google_rows(),
     }
+    if args.live:
+        pages["live"] = json.loads(
+            pathlib.Path(args.live).read_text(encoding="utf-8")
+        )
     census = None
     if args.census:
         census = json.loads(

@@ -130,6 +130,24 @@ else
   gcloud scheduler jobs create http "$RET_JOB" "${RET_SCHED[@]}" "${P[@]}"
 fi
 
+# Live "Today" tab: Shopify, Meta, Google and GoKwik for today so far, every
+# 15 minutes through the day. Separate from the D-1 refresh, which it never
+# touches.
+LIVE_JOB="${LIVE_JOB:-asaya-d2c-live}"
+gcloud run jobs deploy "$LIVE_JOB" --image "$IMAGE" --region "$REGION" --service-account "$SA" \
+  --set-env-vars "$ENV_VARS" --command python --args=-m,app.live \
+  --memory 1Gi --task-timeout 600 --max-retries 0 "${P[@]}"
+gcloud run jobs add-iam-policy-binding "$LIVE_JOB" --region "$REGION" --member "serviceAccount:$SA" \
+  --role roles/run.invoker "${P[@]}" >/dev/null
+LIVE_URI="https://run.googleapis.com/v2/projects/${GOOGLE_PROJECT_ID}/locations/${REGION}/jobs/${LIVE_JOB}:run"
+LIVE_SCHED=(--location "$REGION" --schedule "*/15 6-23 * * *" --time-zone "Asia/Kolkata" --uri "$LIVE_URI"
+            --http-method POST --oauth-service-account-email "$SA")
+if gcloud scheduler jobs describe "$LIVE_JOB" --location "$REGION" "${P[@]}" >/dev/null 2>&1; then
+  gcloud scheduler jobs update http "$LIVE_JOB" "${LIVE_SCHED[@]}" "${P[@]}"
+else
+  gcloud scheduler jobs create http "$LIVE_JOB" "${LIVE_SCHED[@]}" "${P[@]}"
+fi
+
 echo "==> [9/9] Alerts"
 gcloud logging metrics describe asaya_dashboard_alert "${P[@]}" >/dev/null 2>&1 \
   || gcloud logging metrics create asaya_dashboard_alert \

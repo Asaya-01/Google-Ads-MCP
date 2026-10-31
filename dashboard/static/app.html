@@ -128,6 +128,7 @@ tr.delta td { font-weight: 600; }
 tr.group td { background: var(--accent-wash); color: var(--ink-2); font-size: 12px; font-weight: 600; text-align: left; }
 td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(--muted); }
 .legend-note { font-size: 12px; color: var(--muted); }
+.live-ctl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
 
 .chart-box { position: relative; height: 240px; }
 .chart-legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); }
@@ -189,6 +190,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
   const NEUTRAL_DELTA = new Set(["spend", "meta_spend", "google_spend", "perf_spend", "sessions", "awareness_sessions"]);
   function deltaHtml(d, key) {
     if (d === null || d === undefined) return '<span class="flat">–</span>';
+    if (Math.abs(d) < 0.00005) d = 0;
     const pct = (d >= 0 ? "+" : "") + (d * 100).toFixed(2) + "%";
     const arrow = d > 0 ? "▲" : d < 0 ? "▼" : "";
     const cls = NEUTRAL_DELTA.has(key) || d === 0 ? "flat" : d > 0 ? "up" : "down";
@@ -257,7 +259,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     return r.json();
   }
   async function loadPage(tab) {
-    if (state.pages[tab]) return state.pages[tab];
+    if (state.pages[tab] && tab !== "live") return state.pages[tab];
     state.pages[tab] = embedded ? embedded.pages[tab] : await getJSON(`/api/page/${tab}`);
     return state.pages[tab];
   }
@@ -630,6 +632,110 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     }));
   };
 
+
+  // ------------------------------------------------------------ live (Today)
+  const LIVE = { base: "typical", metric: "gmv" };
+  const liveAge = (p) => Math.max(0, Math.round((Date.now() - new Date(p.generated_at).getTime()) / 60000));
+  const liveWhen = (iso) => new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true });
+  function liveTick() {
+    const p = state.pages.live, el = document.getElementById("live-age");
+    if (!p || !el) return;
+    const a = liveAge(p);
+    el.textContent = a < 1 ? "just now" : a + " min ago";
+    const warn = document.getElementById("live-stale");
+    if (warn) warn.hidden = a < 30;
+  }
+  async function liveRefresh() {
+    if (state.tab !== "live" || document.hidden || embedded) return;
+    try {
+      const page = await getJSON("/api/page/live");
+      if (page && page.generated_at !== state.pages.live?.generated_at) {
+        state.pages.live = page; destroyCharts(); R.live(page);
+      }
+    } catch (e) { /* keep showing the last good view; the age label says how old it is */ }
+  }
+  R.live = (p) => {
+    clearInterval(state.liveTimer); clearInterval(state.liveTick);
+    state.liveTimer = setInterval(liveRefresh, (p.refresh_seconds || 180) * 1000);
+    state.liveTick = setInterval(liveTick, 20000);
+    const sh = p.shopify, vsKey = LIVE.base === "typical" ? "vs_typical" : "vs_yesterday";
+    const baseKey = LIVE.base === "typical" ? "typical" : "yesterday";
+    const baseLabel = sh ? (LIVE.base === "typical" ? sh.typical_label : sh.yesterday_label) : "";
+    const chips = p.sources.map((s) => `<span class="chip ${s.ok ? "ok" : "missing"}" title="${esc(s.reason || s.note)}">${esc(s.label)} · ${s.as_of ? esc(liveWhen(s.as_of)) : "no data"}</span>`).join("");
+    const head = `<section class="card">
+      <div class="section-head"><h2>Today · ${esc(p.weekday)} ${esc(dayLabel(p.today))}</h2>
+        <span class="sub">updated <span id="live-age"></span> · refreshes itself every ${Math.round((p.refresh_seconds || 180) / 60)} min · D-1 stays on the other tabs</span></div>
+      <div class="banner" id="live-stale" hidden>This view is more than 30 minutes old, so the live refresh may be failing. The numbers below are the last good ones.</div>
+      <div class="status" aria-label="Data sources and freshness">${chips}</div>
+      ${sh ? `<div class="live-ctl"><span class="sub">Compare today so far with</span>
+        <div class="seg" id="live-base"><button type="button" data-b="typical" aria-pressed="${LIVE.base === "typical"}">${esc(sh.typical_label)}</button><button type="button" data-b="yesterday" aria-pressed="${LIVE.base === "yesterday"}">Yesterday, same time</button></div></div>` : ""}
+    </section>`;
+    const tiles = sh ? `<section class="card"><div class="section-head"><h2>So far today</h2><span class="sub">each figure compared at the same time of day</span></div>
+      <div class="tiles">${sh.tiles.map((t) => `<div class="tile">
+        <div class="label">${esc(t.label)}</div>
+        ${t.value === null || t.value === undefined ? `<div class="na">Data unavailable: ${esc(t.na || "not available")}</div>`
+          : `<div class="value">${esc(fmt(t.value, t.unit, true))}</div>
+             <div class="foot">${deltaHtml(t[vsKey], t.key)}<span>vs ${esc(fmt(t[baseKey], t.unit, true) ?? "n/a")}</span></div>`}
+      </div>`).join("")}</div></section>`
+      : `<section class="card"><div class="section-head"><h2>So far today</h2></div><p class="na">Data unavailable: ${esc(p.unavailable.shopify_orders || "Shopify orders not available")}</p></section>`;
+    const chart = sh ? `<section class="card"><div class="section-head"><h2>Through the day</h2>
+        <div class="seg" id="live-metric">${[["gmv", "GMV"], ["orders", "Orders"], ["sessions", "Sessions"]].map(([k, l]) => `<button type="button" data-m="${k}" aria-pressed="${LIVE.metric === k}">${l}</button>`).join("")}</div></div>
+      ${legend([["--accent", "Today"], ["--muted", baseLabel]])}
+      <div class="chart-box"><canvas id="c-live" aria-label="Running total through the day, today against the comparison"></canvas></div></section>` : "";
+    const cards = `<section class="card"><div class="section-head"><h2>Returns so far today</h2><span class="sub">vs yesterday's final · ad platforms report late, so today reads low</span></div>
+      <div class="pulse">${p.cards.map((c) => `<article class="pcard">
+        <div class="plabel">${esc(c.label)}</div>
+        ${c.value === null || c.value === undefined ? `<div class="na">Data unavailable: ${esc(c.na || "not available")}</div>`
+          : `<div class="hero">${esc(fmt(c.value, "x"))}</div>
+             <div class="vs">${deltaHtml(c.delta, c.key)}<span>vs yesterday ${esc(fmt(c.yesterday, "x") ?? "n/a")}</span></div>`}
+        <div class="psub">${esc(c.sub)}</div></article>`).join("")}</div></section>`;
+    const gk = p.gokwik;
+    const pct1 = (v) => (v === null || v === undefined ? "n/a" : (v * 100).toFixed(1) + "%");
+    const checkout = `<section class="card"><div class="section-head"><h2>Checkout (GoKwik)</h2>
+        <span class="sub">${gk.na ? "" : `as loaded ${gk.age_minutes === null || gk.age_minutes === undefined ? "" : gk.age_minutes + " min ago"} · rates against the last ${gk.typical_days} days`}</span></div>
+      ${gk.na ? `<p class="na">Data unavailable: ${esc(gk.na)}</p>`
+        : `${gk.stale ? '<div class="banner">The latest GoKwik load is old, so these rates are not current.</div>' : ""}
+           ${table([
+             { label: "Step", text: true, render: (r) => esc(r.label) },
+             { label: "Customers", render: (r) => esc(fmt(r.count, "int") ?? "n/a") },
+             { label: "Step rate", render: (r) => r.rate === null ? '<span class="na">–</span>' : esc(pct1(r.rate)) },
+             { label: "Typical", render: (r) => r.typical === null ? '<span class="na">–</span>' : esc(pct1(r.typical)) },
+             { label: "vs typical", render: (r) => r.delta === null ? '<span class="flat">–</span>' : deltaHtml(r.delta, "rate") },
+           ], gk.steps)}
+           <p class="legend-note">Overall checkout conversion ${esc(pct1(gk.overall))} against a typical ${esc(pct1(gk.overall_typical))}.</p>`}
+    </section>`;
+    const adTable = (title, blk) => {
+      if (blk.na && !blk.today) return `<section class="card"><div class="section-head"><h2>${esc(title)}</h2></div><p class="na">Data unavailable: ${esc(blk.na)}</p></section>`;
+      const t = blk.today || {};
+      const rows = blk.campaigns.map((c) => ({ ...c }));
+      return `<section class="card"><div class="section-head"><h2>${esc(title)}</h2>
+        <span class="sub">spend ${esc(fmt(t.spend, "inr", true) ?? "n/a")}${blk.spend_pct_of_yesterday === null || blk.spend_pct_of_yesterday === undefined ? "" : ` · ${(blk.spend_pct_of_yesterday * 100).toFixed(0)}% of yesterday's`} · sales-campaign ROAS ${esc(fmt(t.roas, "x") ?? "n/a")}</span></div>
+        ${table([
+          { label: "Campaign", text: true, render: (r) => `${esc(r.campaign)}${r.awareness ? ' <span class="sub">Awareness, not in ROAS</span>' : ""}` },
+          { label: "Spend", render: (r) => esc(fmt(r.spend, "inr") ?? "n/a") },
+          { label: "Value", render: (r) => esc(fmt(r.value, "inr") ?? "n/a") },
+          { label: "ROAS", render: (r) => r.roas === null ? '<span class="na">–</span>' : esc(fmt(r.roas, "x")) },
+        ], rows, { maxHeight: "50vh" })}</section>`;
+    };
+    $main.innerHTML = head + tiles + chart + cards + checkout + `<div class="grid-2">${adTable("Meta campaigns today", p.meta)}${adTable("Google Ads campaigns today", p.google)}</div><section class="card">${notes(p)}</section>`;
+    liveTick();
+    document.getElementById("live-base")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-b]"); if (b) { LIVE.base = b.dataset.b; destroyCharts(); R.live(p); } });
+    document.getElementById("live-metric")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-m]"); if (b) { LIVE.metric = b.dataset.m; destroyCharts(); R.live(p); } });
+    const canvas = document.getElementById("c-live");
+    if (canvas && sh) {
+      const ser = sh.curves.series[LIVE.metric], unit = LIVE.metric === "gmv" ? "inr" : "int";
+      const labels = sh.curves.hours.map((h) => (h % 12 || 12) + (h < 12 ? "a" : "p"));
+      const compare = ser[LIVE.base === "typical" ? "typical" : "yesterday"];
+      baseChart(canvas, {
+        type: "line",
+        data: { labels, datasets: [
+          { label: baseLabel, data: compare || [], borderColor: css("--muted"), borderDash: [5, 4], borderWidth: 2, pointRadius: 0, tension: 0.25 },
+          { label: "Today", data: ser.today, borderColor: css("--accent"), backgroundColor: css("--accent"), borderWidth: 2.5, pointRadius: 0, tension: 0.25, spanGaps: false },
+        ] },
+      }, unit);
+    }
+  };
+
   // ------------------------------------------------------------ routing
   async function show() {
     const ids = state.config.tabs.map((t) => t.id);
@@ -637,6 +743,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     state.tab = ids.includes(want) ? want : ids[0];
     renderTabs();
     destroyCharts();
+    clearInterval(state.liveTimer); clearInterval(state.liveTick);
     $main.innerHTML = '<p class="empty">Loading…</p>';
     try {
       const page = await loadPage(state.tab);
