@@ -40,14 +40,14 @@ def render(sql_name: str) -> str:
     return sql.replace("{{dataset}}", settings.config()["gcp"]["dataset"])
 
 
-def run(sql_name: str, **params) -> list[dict]:
+def _job(sql_name: str, params: dict):
     from google.cloud import bigquery
 
     cfg = settings.config()["gcp"]
     client = bigquery.Client(
         project=cfg["project"], location=cfg["bq_location"]
     )
-    job = client.query(
+    return client.query(
         render(sql_name),
         job_config=bigquery.QueryJobConfig(
             query_parameters=[_param(k, v) for k, v in params.items()],
@@ -57,4 +57,15 @@ def run(sql_name: str, **params) -> list[dict]:
             },
         ),
     )
+
+
+def run(sql_name: str, **params) -> list[dict]:
+    job = _job(sql_name, params)
     return [{k: _plain(v) for k, v in row.items()} for row in job.result()]
+
+
+def stream(sql_name: str, **params):
+    """Rows one at a time, for results too big to hold as dicts (the
+    retention census reads about a million lines). Values are left as the
+    BigQuery client returns them, so timestamps stay real datetimes."""
+    return iter(_job(sql_name, params).result(page_size=50_000))

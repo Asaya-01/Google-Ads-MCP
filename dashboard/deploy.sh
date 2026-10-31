@@ -113,6 +113,23 @@ else
   gcloud scheduler jobs create http "$JOB" "${SCHED[@]}" "${P[@]}"
 fi
 
+# Retention census: all-time customer timelines, rebuilt every morning once
+# yesterday's orders are in. Needs more memory and time than the refresh.
+RET_JOB="${RET_JOB:-asaya-d2c-retention}"
+gcloud run jobs deploy "$RET_JOB" --image "$IMAGE" --region "$REGION" --service-account "$SA" \
+  --set-env-vars "$ENV_VARS" --command python --args=-m,app.retention.job \
+  --memory 4Gi --cpu 2 --task-timeout 3000 --max-retries 0 "${P[@]}"
+gcloud run jobs add-iam-policy-binding "$RET_JOB" --region "$REGION" --member "serviceAccount:$SA" \
+  --role roles/run.invoker "${P[@]}" >/dev/null
+RET_URI="https://run.googleapis.com/v2/projects/${GOOGLE_PROJECT_ID}/locations/${REGION}/jobs/${RET_JOB}:run"
+RET_SCHED=(--location "$REGION" --schedule "30 9 * * *" --time-zone "Asia/Kolkata" --uri "$RET_URI"
+           --http-method POST --oauth-service-account-email "$SA")
+if gcloud scheduler jobs describe "$RET_JOB" --location "$REGION" "${P[@]}" >/dev/null 2>&1; then
+  gcloud scheduler jobs update http "$RET_JOB" "${RET_SCHED[@]}" "${P[@]}"
+else
+  gcloud scheduler jobs create http "$RET_JOB" "${RET_SCHED[@]}" "${P[@]}"
+fi
+
 echo "==> [9/9] Alerts"
 gcloud logging metrics describe asaya_dashboard_alert "${P[@]}" >/dev/null 2>&1 \
   || gcloud logging metrics create asaya_dashboard_alert \

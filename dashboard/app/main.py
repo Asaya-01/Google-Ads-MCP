@@ -13,6 +13,7 @@ from __future__ import annotations
 import time
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -27,6 +28,7 @@ ALLOWLIST_TTL = 300
 app = FastAPI(
     title="Asaya D2C dashboard", docs_url=None, redoc_url=None, openapi_url=None
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 _store = None
 _serializer = None
 _allow_cache: dict[str, tuple[bool, float]] = {}
@@ -190,6 +192,29 @@ def me(user: str = Depends(current_user)):
 @app.get("/api/status")
 def status(user: str = Depends(current_user)):
     return store().get_json("status/latest.json") or {}
+
+
+_census_cache: dict = {"at": 0.0, "text": None}
+CENSUS_TTL = 600
+
+
+@app.get("/api/retention/census")
+def retention_census(user: str = Depends(current_user)):
+    """The retention census: per-customer purchase timelines, no names, emails
+    or phone numbers. A few MB, so it is gzipped and cached for ten minutes."""
+    now = time.time()
+    if _census_cache["text"] is None or now - _census_cache["at"] > CENSUS_TTL:
+        _census_cache["text"] = store().get_text("retention/census.json")
+        _census_cache["at"] = now
+    if _census_cache["text"] is None:
+        return Response(
+            content='{"error": "The retention census has not been built yet. It is rebuilt every morning."}',
+            status_code=503,
+            media_type="application/json",
+        )
+    return Response(
+        content=_census_cache["text"], media_type="application/json"
+    )
 
 
 @app.get("/api/page/{tab}")

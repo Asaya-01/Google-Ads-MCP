@@ -21,6 +21,10 @@ class LocalStore:
         p = self.root / path
         return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
 
+    def get_text(self, path: str):
+        p = self.root / path
+        return p.read_text(encoding="utf-8") if p.exists() else None
+
     def put_json(self, path: str, obj) -> None:
         p = self.root / path
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -49,6 +53,10 @@ class GCSStore:
         if not blob.exists():
             return None
         return json.loads(blob.download_as_text())
+
+    def get_text(self, path: str):
+        blob = self.bucket.blob(path)
+        return blob.download_as_text() if blob.exists() else None
 
     def put_json(self, path: str, obj) -> None:
         blob = self.bucket.blob(path)

@@ -160,10 +160,11 @@ class Shopify:
         query($after: String) {
           productVariants(first: 250, after: $after) {
             pageInfo { hasNextPage endCursor }
-            nodes { sku compareAtPrice product { id productType } }
+            nodes { sku title compareAtPrice product { id productType } }
           }
         }"""
         by_sku: dict[str, float] = {}
+        titles: dict[str, str] = {}
         by_product: dict[str, set] = {}
         types: dict[str, int] = {}
         products_seen: set[str] = set()
@@ -179,6 +180,8 @@ class Shopify:
                 )
                 if v.get("sku") and mrp:
                     by_sku[v["sku"].strip()] = mrp
+                if v.get("sku") and v.get("title"):
+                    titles[v["sku"].strip()] = v["title"]
                 by_product.setdefault(pid, set()).add(mrp)
                 if pid not in products_seen:
                     products_seen.add(pid)
@@ -198,7 +201,22 @@ class Shopify:
                 if len(m) == 1 and None not in m
             },
             "product_types": types,
+            # Variant title per SKU ("Berry Crush / 100 ml"), used by the
+            # retention census to tell fragrances, shades and packs apart.
+            "variant_titles": titles,
         }
+
+    def orders_count_through(self, day: str) -> int:
+        """Shopify's own all-time count of real (non-test) orders created up
+        to and including one IST day."""
+        nxt = (dt.date.fromisoformat(day) + dt.timedelta(days=1)).isoformat()
+        data = self.graphql(
+            "query($q: String!) { ordersCount(query: $q, limit: null) { count precision } }",
+            {"q": f"created_at:<'{nxt}T00:00:00+05:30' AND test:false"},
+        )["ordersCount"]
+        if data.get("precision") != "EXACT":
+            raise ShopifyError("Shopify returned an approximate order count")
+        return int(data["count"])
 
 
 def _int(value) -> int:
