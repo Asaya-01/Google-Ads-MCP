@@ -20,6 +20,8 @@ COUNT_FIELDS = [
     "perf_atc",
     "ic",
     "gk_converted",
+    "gk_address",
+    "gk_payment",
     "orders",
     "gmv",
     "new_orders",
@@ -38,7 +40,7 @@ COUNT_FIELDS = [
 
 NA = {
     "sessions": "Shopify sessions were not pulled for this day",
-    "ic": "GoKwik funnel not loaded for this day (the mail CSV is still manual)",
+    "ic": "GoKwik funnel not in BigQuery for this day yet (a bot loads it each morning)",
     "orders": "Shopify orders not synced for this day",
     "google": "GOOGLEADS_CONSOLIDATED has no data for this day yet",
     "google_gap": "GOOGLEADS_CONSOLIDATED has no rows for this day (sync gap)",
@@ -57,6 +59,13 @@ def derive(f: dict) -> dict:
         atc_rate=r(f.get("atc"), f.get("sessions")),
         atc_to_ic=r(f.get("ic"), f.get("atc")),
         ic_to_order=r(f.get("orders"), f.get("ic")),
+        address_rate=r(f.get("gk_address"), f.get("ic")),
+        payment_rate=r(f.get("gk_payment"), f.get("gk_address")),
+        paid_rate=r(f.get("gk_converted"), f.get("gk_payment")),
+        meta_sales_roas=r(f.get("meta_perf_value"), f.get("meta_perf_spend")),
+        google_sales_roas=r(
+            f.get("google_perf_value"), f.get("google_perf_spend")
+        ),
         mer=r(f.get("gmv"), f.get("spend")),
         perf_roas=r(f.get("gmv"), f.get("perf_spend")),
         new_share=(
@@ -171,10 +180,12 @@ class Context:
         dates = rules.date_range(start, self.d1)
 
         orders = {r["date"]: r for r in d.get("orders_daily", [])}
-        ic = defaultdict(lambda: [0, 0])
+        ic = defaultdict(lambda: [0, 0, 0, 0])
         for r in self.funnel_rows:
             ic[r["date"]][0] += r.get("checkout_started") or 0
             ic[r["date"]][1] += r.get("converted") or 0
+            ic[r["date"]][2] += r.get("address_landed") or 0
+            ic[r["date"]][3] += r.get("payment_step_reached") or 0
         google = defaultdict(lambda: [0.0, 0.0, 0.0])
         for r in d.get("google_ads", []):
             g = google[r["date"]]
@@ -226,10 +237,19 @@ class Context:
                 and day <= funnel_latest
                 and day >= d.get("funnel_start", day)
             ):
-                f["ic"], f["gk_converted"] = ic[day] if day in ic else (0, 0)
+                (
+                    f["ic"],
+                    f["gk_converted"],
+                    f["gk_address"],
+                    f["gk_payment"],
+                ) = (
+                    ic[day] if day in ic else (0, 0, 0, 0)
+                )
             else:
                 f["ic"] = f["gk_converted"] = None
-                f["na"]["ic"] = f["na"]["gk_converted"] = NA["ic"]
+                f["gk_address"] = f["gk_payment"] = None
+                for k in ("ic", "gk_converted", "gk_address", "gk_payment"):
+                    f["na"][k] = NA["ic"]
 
             o = orders.get(day)
             for k in (

@@ -1,52 +1,56 @@
 <title>Asaya D2C Dashboard</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap">
 <style>
 /* Layout: sticky brand + tab bar; each tab is a vertical stack of sections,
    summary (tiles, period tables) before detail (charts, then dense tables). */
 :root {
-  --bg: #f3f6f6;            /* page plane: cool porcelain, biased toward the ink-teal accent */
-  --surface: #fbfcfc;       /* cards and chart surface */
-  --ink: #0e1a1c;
-  --ink-2: #4a5759;
-  --muted: #7d898b;
-  --line: #dde4e4;
-  --axis: #c3cccc;
-  --accent: #1d5e63;        /* deep teal: tabs, links, focus */
-  --accent-wash: #e1eeee;
-  --series-1: #2a78d6;      /* Meta / BAU */
-  --series-2: #eb6834;      /* Google / Sale */
-  --good: #006300;
-  --bad: #b42323;
-  --warn-bg: #fdf3dc;
-  --warn-ink: #6b4a00;
-  --bad-bg: #fbe7e5;
-  --good-bg: #e3f2e3;
-  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
-  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
-  --radius: 10px;
+  /* Asaya brand: wordmark brown, cream, product-label blue, sale orange, badge crimson.
+     Chart blue/orange are the brand hues stepped into the validated lightness band. */
+  --bg: #f7efe9;            /* brand cream */
+  --surface: #fffdf9;       /* cards: ivory white */
+  --ink: #2a1a12;
+  --ink-2: #5c4538;
+  --muted: #86705f;
+  --line: #e9dccf;
+  --axis: #d3c1b1;
+  --brand: #613a28;         /* wordmark brown */
+  --accent: #674130;        /* brand button brown: tabs, links, focus */
+  --accent-wash: #f0e2d8;
+  --series-1: #2c60ac;      /* Meta / BAU (product-label blue) */
+  --series-2: #d96a1c;      /* Google / Sale (sale-tag orange) */
+  --good: #1e6b34;
+  --bad: #b8004c;           /* badge crimson */
+  --warn: #8f5a00;
+  --warn-bg: #fdf0dc;
+  --warn-ink: #6b4300;
+  --bad-bg: #fbe3ec;
+  --good-bg: #e4f1e5;
+  --font-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --radius: 12px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0c1213; --surface: #141a1b; --ink: #ecf1f1; --ink-2: #b7c2c3; --muted: #899496;
-    --line: #263032; --axis: #364244; --accent: #6fb7bb; --accent-wash: #1b2b2d;
-    --series-1: #3987e5; --series-2: #d95926; --good: #3cc23c; --bad: #ef7a72;
-    --warn-bg: #3a2f12; --warn-ink: #f4d58a; --bad-bg: #3b1d1b; --good-bg: #16301a;
+    --bg: #17110e; --surface: #211915; --ink: #f6ece4; --ink-2: #d2c0b4; --muted: #a39084;
+    --line: #3a2d26; --axis: #4b3c33; --brand: #e8c7b1; --accent: #e0b99f; --accent-wash: #33261f;
+    --series-1: #3987e5; --series-2: #dd6a2a; --good: #52c26a; --bad: #ff7aa8; --warn: #f0b74a;
+    --warn-bg: #3a2c10; --warn-ink: #f4d58a; --bad-bg: #3e1626; --good-bg: #17301d;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0c1213; --surface: #141a1b; --ink: #ecf1f1; --ink-2: #b7c2c3; --muted: #899496;
-  --line: #263032; --axis: #364244; --accent: #6fb7bb; --accent-wash: #1b2b2d;
-  --series-1: #3987e5; --series-2: #d95926; --good: #3cc23c; --bad: #ef7a72;
-  --warn-bg: #3a2f12; --warn-ink: #f4d58a; --bad-bg: #3b1d1b; --good-bg: #16301a;
+  --bg: #17110e; --surface: #211915; --ink: #f6ece4; --ink-2: #d2c0b4; --muted: #a39084;
+  --line: #3a2d26; --axis: #4b3c33; --brand: #e8c7b1; --accent: #e0b99f; --accent-wash: #33261f;
+  --series-1: #3987e5; --series-2: #dd6a2a; --good: #52c26a; --bad: #ff7aa8; --warn: #f0b74a;
+  --warn-bg: #3a2c10; --warn-ink: #f4d58a; --bad-bg: #3e1626; --good-bg: #17301d;
   color-scheme: dark;
 }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
 h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; }
-h2 { font-size: 17px; font-weight: 600; }
+h2 { font-size: 19px; font-weight: 600; letter-spacing: -0.005em; }
 h3 { font-size: 14px; font-weight: 600; }
 a { color: var(--accent); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
@@ -55,7 +59,7 @@ a { color: var(--accent); }
 .bar-inner, main { max-width: 1320px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 .bar-inner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding-block: 10px; }
 .brand { display: flex; align-items: baseline; gap: 8px; }
-.brand h1 { font-size: 18px; font-weight: 700; letter-spacing: 0.01em; }
+.brand h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.015em; line-height: 1; color: var(--brand); }
 .brand span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
 nav.tabs { display: flex; gap: 2px; overflow-x: auto; flex: 1 1 auto; min-width: 0; }
 nav.tabs a { text-decoration: none; color: var(--ink-2); padding: 6px 12px; border-radius: 999px; font-weight: 500; white-space: nowrap; }
@@ -78,6 +82,28 @@ section.card { background: var(--surface); border: 1px solid var(--line); border
 .phase { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 7px; border-radius: 4px; }
 .phase.sale { background: color-mix(in srgb, var(--series-2) 16%, transparent); color: var(--ink); }
 .phase.bau { background: color-mix(in srgb, var(--series-1) 12%, transparent); color: var(--ink-2); }
+
+.pulse { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); }
+.pcard { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; display: grid; gap: 10px; align-content: start; min-width: 0; font-variant-numeric: tabular-nums; }
+.pcard .plabel { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
+.pcard .psub { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.pcard .hero { font-family: var(--font-body); font-size: clamp(38px, 5vw, 52px); font-weight: 700; line-height: 1; letter-spacing: -0.025em; }
+.pcard .vs { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: center; font-size: 13px; color: var(--ink-2); line-height: 1.4; }
+.pcard .pfoot { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 12px; color: var(--muted); }
+.pcard svg.spark { width: 100%; height: 44px; display: block; overflow: visible; }
+.pcard.checkout { border-left: 6px solid var(--line); }
+.pcard.checkout.ok { border-left-color: var(--good); }
+.pcard.checkout.watch { border-left-color: var(--warn); }
+.pcard.checkout.problem { border-left-color: var(--bad); }
+.status-pill { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: clamp(30px, 4.4vw, 40px); line-height: 1.05; letter-spacing: -0.02em; }
+.status-pill { --c: var(--muted); color: var(--c); }
+.status-pill.ok { --c: var(--good); } .status-pill.watch { --c: var(--warn); } .status-pill.problem { --c: var(--bad); }
+.status-pill .ico { display: inline-grid; place-items: center; width: 1.05em; height: 1.05em; border-radius: 50%; background: var(--c); flex: none; }
+.status-pill .ico b { color: var(--surface); font-size: 0.6em; font-weight: 700; line-height: 1; }
+.steps summary { cursor: pointer; font-size: 12px; color: var(--accent); font-weight: 600; }
+.steps .steprow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 2px 12px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.steps .steprow:last-child { border-bottom: 0; }
+.steps .steprow .sub { text-align: right; }
 
 .tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
 .tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 4px; align-content: start; }
@@ -121,7 +147,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
 
 <header class="bar">
   <div class="bar-inner">
-    <div class="brand"><h1>Asaya</h1><span>D2C</span></div>
+    <div class="brand"><h1>asaya</h1><span>D2C</span></div>
     <nav class="tabs" id="tabs" aria-label="Dashboard tabs"></nav>
     <div class="meta-line" id="meta-line"></div>
   </div>
@@ -273,6 +299,60 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
   // ------------------------------------------------------------ tabs
   const R = {};
 
+  // Ten-second view: checkout health plus Meta, Google and Shopify returns.
+  function spark(points, colour) {
+    const nums = points.map((q) => q.v).filter((v) => v !== null && v !== undefined);
+    if (nums.length < 2) return "";
+    const W = 200, H = 44, pad = 5, lo = Math.min(...nums), span = (Math.max(...nums) - lo) || 1, n = points.length - 1;
+    const x = (i) => pad + (i * (W - 2 * pad)) / n, y = (v) => H - pad - ((v - lo) / span) * (H - 2 * pad);
+    let d = "", pen = false;
+    points.forEach((q, i) => { if (q.v === null || q.v === undefined) { pen = false; return; } d += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(q.v).toFixed(1) + " "; pen = true; });
+    const colW = (W - 2 * pad) / n;
+    let bands = "", from = null;
+    points.forEach((q, i) => {
+      const sale = q.phase === "sale";
+      if (sale && from === null) from = i;
+      if ((!sale || i === points.length - 1) && from !== null) {
+        const to = sale ? i : i - 1;
+        bands += `<rect x="${Math.max(0, x(from) - colW / 2).toFixed(1)}" y="0" width="${(Math.min(W, x(to) + colW / 2) - Math.max(0, x(from) - colW / 2)).toFixed(1)}" height="${H}" fill="var(--accent-wash)"/>`;
+        from = null;
+      }
+    });
+    const last = points[points.length - 1];
+    const dot = last.v === null || last.v === undefined ? "" : `<circle cx="${x(n).toFixed(1)}" cy="${y(last.v).toFixed(1)}" r="4" fill="${colour}" stroke="var(--surface)" stroke-width="2"/>`;
+    return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Last 14 days; shaded days were sale days">${bands}<path d="${d}" fill="none" stroke="${colour}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>${dot}</svg>`;
+  }
+  const STATUS = { ok: ["Healthy", "✓"], watch: ["Watch", "!"], problem: ["Problem", "✕"], unknown: ["No data", "–"] };
+  function pulseHtml(p) {
+    const pl = p.pulse;
+    if (!pl) return "";
+    const co = pl.checkout, [word, icon] = STATUS[co.status] || STATUS.unknown;
+    const pct1 = (v) => (v === null || v === undefined ? "n/a" : (v * 100).toFixed(1) + "%");
+    const stepRows = co.steps.map((st) => `<div class="steprow"><span>${esc(st.label)}${st.counts ? "" : ' <span class="sub">(context, not in the verdict)</span>'}</span><strong>${esc(pct1(st.value))}</strong><span class="sub">${st.delta === null ? "no baseline" : deltaHtml(st.delta, "rate")} · typical ${esc(pct1(st.baseline))}</span></div>`).join("");
+    const checkout = `<article class="pcard checkout ${esc(co.status)}">
+      <div class="plabel">Checkout</div>
+      <div class="status-pill ${esc(co.status)}"><span class="ico" aria-hidden="true"><b>${icon}</b></span><span>${word}</span></div>
+      <div class="vs">${esc(co.reason)}</div>
+      <details class="steps"><summary>See the steps</summary>${stepRows}</details>
+      <div class="psub">GoKwik funnel steps against a typical ${esc(pl.kind)} day</div>
+    </article>`;
+    const colours = { meta_sales_roas: "var(--series-1)", google_sales_roas: "var(--series-2)", perf_roas: "var(--accent)" };
+    const cards = pl.cards.map((c) => `<article class="pcard">
+      <div class="plabel">${esc(c.label)}</div>
+      ${c.value === null || c.value === undefined ? `<div class="na">Data unavailable: ${esc(c.na || "not available")}</div>`
+        : `<div class="hero">${esc(fmt(c.value, "x"))}</div>
+           <div class="vs">${deltaHtml(c.delta, c.key)}<span>vs typical ${esc(pl.kind)} day ${esc(fmt(c.baseline, "x") ?? "n/a")}</span></div>
+           ${spark(c.spark, colours[c.key] || "var(--accent)")}
+           <div class="pfoot"><span>7 days ${esc(fmt(c.last7, "x") ?? "n/a")}</span><span>Month ${esc(fmt(c.mtd, "x") ?? "n/a")}</span>${c.mer !== null && c.mer !== undefined ? `<span>MER ${esc(fmt(c.mer, "x"))}</span>` : ""}</div>`}
+      <div class="psub">${esc(c.sub)}</div>
+    </article>`).join("");
+    return `<section class="card">
+      <div class="section-head"><h2>Right now</h2><span class="sub">D-1 ${esc(dayLabel(p.as_of))} · a ${esc(pl.kind)} day · ${esc(pl.baseline_note)}</span></div>
+      <div class="pulse">${checkout}${cards}</div>
+      ${statusStrip()}
+    </section>`;
+  }
+
   R.overview = (p) => {
     const tiles = p.tiles.map((t) => `
       <div class="tile">
@@ -287,9 +367,9 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
         .map(([k, l, u]) => ({ label: l, render: (r) => `${r.current[k] === null || r.current[k] === undefined ? '<span class="na">n/a</span>' : esc(fmt(r.current[k], u, true))}<br><span class="sub">${deltaHtml(r.delta[k], k)}</span>` })),
     ];
     $main.innerHTML = `
+      ${pulseHtml(p)}
       <section class="card">
         <div class="section-head"><h2>Month to date</h2><span class="sub">${dayLabel(p.period.current[0])}–${dayLabel(p.period.current[1])} vs ${dayLabel(p.period.prior[0])}–${dayLabel(p.period.prior[1])}</span></div>
-        ${statusStrip()}
         <div class="tiles">${tiles}</div>
       </section>
       <section class="card">

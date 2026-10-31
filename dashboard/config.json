@@ -40,6 +40,15 @@
     "required_sources": ["shopify_orders", "shopify_order_items", "gokwik_funnel", "gokwik_orders", "google_ads", "shopify_sessions"]
   },
 
+  "pulse": {
+    "baseline_days": 28,
+    "min_baseline_days": 5,
+    "watch_z": 3,
+    "problem_z": 4,
+    "watch_drop": 0.12,
+    "problem_drop": 0.20
+  },
+
   "orders": {
     "exclude_name_regex": "ASAYASS|ASAYAINF"
   },

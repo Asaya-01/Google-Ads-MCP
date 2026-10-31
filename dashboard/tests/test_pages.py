@@ -400,3 +400,63 @@ def test_platform_roas_leaves_out_awareness_campaigns(built_with_meta):
     d1 = pages["marketing"]["periods"][0]
     assert d1["meta_platform_roas"] == pytest.approx(3.0)
     assert d1["google_platform_roas"] == pytest.approx(3.0)
+
+
+def _with_checkout_steps(data, d1_paid_factor=1.0):
+    for row in data["funnel"]:
+        row["address_landed"] = round(row["checkout_started"] * 0.8)
+        row["payment_step_reached"] = round(row["address_landed"] * 0.7)
+        if row["date"] == D1:
+            row["converted"] = round(row["converted"] * d1_paid_factor)
+    return data
+
+
+def test_pulse_says_checkout_is_healthy_when_steps_match_a_typical_day():
+    data = _with_checkout_steps(_dataset(with_meta=True))
+    pages, _ = build_all(data, CFG, ["overview"])
+    pulse = pages["overview"]["pulse"]
+    assert pulse["kind"] == "BAU"
+    assert pulse["checkout"]["status"] == "ok"
+    assert [s["key"] for s in pulse["checkout"]["steps"]] == [
+        "atc_to_ic",
+        "address_rate",
+        "payment_rate",
+        "paid_rate",
+    ]
+    assert all(s["status"] == "ok" for s in pulse["checkout"]["steps"])
+    assert [s["counts"] for s in pulse["checkout"]["steps"]] == [
+        False,
+        True,
+        True,
+        True,
+    ]
+
+
+def test_pulse_names_the_step_that_broke():
+    data = _with_checkout_steps(_dataset(with_meta=True), d1_paid_factor=0.7)
+    pages, _ = build_all(data, CFG, ["overview"])
+    checkout = pages["overview"]["pulse"]["checkout"]
+    assert checkout["status"] == "problem"
+    assert "Payment to paid" in checkout["reason"]
+    assert (
+        "30%" in checkout["reason"] and "typical BAU day" in checkout["reason"]
+    )
+
+
+def test_pulse_roas_cards_use_sales_campaigns_only():
+    data = _with_checkout_steps(_dataset(with_meta=True))
+    pages, _ = build_all(data, CFG, ["overview"])
+    cards = {c["key"]: c for c in pages["overview"]["pulse"]["cards"]}
+    assert cards["meta_sales_roas"]["value"] == pytest.approx(3.0)
+    assert cards["google_sales_roas"]["value"] == pytest.approx(3.0)
+    assert cards["perf_roas"]["mer"] is not None
+    assert len(cards["perf_roas"]["spark"]) == 14
+
+
+def test_pulse_without_meta_says_why_instead_of_a_number():
+    data = _with_checkout_steps(_dataset(with_meta=False))
+    pages, _ = build_all(data, CFG, ["overview"])
+    cards = {c["key"]: c for c in pages["overview"]["pulse"]["cards"]}
+    assert cards["meta_sales_roas"]["value"] is None
+    assert "token" in cards["meta_sales_roas"]["na"]
+    assert cards["google_sales_roas"]["value"] is not None
