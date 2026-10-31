@@ -256,3 +256,40 @@ def test_a_paid_lip_balm_is_a_product_but_the_free_lip_pot_is_not():
     cl = lambda t, ptype: CAT.classify(t, "x", 190.0, ptype, TYPES)
     assert cl("BOBA Lip Balm", "")[0].code == "BLB"
     assert cl("Soft Spot Lip & Cheek Blurring Pot", "freebie")[0] is None
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node is not installed")
+def test_the_engine_values_customers_like_an_independent_sum(tmp_path):
+    rows, truth = _synthetic()
+    f = tmp_path / "census.json"
+    f.write_text(json.dumps(census_for(rows)))
+    script = (
+        "const P=JSON.parse(require('fs').readFileSync(process.argv[1]));"
+        f"const E=require('{ENGINE}')(P);"
+        "const v=E.computeValue(0,E.NDAYS,90);"
+        "const m=E.computeMonthly(0,E.NDAYS);"
+        "const pv=E.computeProductValue(0,E.NDAYS);"
+        "console.log(JSON.stringify({v,months:m.reduce((s,x)=>s+x.n,0),"
+        "pv:pv.reduce((s,x)=>s+x.n,0)}));"
+    )
+    out = json.loads(
+        subprocess.run(
+            ["node", "-e", script, str(f)],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    )
+    epoch = min(d[0] for d in truth.values())
+    ndays = (THROUGH - epoch).days
+    day = lambda x: (x - epoch).days
+    cohort = [d for d in truth.values() if day(d[0]) <= ndays - 90]
+    expect = sum(
+        400 * sum(1 for x in d if day(x) - day(d[0]) <= 90) for d in cohort
+    )
+    ltv90 = next(x for x in out["v"]["ltv"] if x["h"] == 90)
+    assert ltv90["n"] == len(cohort)
+    assert ltv90["per"] == pytest.approx(expect / len(cohort))
+    assert out["v"]["cust"] == len(truth) == out["months"]
+    assert out["v"]["firstAov"] == pytest.approx(400)
+    assert out["v"]["repAov"] == pytest.approx(400)

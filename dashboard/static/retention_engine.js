@@ -369,9 +369,141 @@
       return { ids, subs, hasSub, lb, lm, lg, pk, A2 };
     }
 
+    // ------------------------------------------------------------- revenue & LTV
+    // Order value is the whole order (every line), merged the same way as the
+    // timelines. A customer's value inside h days counts the first order too.
+    const LTV_H = [30, 60, 90, 180, 365];
+
+    function computeValue(a, b, hz) {
+      const bE = acqEnd(b, hz);
+      const OBS = hz == null ? Infinity : hz;
+      const ltv = {};
+      LTV_H.forEach((h) => (ltv[h] = { n: 0, rev: 0, first: 0 }));
+      const size = { 1: { n: 0, first: 0, n90: 0, rev90: 0 }, 2: { n: 0, first: 0, n90: 0, rev90: 0 }, 3: { n: 0, first: 0, n90: 0, rev90: 0 } };
+      const t = { cust: 0, first: 0, hzN: 0, hzFirst: 0, repOrders: 0, repRev: 0, repCust: 0 };
+      for (let m = 0; m < MULTI.length; m++) {
+        const tl = MULTI[m], f0 = tl[0][0];
+        if (PREFLAG[m] || f0 < a || f0 > b) continue;
+        t.cust++; t.first += tl[0][2];
+        const z = Math.min(tl[0][1].length, 3);
+        size[z].n++; size[z].first += tl[0][2];
+        if (f0 <= bE) {
+          t.hzN++; t.hzFirst += tl[0][2];
+          let any = false;
+          for (let j = 1; j < tl.length; j++) {
+            if (tl[j][0] - f0 > OBS) break;
+            t.repOrders++; t.repRev += tl[j][2]; any = true;
+          }
+          if (any) t.repCust++;
+        }
+        for (const h of LTV_H) {
+          if (f0 > Math.min(b, NDAYS - h)) continue;
+          let r = 0;
+          for (let j = 0; j < tl.length; j++) if (tl[j][0] - f0 <= h) r += tl[j][2];
+          ltv[h].n++; ltv[h].rev += r; ltv[h].first += tl[0][2];
+          if (h === 90) { size[z].n90++; size[z].rev90 += r; }
+        }
+      }
+      for (const [d, z, cN, , rev] of SB) {
+        if (d < a || d > b) continue;
+        t.cust += cN; t.first += rev;
+        size[z].n += cN; size[z].first += rev;
+        if (d <= bE) { t.hzN += cN; t.hzFirst += rev; }
+        for (const h of LTV_H) {
+          if (d > Math.min(b, NDAYS - h)) continue;
+          ltv[h].n += cN; ltv[h].rev += rev; ltv[h].first += rev;
+          if (h === 90) { size[z].n90 += cN; size[z].rev90 += rev; }
+        }
+      }
+      const per = (x, n) => (n ? x / n : null);
+      return {
+        empty: !t.cust, bE, cust: t.cust,
+        firstAov: per(t.first, t.cust),
+        repAov: per(t.repRev, t.repOrders), repOrders: t.repOrders, repRev: t.repRev, repCust: t.repCust,
+        hzN: t.hzN, repShare: t.hzFirst + t.repRev ? (100 * t.repRev) / (t.hzFirst + t.repRev) : null,
+        hzPer: per(t.hzFirst + t.repRev, t.hzN),
+        ltv: LTV_H.map((h) => ({ h, n: ltv[h].n, per: per(ltv[h].rev, ltv[h].n), first: per(ltv[h].first, ltv[h].n),
+          lift: ltv[h].first ? ltv[h].rev / ltv[h].first : null })),
+        size: [1, 2, 3].map((z) => ({ z, n: size[z].n, first: per(size[z].first, size[z].n), n90: size[z].n90, ltv90: per(size[z].rev90, size[z].n90) })),
+      };
+    }
+
+    // monthly acquisition cohorts: value per customer once the month is fully mature
+    function computeMonthly(a, b) {
+      const months = new Map();
+      const slot = (d) => {
+        const dt = dayToDate(d), key = dt.getUTCFullYear() * 100 + dt.getUTCMonth() + 1;
+        if (!months.has(key)) {
+          const end = dateToDay(iso(new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 0))));
+          months.set(key, { key, label: dt.toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" }), end, n: 0, first: 0, again90: 0, base90: 0, rev: {}, nn: {} });
+          LTV_H.forEach((h) => { months.get(key).rev[h] = 0; months.get(key).nn[h] = 0; });
+        }
+        return months.get(key);
+      };
+      const add = (d, cnt, firstRev, f0, tl) => {
+        const c = slot(d);
+        c.n += cnt; c.first += firstRev;
+        for (const h of LTV_H) {
+          if (c.end > NDAYS - h) continue; // month not fully mature for this horizon
+          c.nn[h] += cnt;
+          let r = firstRev;
+          if (tl) { r = 0; for (const o of tl) if (o[0] - f0 <= h) r += o[2]; }
+          c.rev[h] += r;
+        }
+        if (c.end <= NDAYS - 90) {
+          c.base90 += cnt;
+          if (tl && tl.length > 1 && tl[1][0] - f0 <= 90) c.again90 += cnt;
+        }
+      };
+      for (let m = 0; m < MULTI.length; m++) {
+        const tl = MULTI[m], f0 = tl[0][0];
+        if (PREFLAG[m] || f0 < a || f0 > b) continue;
+        add(f0, 1, tl[0][2], f0, tl);
+      }
+      for (const [d, , cN, , rev] of SB) if (d >= a && d <= b) add(d, cN, rev, d, null);
+      return [...months.values()].sort((x, y) => x.key - y.key).map((c) => ({
+        key: c.key, label: c.label, n: c.n, aov: c.n ? c.first / c.n : null,
+        again90: c.base90 ? (100 * c.again90) / c.base90 : null,
+        ltv: LTV_H.map((h) => ({ h, per: c.nn[h] ? c.rev[h] / c.nn[h] : null })),
+      }));
+    }
+
+    // per product: customers whose first order held it, and what they are worth
+    function computeProductValue(a, b) {
+      const acc = Array.from({ length: NS }, () => ({ n: 0, first: 0, n90: 0, r90: 0, n180: 0, r180: 0, n365: 0, r365: 0 }));
+      for (let m = 0; m < MULTI.length; m++) {
+        const tl = MULTI[m], f0 = tl[0][0];
+        if (f0 < a || f0 > b) continue;
+        const v = (h) => { let r = 0; for (const o of tl) if (o[0] - f0 <= h) r += o[2]; return r; };
+        const r90 = f0 <= NDAYS - 90 ? v(90) : null, r180 = f0 <= NDAYS - 180 ? v(180) : null, r365 = f0 <= NDAYS - 365 ? v(365) : null;
+        for (const s of tl[0][1]) {
+          const c = acc[s];
+          c.n++; c.first += tl[0][2];
+          if (r90 != null) { c.n90++; c.r90 += r90; }
+          if (r180 != null) { c.n180++; c.r180 += r180; }
+          if (r365 != null) { c.n365++; c.r365 += r365; }
+        }
+      }
+      for (const k in SINGLES) {
+        const c = acc[+k];
+        for (const [d, cN, , rev] of SINGLES[k]) {
+          if (d < a || d > b) continue;
+          c.n += cN; c.first += rev;
+          if (d <= NDAYS - 90) { c.n90 += cN; c.r90 += rev; }
+          if (d <= NDAYS - 180) { c.n180 += cN; c.r180 += rev; }
+          if (d <= NDAYS - 365) { c.n365 += cN; c.r365 += rev; }
+        }
+      }
+      const per = (x, n) => (n ? x / n : null);
+      return acc.map((c, i) => ({
+        i, code: SKUS[i][0], name: SKUS[i][1], n: c.n, aov: per(c.first, c.n),
+        n90: c.n90, ltv90: per(c.r90, c.n90), n180: c.n180, ltv180: per(c.r180, c.n180), n365: c.n365, ltv365: per(c.r365, c.n365),
+      })).filter((r) => r.n > 0);
+    }
+
     return {
       P, EPOCH, NDAYS, SKUS, VARS, NS, NV, MILES,
-      compute, computeBrand, computeVariants, acqEnd, median,
+      compute, computeBrand, computeVariants, computeValue, computeMonthly, computeProductValue, LTV_H, acqEnd, median,
       dayToDate, iso, dateToDay,
     };
   }
