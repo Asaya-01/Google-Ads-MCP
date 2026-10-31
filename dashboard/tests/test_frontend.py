@@ -12,7 +12,9 @@ def test_the_range_picker_files_are_inlined_without_leftover_markers():
     assert "__RANGE_" not in html
     assert "createRangeEngine" in html and "R.overview = (p)" in html
     assert ".rg-pop" in html
-    for name in ("range_engine.js", "range_ui.js"):
+    assert "R.marketing = (p)" in html and "R.products = (p)" in html
+    assert "R.d1 = (p)" in html
+    for name in ("range_engine.js", "range_ui.js", "range_tabs.js"):
         assert "</script" not in (settings.STATIC_DIR / name).read_text(
             encoding="utf-8"
         )

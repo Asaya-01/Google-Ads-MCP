@@ -36,6 +36,7 @@ def app_fragment() -> str:
         ("/*__RANGE_CSS__*/", "range.css"),
         ("/*__RANGE_ENGINE__*/", "range_engine.js"),
         ("/*__RANGE_UI__*/", "range_ui.js"),
+        ("/*__RANGE_TABS__*/", "range_tabs.js"),
     ):
         html = html.replace(
             marker, (STATIC_DIR / name).read_text(encoding="utf-8")

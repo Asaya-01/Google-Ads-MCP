@@ -220,14 +220,15 @@ function rgTile(k, label, unit, g) {
   const perDay = count && w.days > 1 ? `<div class="foot sub">${esc(fmt(v / w.days, unit, true))} a day</div>` : "";
   return `<div class="tile"><div class="label">${esc(label)}</div><div class="value">${esc(fmt(v, unit, true))}</div><div class="foot">${foot}</div>${perDay}</div>`;
 }
-function rgGroupHtml(g, mixed) {
+function rgGroupHtml(g, mixed, tiles, title) {
+  tiles = tiles || RG_TILES;
   const nm = g.phase === "sale" ? "Sale days" : "BAU days";
   const cmpTxt = g.prevSpan ? `${rgSpan(g.prevSpan[0], g.prevSpan[1])}${g.pw.days !== g.prev.length ? "" : ""}` : "";
   return `<section class="card">
     <div class="section-head"><h2>${phaseChip(g.phase)} ${nm}</h2>
       <span class="sub">${g.w.days} day${g.w.days === 1 ? "" : "s"}${g.curSpan ? ` · ${esc(rgSpan(g.curSpan[0], g.curSpan[1]))}` : ""}${g.pw ? ` vs ${g.pw.days} day${g.pw.days === 1 ? "" : "s"} · ${esc(cmpTxt)}` : ""}</span></div>
     ${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}
-    <div class="tiles">${RG_TILES.map(([k, l, u]) => rgTile(k, l, u, g)).join("")}</div>
+    <div class="tiles">${tiles.map(([k, l, u]) => rgTile(k, l, u, g)).join("")}</div>
     ${g.pw && g.pw.days !== g.w.days ? `<p class="legend-note">Changes compare per-day averages, because the two periods are not the same length.</p>` : ""}
   </section>`;
 }

@@ -144,6 +144,18 @@ falls back to BigQuery in the meantime.
   3 hours), and a failed Cloud Run execution (a Cloud Monitoring policy, created
   best-effort by `deploy.sh`).
 
+## Date ranges
+
+Overview, Daily, Marketing, Products and D-1 share one date picker and one
+comparison menu (Shopify style). Sale days are only ever compared with sale
+days, and BAU days with BAU days: a mixed range is split into a BAU block and a
+sale block, each against the same kind of days in the comparison period. The
+browser does the sums (`range_engine.js`) from three compact pages the refresh
+writes: `days` (per-day counts), `campaign_days` and `product_days`. D-1's
+drill-downs (channel, source, campaign, landing page, product) and commentary
+still cover the standard D-1 windows; they need per-day session breakdowns that
+are too large to ship to the browser.
+
 ## Today (live)
 
 The Today tab shows today so far, next to yesterday and a typical day, and

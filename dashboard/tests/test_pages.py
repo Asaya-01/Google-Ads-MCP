@@ -267,6 +267,8 @@ def test_every_phase1_tab_builds_and_serialises(built_without_meta):
         "products",
         "d1",
         "days",
+        "campaign_days",
+        "product_days",
     }
     for page in pages.values():
         json.dumps(page, default=str)
@@ -482,3 +484,17 @@ def test_days_page_holds_every_day_and_says_why_a_value_is_missing(
     assert days["values"]["meta_spend"][i] is None
     why = days["reasons"][days["na"]["meta_spend"][D1]]
     assert "token" in why
+
+
+def test_range_data_pages_add_up_to_the_server_tables(built_without_meta):
+    pages, ctx = built_without_meta
+    prod = pages["product_days"]
+    kept = [r for r in ctx.data["products"] if r["drop_reason"] is None]
+    assert sum(r[2] for r in prod["rows"]) == sum(r["units"] for r in kept)
+    assert round(sum(r[3] for r in prod["rows"]), 0) == round(
+        sum(r["revenue"] for r in kept), 0
+    )
+    g = pages["campaign_days"]["google"]
+    spend = sum(r["spend"] for r in ctx.data["google_ads"])
+    assert round(sum(r[2] for r in g["rows"]), 0) == round(spend, 0)
+    assert all(0 <= r[1] < len(g["names"]) for r in g["rows"])

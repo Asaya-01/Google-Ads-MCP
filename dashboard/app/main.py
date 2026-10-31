@@ -219,7 +219,11 @@ def retention_census(user: str = Depends(current_user)):
 
 @app.get("/api/page/{tab}")
 def page(tab: str, user: str = Depends(current_user)):
-    if tab not in {t["id"] for t in settings.enabled_tabs()} | {"days"}:
+    if tab not in {t["id"] for t in settings.enabled_tabs()} | {
+        "days",
+        "campaign_days",
+        "product_days",
+    }:
         raise HTTPException(404, "No such tab")
     payload = store().get_json(f"pages/{tab}.json")
     if payload is None:
