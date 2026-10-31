@@ -29,7 +29,7 @@ import time
 import sys
 from zoneinfo import ZoneInfo
 
-from . import alerts, bq, commentary, meta, secrets, settings
+from . import alerts, bq, commentary, google_ads, meta, secrets, settings
 from .pages import build_all
 from .shopify import Shopify
 from .store import default_store
@@ -61,8 +61,20 @@ def collect(
         "unavailable": {},
     }
 
+    # Google Ads straight from the API when its credentials are in; BigQuery
+    # (a copy that lands around midday) is the fallback.
+    gsrc = _google_from_api(cfg, d1, start.isoformat(), data["unavailable"])
+    data["google_source"] = {
+        "mode": "api" if gsrc else "bigquery",
+        "note": data["unavailable"].get("google_api"),
+    }
+
     # BigQuery
     checks = bq.run("refresh_check", d1=d1_date)
+    if gsrc:
+        checks = [c for c in checks if c["source"] != "google_ads"] + [
+            gsrc["check"]
+        ]
     data["checks"] = checks
     for c in checks:
         if c["source"] in required and not c["d1_rows"]:
@@ -85,6 +97,11 @@ def collect(
     data["funnel"] = bq.run("funnel_daily", **window)
     data["google_ads"] = bq.run("google_ads_daily", **window)
     data["google_campaigns"] = bq.run("google_campaigns")
+    if gsrc:
+        data["google_ads"] = gsrc["rows"]
+        known = {c["campaign_id"]: c for c in data["google_campaigns"]}
+        known.update({c["campaign_id"]: c for c in gsrc["campaigns"]})
+        data["google_campaigns"] = list(known.values())
 
     # Shopify: sessions per day (cached, recent days re-pulled) and MRP
     scfg = cfg["shopify"]
@@ -171,6 +188,45 @@ def collect(
                 cached[day] = rows
         data["meta"] = cached
     return data, missing
+
+
+def _google_from_api(
+    cfg: dict, d1: str, since: str, unavailable: dict
+) -> dict | None:
+    """Daily campaign rows and the campaign list from the Google Ads API, or
+    None (with the reason in `unavailable`) so the BigQuery copy is used."""
+    gcfg = cfg["google_ads"]
+    creds = {
+        "developer_token": secrets.get_secret(gcfg["developer_token_secret"]),
+        "client_id": secrets.get_secret(gcfg["client_id_secret"]),
+        "client_secret": secrets.get_secret(gcfg["client_secret_secret"]),
+        "refresh_token": secrets.get_secret(gcfg["refresh_token_secret"]),
+    }
+    absent = [k for k, v in creds.items() if not v]
+    if absent:
+        unavailable["google_api"] = (
+            "Google Ads API credentials not in Secret Manager yet "
+            f"({', '.join(absent)}); using the BigQuery copy"
+        )
+        return None
+    try:
+        rows = google_ads.fetch_daily(gcfg, creds, since, d1)
+        campaigns = google_ads.fetch_campaigns(gcfg, creds)
+    except Exception as exc:
+        unavailable["google_api"] = (
+            f"Google Ads API: {exc}; using the BigQuery copy"
+        )
+        return None
+    dates = [r["date"] for r in rows if r["date"] <= d1]
+    return {
+        "rows": rows,
+        "campaigns": campaigns,
+        "check": {
+            "source": "google_ads",
+            "latest_date": max(dates) if dates else None,
+            "d1_rows": sum(1 for r in rows if r["date"] == d1),
+        },
+    }
 
 
 def _fetch_meta(

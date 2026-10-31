@@ -63,6 +63,12 @@
 
   "google_ads": {
     "account_id": "6548153452",
+    "login_customer_id": "2013716241",
+    "api_version": "v23",
+    "developer_token_secret": "google-ads-developer-token",
+    "client_id_secret": "google-ads-client-id",
+    "client_secret_secret": "google-ads-client-secret",
+    "refresh_token_secret": "google-ads-refresh-token",
     "zero_spend_dates": {
       "2026-10-07": "No budget in the Google Ads account that day, so spend was zero"
     }

@@ -77,6 +77,7 @@ def build(ctx: Context) -> dict:
             "google_match": _google_match(ctx, last7),
         },
         "notes": [
+            _google_source_note(ctx),
             "Meta is pulled from the Marketing API for Asaya Sales (act_666565859450360) and Asaya Top Funnel "
             "(act_1040064540569018) only. Google comes from GOOGLEADS_CONSOLIDATED.",
             "MER = GMV / total ad spend. Performance ROAS = GMV / spend on non-awareness campaigns. "
@@ -93,6 +94,14 @@ def build(ctx: Context) -> dict:
             k: v for k, v in ctx.unavailable.items() if k == "meta"
         },
     }
+
+
+def _google_source_note(ctx: Context) -> str:
+    src = ctx.data.get("google_source") or {}
+    if src.get("mode") == "api":
+        return "Google spend and results come straight from the Google Ads API (the whole history window is re-read every run, so late conversions are picked up)."
+    why = f" ({src['note']})" if src.get("note") else ""
+    return f"Google spend and results come from the GOOGLEADS_CONSOLIDATED copy in BigQuery, which lands around midday{why}."
 
 
 def _google_partial(ctx: Context, dates: list[str]) -> dict | None:

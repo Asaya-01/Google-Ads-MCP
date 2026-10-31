@@ -105,6 +105,26 @@ Needs `gcloud` signed in with Owner (or equivalent) on `asaya-data-room-487110`.
 7. Allowlist people: `python -m app.allowlist add name@company.com` (removal
    takes effect within 5 minutes).
 
+## Google Ads straight from the API
+
+Yesterday's Google spend is read from the Google Ads API at the start of the
+day. `GOOGLEADS_CONSOLIDATED` (BigQuery) lands around 12:15 IST and is the
+automatic fallback while the credentials are not in Secret Manager, or if the
+API call fails. The Marketing tab says which source it used.
+
+Secrets (Secret Manager, never in code or chat):
+
+| Secret | What it is |
+|---|---|
+| `google-ads-developer-token` | From the manager account (2013716241) under Admin, API Center. Needs Explorer or Basic access; a test-level token cannot read a live account. |
+| `google-ads-client-id`, `google-ads-client-secret` | An OAuth client of type Web application, with `https://developers.google.com/oauthplayground` as an authorised redirect URI. |
+| `google-ads-refresh-token` | Minted once in the OAuth Playground (gear icon, own credentials, scope `https://www.googleapis.com/auth/adwords`), signed in as a user with read access to the Google Ads account. |
+
+`config.json` (`google_ads`): `account_id` (the World of Asaya account),
+`login_customer_id` (the manager account), `api_version`. If Google retires the
+version, change `api_version`; the Marketing tab then shows the API error and
+falls back to BigQuery in the meantime.
+
 ## Local development
 
 ```

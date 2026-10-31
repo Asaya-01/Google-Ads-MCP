@@ -71,7 +71,7 @@ ensure_secret() {
   gcloud secrets describe "$1" "${P[@]}" >/dev/null 2>&1 \
     || gcloud secrets create "$1" --replication-policy automatic "${P[@]}"
 }
-for s in shopify-client-id shopify-client-secret meta-system-user-token anthropic-api-key; do
+for s in shopify-client-id shopify-client-secret meta-system-user-token anthropic-api-key google-ads-developer-token google-ads-client-id google-ads-client-secret google-ads-refresh-token; do
   ensure_secret "$s"
 done
 ensure_secret dashboard-session-key
@@ -80,7 +80,7 @@ if ! gcloud secrets versions describe latest --secret dashboard-session-key "${P
     | gcloud secrets versions add dashboard-session-key --data-file - "${P[@]}"
 fi
 MISSING=()
-for s in shopify-client-id shopify-client-secret meta-system-user-token anthropic-api-key; do
+for s in shopify-client-id shopify-client-secret meta-system-user-token anthropic-api-key google-ads-developer-token google-ads-client-id google-ads-client-secret google-ads-refresh-token; do
   gcloud secrets versions describe latest --secret "$s" "${P[@]}" >/dev/null 2>&1 || MISSING+=("$s")
 done
 
