@@ -3,7 +3,7 @@ served at /api/page/<tab>."""
 
 from __future__ import annotations
 
-from . import d1, daily, marketing, overview, products
+from . import d1, daily, days, marketing, overview, products
 from .common import Context
 
 BUILDERS = {
@@ -19,4 +19,7 @@ def build_all(
     data: dict, cfg: dict, enabled: list[str]
 ) -> tuple[dict, Context]:
     ctx = Context(data, cfg)
-    return {tab: BUILDERS[tab](ctx) for tab in enabled if tab in BUILDERS}, ctx
+    pages = {tab: BUILDERS[tab](ctx) for tab in enabled if tab in BUILDERS}
+    # Data for the browser's date-range picker; not a tab of its own.
+    pages["days"] = days.build(ctx)
+    return pages, ctx

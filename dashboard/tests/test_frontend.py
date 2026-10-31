@@ -7,6 +7,17 @@ import pytest
 from app import settings
 
 
+def test_the_range_picker_files_are_inlined_without_leftover_markers():
+    html = settings.app_fragment()
+    assert "__RANGE_" not in html
+    assert "createRangeEngine" in html and "R.overview = (p)" in html
+    assert ".rg-pop" in html
+    for name in ("range_engine.js", "range_ui.js"):
+        assert "</script" not in (settings.STATIC_DIR / name).read_text(
+            encoding="utf-8"
+        )
+
+
 def test_the_retention_files_are_inlined_without_leftover_markers():
     html = settings.app_fragment()
     assert "__RETENTION_" not in html

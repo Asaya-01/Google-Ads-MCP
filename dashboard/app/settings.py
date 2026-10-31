@@ -33,6 +33,9 @@ def app_fragment() -> str:
         ("/*__RETENTION_CSS__*/", "retention.css"),
         ("/*__RETENTION_ENGINE__*/", "retention_engine.js"),
         ("/*__RETENTION_UI__*/", "retention_ui.js"),
+        ("/*__RANGE_CSS__*/", "range.css"),
+        ("/*__RANGE_ENGINE__*/", "range_engine.js"),
+        ("/*__RANGE_UI__*/", "range_ui.js"),
     ):
         html = html.replace(
             marker, (STATIC_DIR / name).read_text(encoding="utf-8")

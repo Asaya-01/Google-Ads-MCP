@@ -145,6 +145,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
 .empty { color: var(--muted); padding: 24px 0; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 /*__RETENTION_CSS__*/
+/*__RANGE_CSS__*/
 </style>
 
 <header class="bar">
@@ -159,6 +160,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
 /*__RETENTION_ENGINE__*/
+/*__RANGE_ENGINE__*/
 </script>
 <script>
 (() => {
@@ -359,51 +361,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     </section>`;
   }
 
-  R.overview = (p) => {
-    const tiles = p.tiles.map((t) => `
-      <div class="tile">
-        <div class="label">${esc(t.label)}</div>
-        ${t.value === null ? `<div class="na">Data unavailable: ${esc(t.na || "not available")}</div>`
-          : `<div class="value">${esc(fmt(t.value, t.unit, true))}</div>
-             <div class="foot">${deltaHtml(t.delta, t.key)}<span>vs ${esc(fmt(t.prior, t.unit, true) ?? "n/a")}</span></div>`}
-      </div>`).join("");
-    const phaseCols = [
-      { label: "Phase", text: true, render: (r) => `${phaseChip(r.phase)} <span class="sub">${r.current.days} vs ${r.prior.days} days</span>` },
-      ...[["gmv", "GMV / day", "inr"], ["orders", "Orders / day", "num"], ["sessions", "Sessions / day", "num"], ["aov", "AOV", "inr"], ["cvr", "CVR", "pct"], ["atc_rate", "ATC rate", "pct"], ["mer", "MER", "x"]]
-        .map(([k, l, u]) => ({ label: l, render: (r) => `${r.current[k] === null || r.current[k] === undefined ? '<span class="na">n/a</span>' : esc(fmt(r.current[k], u, true))}<br><span class="sub">${deltaHtml(r.delta[k], k)}</span>` })),
-    ];
-    $main.innerHTML = `
-      ${pulseHtml(p)}
-      <section class="card">
-        <div class="section-head"><h2>Month to date</h2><span class="sub">${dayLabel(p.period.current[0])}–${dayLabel(p.period.current[1])} vs ${dayLabel(p.period.prior[0])}–${dayLabel(p.period.prior[1])}</span></div>
-        <div class="tiles">${tiles}</div>
-      </section>
-      <section class="card">
-        <div class="section-head"><h2>Sale vs sale, BAU vs BAU</h2><span class="sub">Per-day averages, this month vs last month</span></div>
-        ${table(phaseCols, p.phase_panel)}
-      </section>
-      <div class="grid-2">
-        <section class="card"><div class="section-head"><h2>GMV per day</h2>${legend([["--series-1", "BAU day"], ["--series-2", "Sale day"]])}</div><div class="chart-box"><canvas id="c-gmv" aria-label="GMV per day, last 60 days"></canvas></div></section>
-        <section class="card"><div class="section-head"><h2>Orders per day</h2>${legend([["--series-1", "BAU day"], ["--series-2", "Sale day"]])}</div><div class="chart-box"><canvas id="c-orders" aria-label="Orders per day, last 60 days"></canvas></div></section>
-      </div>
-      <section class="card">${notes(p)}</section>`;
-    phaseBars(document.getElementById("c-gmv"), p.trend, "gmv", "inr", "GMV");
-    phaseBars(document.getElementById("c-orders"), p.trend, "orders", "int", "Orders");
-  };
-
-  R.daily = (p) => {
-    const cols = p.columns.map((c) => c.key === "date"
-      ? { label: c.label, text: true, render: (r) => esc(dayLabel(r.date)) }
-      : c.key === "phase" ? { label: c.label, text: true, render: (r) => `<span title="${esc(r.phase_basis || "")}">${phaseChip(r.phase)}</span>` }
-      : c);
-    $main.innerHTML = `
-      <section class="card">
-        <div class="section-head"><h2>Daily</h2><span class="sub">Last ${p.rows.length} days, newest first. Hover “n/a” for the reason.</span></div>
-        ${statusStrip()}
-        ${table(cols, p.rows, { maxHeight: "70vh" })}
-        ${notes(p)}
-      </section>`;
-  };
+  /*__RANGE_UI__*/
 
   R.marketing = (p) => {
     const periodCols = [

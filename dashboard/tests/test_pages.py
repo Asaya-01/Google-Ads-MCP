@@ -260,7 +260,14 @@ def built_with_meta():
 
 def test_every_phase1_tab_builds_and_serialises(built_without_meta):
     pages, _ = built_without_meta
-    assert set(pages) == {"overview", "daily", "marketing", "products", "d1"}
+    assert set(pages) == {
+        "overview",
+        "daily",
+        "marketing",
+        "products",
+        "d1",
+        "days",
+    }
     for page in pages.values():
         json.dumps(page, default=str)
 
@@ -460,3 +467,18 @@ def test_pulse_without_meta_says_why_instead_of_a_number():
     assert cards["meta_sales_roas"]["value"] is None
     assert "token" in cards["meta_sales_roas"]["na"]
     assert cards["google_sales_roas"]["value"] is not None
+
+
+def test_days_page_holds_every_day_and_says_why_a_value_is_missing(
+    built_without_meta,
+):
+    pages, ctx = built_without_meta
+    days = pages["days"]
+    assert days["dates"] == sorted(ctx.facts)
+    n = len(days["dates"])
+    assert all(len(col) == n for col in days["values"].values())
+    assert len(days["phase"]) == n
+    i = days["dates"].index(D1)
+    assert days["values"]["meta_spend"][i] is None
+    why = days["reasons"][days["na"]["meta_spend"][D1]]
+    assert "token" in why

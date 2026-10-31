@@ -92,8 +92,8 @@ def build(ctx: Context) -> dict:
         "notes": [
             "GMV is Shopify Total sales at order level on valid orders (no tests, no cancellations, "
             "no ASAYASS sample or ASAYAINF influencer orders). Refunds and returns are not subtracted.",
-            "Month-to-date compares with the same days of last month. The phase panel compares sale days "
-            "with sale days and BAU days with BAU days, as per-day averages.",
+            "Pick any dates and any comparison above. Sale days are only compared with sale days and BAU "
+            "days with BAU days; changes use per-day averages, so periods of different lengths are fair.",
         ],
     }
 
