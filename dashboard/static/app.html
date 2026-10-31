@@ -108,7 +108,7 @@ section.card { background: var(--surface); border: 1px solid var(--line); border
 .tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
 .tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 4px; align-content: start; }
 .tile .label { color: var(--ink-2); font-size: 12px; overflow-wrap: anywhere; }
-.tile .value { font-family: var(--font-display); font-size: 24px; font-weight: 600; line-height: 1.15; }
+.tile .value { font-family: var(--font-display); font-size: clamp(19px, 1.7vw, 24px); font-weight: 600; line-height: 1.15; white-space: nowrap; }
 .tile .foot { font-size: 12px; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; }
 .na { color: var(--muted); font-size: 12px; }
 .tile .na { font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
