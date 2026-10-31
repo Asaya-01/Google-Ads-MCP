@@ -277,7 +277,7 @@ class Context:
                 ):
                     f["na"][k] = reason
 
-            if day in meta_days:
+            if meta_days.get(day):
                 rows = meta_days[day]
                 f["meta_spend"] = sum(r["spend"] for r in rows)
                 f["meta_platform_value"] = sum(

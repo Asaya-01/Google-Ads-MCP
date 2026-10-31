@@ -25,6 +25,7 @@ import argparse
 import datetime as dt
 import json
 import pathlib
+import time
 import sys
 from zoneinfo import ZoneInfo
 
@@ -150,10 +151,12 @@ def collect(
             if meta_backfill_days:
                 _meta_backfill(token, mcfg, store, d1_date, meta_backfill_days)
             since = d1_date - dt.timedelta(days=mcfg["lookback_days"] - 1)
-            rows = meta.fetch_all(token, mcfg, since.isoformat(), d1)
-            by_day: dict[str, list] = {day: [] for day in _days(since, d1_date)}
+            rows = _fetch_meta(token, mcfg, since.isoformat(), d1)
+            by_day: dict[str, list] = {}
             for r in rows:
                 by_day.setdefault(r["date"], []).append(r)
+            # An empty result is not a zero day: never cache it, so a good
+            # earlier pull is kept and the day reads as unavailable.
             for day, day_rows in by_day.items():
                 store.put_json(f"cache/meta/{day}.json", day_rows)
             if not by_day.get(d1):
@@ -168,6 +171,23 @@ def collect(
                 cached[day] = rows
         data["meta"] = cached
     return data, missing
+
+
+def _fetch_meta(
+    token: str,
+    mcfg: dict,
+    since: str,
+    d1: str,
+    pauses: tuple[int, ...] = (30, 60),
+) -> list[dict]:
+    """Meta sometimes answers with no rows for yesterday and fills them in
+    minutes later; ask again a couple of times before giving up."""
+    for attempt in range(len(pauses) + 1):
+        rows = meta.fetch_all(token, mcfg, since, d1)
+        if any(r["date"] == d1 for r in rows) or attempt == len(pauses):
+            return rows
+        time.sleep(pauses[attempt])
+    return rows
 
 
 def _meta_backfill(
@@ -190,8 +210,11 @@ def _meta_backfill(
         for r in rows:
             by_day.setdefault(r["date"], []).append(r)
         for day in _days(chunk_start, end):
-            if store.get_json(f"cache/meta/{day}.json") is None:
-                store.put_json(f"cache/meta/{day}.json", by_day.get(day, []))
+            if (
+                by_day.get(day)
+                and store.get_json(f"cache/meta/{day}.json") is None
+            ):
+                store.put_json(f"cache/meta/{day}.json", by_day[day])
         end = chunk_start - dt.timedelta(days=1)
 
 
@@ -289,6 +312,7 @@ def run(
         d1=d1,
         complete=status["complete"],
         missing=list(missing),
+        reasons=missing,
     )
     return 0
 

@@ -378,3 +378,13 @@ def test_a_confirmed_zero_spend_day_is_zero_not_unavailable():
     assert pages["marketing"]["zero_spend_days"] == [
         {"date": "2026-10-07", "reason": "No budget that day"}
     ]
+
+
+def test_an_empty_meta_day_is_unavailable_not_zero():
+    data = _dataset(with_meta=True)
+    data["meta"][D1] = []  # Meta answered with no rows for D-1
+    _, ctx = build_all(data, CFG, ["daily"])
+    f = ctx.facts[D1]
+    assert f["meta_spend"] is None and f["mer"] is None
+    assert "meta_spend" in f["na"]
+    assert ctx.facts["2026-10-27"]["meta_spend"] == 150000.0
