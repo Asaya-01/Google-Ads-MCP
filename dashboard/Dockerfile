@@ -10,6 +10,7 @@ COPY app ./app
 COPY sql ./sql
 COPY static ./static
 COPY config.json .
+COPY retention_catalog.json .
 
 ENV PORT=8080 PYTHONUNBUFFERED=1
 CMD exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT}" --proxy-headers

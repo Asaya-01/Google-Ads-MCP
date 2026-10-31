@@ -1,81 +1,361 @@
 {
-  "_about": "How Shopify order lines become retention products. Titles are lower-cased, non-ASCII characters become spaces and runs of spaces collapse before any pattern is tried. Patterns use only the regex features Python and BigQuery (RE2) share, so the same rules can be run in SQL to check coverage. Order matters: the first matching rule wins. Edit here, rebuild, and the Catalogue coverage panel on the Retention tab shows what changed.",
-
-  "count_minis": false,
-
+  "_about": "How Shopify order lines become retention products. Shopify's own product type decides what is not a product: Freebie, Merch, Book and Gummies lines never count, and neither do zero-value or free-gift lines. Every other paid line is a named product; sets and gift boxes that are no longer on the website are grouped so nothing is lost. Titles are lower-cased, non-ASCII characters become spaces and runs of spaces collapse before any pattern is tried. Patterns use only the regex features Python and BigQuery (RE2) share, so the same rules can be run in SQL to check coverage. Order matters: the first matching rule wins.",
   "exclude_always": [
-    {"reason": "gift line", "pattern": "gift|gifting|\\bfree\\b|^_|^test|pay remaining amount"},
-    {"reason": "mini or trial size", "pattern": "\\bmini\\b|\\bminis\\b|little luxuries"},
-    {"reason": "travel kit", "pattern": "\\btravel\\b"}
+    {
+      "reason": "free gift or test line",
+      "pattern": "\\bfree\\b|^_|^test|pay remaining amount"
+    }
   ],
-
   "exclude_unless_product": [
-    {"reason": "merch", "pattern": "\\bcharm\\b|\\btote\\b|\\bbag\\b|\\bpouch\\b|tumbler|sticker|sipper|\\bmug\\b"},
-    {"reason": "lip product", "pattern": "lip balm|lip & cheek"}
+    {
+      "reason": "merch",
+      "pattern": "\\bcharm\\b|\\btote\\b|\\bbag\\b|\\bpouch\\b|tumbler|sticker|sipper|\\bmug\\b"
+    }
   ],
-
   "products": [
-    {"code": "TFD",  "name": "Target & Fade Duo",                    "pattern": "target & fade duo|advanced spot targeting serum & even tone underarm mist"},
-    {"code": "FFD",  "name": "Fade & Fresh Duo",                     "pattern": "fade & fresh duo"},
-    {"code": "GED",  "name": "Get Even Duo",                         "pattern": "get even duo"},
-    {"code": "SFD",  "name": "Spot Fade Duo",                        "pattern": "spot fade duo"},
-    {"code": "TPD",  "name": "Tone & Protect Duo",                   "pattern": "tone & protect duo"},
-    {"code": "SRT",  "name": "Sun-Ready Twin Set",                   "pattern": "sun[- ]ready twin set"},
-    {"code": "ETB",  "name": "Even-Tone Body Trio",                  "pattern": "even[- ]tone body trio"},
-    {"code": "H2T",  "name": "Head to Toe Anti-Pigmentation Set",    "pattern": "head[- ]to[- ]toe anti[- ]pigmentation"},
-    {"code": "3SS",  "name": "3-Step Spot Diminishing Set",          "pattern": "3-step spot diminishing"},
-    {"code": "APS",  "name": "Anti Pigmentation Set",                "pattern": "anti[- ]pigmentation (set|kit)"},
-    {"code": "ETRS", "name": "Even Tone Restore Set",                "pattern": "even tone restore"},
-    {"code": "ESD",  "name": "Even Skin Duo",                        "pattern": "even skin duo"},
-
-    {"code": "UAS",  "name": "Even Tone Underarm Mist",              "pattern": "underarm mist",
-     "subs": ["Fresh", "Sweet Vanilla", "Berry Crush", "Mixed"], "default_sub": "Fresh"},
-    {"code": "ITB",  "name": "Fade Forward Inner Thigh & Bum Roll-On", "pattern": "fade forward"},
-    {"code": "ASG",  "name": "Advanced Spot Targeting Gel",          "pattern": "spot targeting gel"},
-    {"code": "ASS",  "name": "Advanced Spot Targeting Serum",        "pattern": "spot targeting serum"},
-    {"code": "KNE",  "name": "Tone Restore Knee-Neck-Elbow Cream",   "pattern": "knee-neck-elbow"},
-    {"code": "EEC",  "name": "Even Evermore Crème",                  "pattern": "even evermore"},
-    {"code": "SLS",  "name": "Spot Light Sunscreen SPF 50",          "pattern": "spot light sunscreen"},
-    {"code": "HOT",  "name": "Hint of Tint (SPF 50 Tinted)",         "pattern": "hint of tint",
-     "subs": ["01 Dawn", "02 Seashell", "03 Honeydew", "04 Summer Sand", "05 Moonbeam"], "default_sub": "Unspecified",
-     "sub_patterns": {"01 Dawn": "dawn", "02 Seashell": "sea ?shell", "03 Honeydew": "honey ?dew", "04 Summer Sand": "summer sand", "05 Moonbeam": "moon ?beam"}},
-    {"code": "PEEL", "name": "Super Fade Regenerative Peel",         "pattern": "regenerative peel"},
-    {"code": "ETC",  "name": "Even Tone Face Cleanser",              "pattern": "even tone face cleanser"},
-    {"code": "DTC",  "name": "D-Tan Face Cleanser",                  "pattern": "d-tan face cleanser"},
-    {"code": "SMS",  "name": "Sheer Milk Sunscreen",                 "pattern": "sheer milk sunscreen"},
-    {"code": "SSM",  "name": "Sheerscreen Mist",                     "pattern": "sheerscreen mist"},
-    {"code": "ALM",  "name": "Air-Light Sunscreen Mist",             "pattern": "air-light sunscreen mist"},
-    {"code": "ADS",  "name": "Aqua Dew Sunscreen",                   "pattern": "aqua dew sunscreen"},
-    {"code": "KOJ",  "name": "2% Kojic Acid + Alpha Arbutin",        "pattern": "kojic acid"},
-    {"code": "NIA",  "name": "10% Niacinamide + Alpha Arbutin",      "pattern": "10% niacinamide & 1% alpha arbutin"},
-    {"code": "SAL",  "name": "2% Salicylic Acid + Niacinamide",      "pattern": "2% salicylic acid"},
-    {"code": "VC10", "name": "10% Vitamin C + Niacinamide",          "pattern": "10% vitamin c"},
-    {"code": "VC15", "name": "15% Vitamin C + E Serum",              "pattern": "15% vitamin c"},
-    {"code": "MPC",  "name": "5% Multi Peptide Complex",             "pattern": "multi peptide complex|5% peptide complex"},
-    {"code": "GLC",  "name": "Glow & Lift Crème",                    "pattern": "glow & lift cr"},
-    {"code": "MCC",  "name": "Moisture Cocoon Crème",                "pattern": "moisture cocoon cr"},
-    {"code": "OFB",  "name": "Oil-Free Barrier+ Crème",              "pattern": "oil-free barrier"},
-    {"code": "NLG",  "name": "New Light Gel Face Moisturiser",       "pattern": "new light gel"},
-    {"code": "RAD",  "name": "Radiance Serum",                       "pattern": "radiance serum"},
-    {"code": "REP",  "name": "Radiance Exfoliating Powder",          "pattern": "radiance exfoliating"},
-    {"code": "MRA",  "name": "MultiRepair Age Serum",                "pattern": "multirepair age serum"},
-    {"code": "PBS",  "name": "Pigment Balance Serum",                "pattern": "pigment balance serum"},
-    {"code": "FSS",  "name": "Fresh Start Smoothening Scrub",        "pattern": "fresh start smoothening scrub"},
-    {"code": "MSC",  "name": "Moisture Splash Face Cleanser",        "pattern": "moisture splash"},
-    {"code": "DCS",  "name": "Daily Clear Salicylic Cleanser",       "pattern": "daily clear salicylic"},
-    {"code": "IMG",  "name": "Intense Moisture Gel",                 "pattern": "intense moisture gel"},
-
-    {"code": "MSG",  "name": "Matte Sheerscreen Gel",                "pattern": "matte sheerscreen gel"},
-    {"code": "TPC",  "name": "Time Perfect Crème",                   "pattern": "time perfect"},
-    {"code": "ORC",  "name": "Overnight Revive Crème",               "pattern": "overnight revive"},
-    {"code": "GIO",  "name": "Glow-in-One Sunscreen",                "pattern": "glow-in-one"},
-    {"code": "SDM",  "name": "Sun Drip Mineral Sunscreen",           "pattern": "sun drip"},
-    {"code": "MRB",  "name": "Moisture Restore Bath & Shower Oil",   "pattern": "bath & shower oil"},
-    {"code": "LHC",  "name": "Lush Hand Cream",                      "pattern": "hand cream"},
-    {"code": "SHM",  "name": "Sheet Masks & Home Spa",               "pattern": "sheet mask|home spa"}
+    {
+      "code": "TFD",
+      "name": "Target & Fade Duo",
+      "pattern": "target & fade duo"
+    },
+    {
+      "code": "FFD",
+      "name": "Fade & Fresh Duo",
+      "pattern": "fade & fresh duo"
+    },
+    {
+      "code": "GED",
+      "name": "Get Even Duo",
+      "pattern": "get even duo"
+    },
+    {
+      "code": "SFD",
+      "name": "Spot Fade Duo",
+      "pattern": "spot fade duo"
+    },
+    {
+      "code": "TPD",
+      "name": "Tone & Protect Duo",
+      "pattern": "tone & protect duo"
+    },
+    {
+      "code": "SRT",
+      "name": "Sun-Ready Twin Set",
+      "pattern": "sun[- ]ready twin set"
+    },
+    {
+      "code": "ETB",
+      "name": "Even-Tone Body Trio",
+      "pattern": "even[- ]tone body trio"
+    },
+    {
+      "code": "H2T",
+      "name": "Head to Toe Anti-Pigmentation Set",
+      "pattern": "head[- ]to[- ]toe anti[- ]pigmentation"
+    },
+    {
+      "code": "3SS",
+      "name": "3-Step Spot Diminishing Set",
+      "pattern": "3-step spot diminishing"
+    },
+    {
+      "code": "APS",
+      "name": "Anti Pigmentation Set",
+      "pattern": "anti[- ]pigmentation (set|kit)"
+    },
+    {
+      "code": "ETRS",
+      "name": "Even Tone Restore Set",
+      "pattern": "even tone restore"
+    },
+    {
+      "code": "ESD",
+      "name": "Even Skin Duo",
+      "pattern": "even skin duo"
+    },
+    {
+      "code": "SUD",
+      "name": "Spot Targeting Serum + Underarm Mist Duo",
+      "pattern": "advanced spot targeting serum & even tone underarm mist"
+    },
+    {
+      "code": "RDS",
+      "name": "Rapid Dark Spot Correction Set",
+      "pattern": "rapid dark spot correction|rapid acne & dark spot"
+    },
+    {
+      "code": "TFK",
+      "name": "Travel Friendly Kit",
+      "pattern": "travel (friendly |ready )?kit"
+    },
+    {
+      "code": "BDE",
+      "name": "Better Daily Essentials",
+      "pattern": "better daily essentials"
+    },
+    {
+      "code": "UAS",
+      "name": "Even Tone Underarm Mist",
+      "pattern": "underarm mist",
+      "subs": [
+        "Fresh",
+        "Sweet Vanilla",
+        "Berry Crush",
+        "Mixed"
+      ],
+      "default_sub": "Fresh"
+    },
+    {
+      "code": "ITB",
+      "name": "Fade Forward Inner Thigh & Bum Roll-On",
+      "pattern": "fade forward"
+    },
+    {
+      "code": "ASG",
+      "name": "Advanced Spot Targeting Gel",
+      "pattern": "spot targeting gel"
+    },
+    {
+      "code": "ASS",
+      "name": "Advanced Spot Targeting Serum",
+      "pattern": "spot targeting serum"
+    },
+    {
+      "code": "KNE",
+      "name": "Tone Restore Knee-Neck-Elbow Cream",
+      "pattern": "knee-neck-elbow"
+    },
+    {
+      "code": "EEC",
+      "name": "Even Evermore Crème",
+      "pattern": "even evermore"
+    },
+    {
+      "code": "SLS",
+      "name": "Spot Light Sunscreen SPF 50",
+      "pattern": "spot light sunscreen"
+    },
+    {
+      "code": "HOT",
+      "name": "Hint of Tint (SPF 50 Tinted)",
+      "pattern": "hint of tint",
+      "subs": [
+        "01 Dawn",
+        "02 Seashell",
+        "03 Honeydew",
+        "04 Summer Sand",
+        "05 Moonbeam"
+      ],
+      "default_sub": "Unspecified",
+      "sub_patterns": {
+        "01 Dawn": "dawn",
+        "02 Seashell": "sea ?shell",
+        "03 Honeydew": "honey ?dew",
+        "04 Summer Sand": "summer sand",
+        "05 Moonbeam": "moon ?beam"
+      }
+    },
+    {
+      "code": "PEEL",
+      "name": "Super Fade Regenerative Peel",
+      "pattern": "regenerative peel"
+    },
+    {
+      "code": "ETC",
+      "name": "Even Tone Face Cleanser",
+      "pattern": "even tone face cleanser"
+    },
+    {
+      "code": "DTC",
+      "name": "D-Tan Face Cleanser",
+      "pattern": "d-tan face cleanser"
+    },
+    {
+      "code": "SMS",
+      "name": "Sheer Milk Sunscreen",
+      "pattern": "sheer milk sunscreen"
+    },
+    {
+      "code": "SSM",
+      "name": "Sheerscreen Mist",
+      "pattern": "sheerscreen mist"
+    },
+    {
+      "code": "ALM",
+      "name": "Air-Light Sunscreen Mist",
+      "pattern": "air-light sunscreen mist"
+    },
+    {
+      "code": "ADS",
+      "name": "Aqua Dew Sunscreen",
+      "pattern": "aqua dew sunscreen"
+    },
+    {
+      "code": "KOJ",
+      "name": "2% Kojic Acid + Alpha Arbutin",
+      "pattern": "kojic acid"
+    },
+    {
+      "code": "NIA",
+      "name": "10% Niacinamide + Alpha Arbutin",
+      "pattern": "10% niacinamide & 1% alpha arbutin"
+    },
+    {
+      "code": "SAL",
+      "name": "2% Salicylic Acid + Niacinamide",
+      "pattern": "2% salicylic acid"
+    },
+    {
+      "code": "VC10",
+      "name": "10% Vitamin C + Niacinamide",
+      "pattern": "10% vitamin c"
+    },
+    {
+      "code": "VC15",
+      "name": "15% Vitamin C + E Serum",
+      "pattern": "15% vitamin c"
+    },
+    {
+      "code": "MPC",
+      "name": "5% Multi Peptide Complex",
+      "pattern": "multi peptide complex|5% peptide complex"
+    },
+    {
+      "code": "GLC",
+      "name": "Glow & Lift Crème",
+      "pattern": "glow & lift cr"
+    },
+    {
+      "code": "MCC",
+      "name": "Moisture Cocoon Crème",
+      "pattern": "moisture cocoon cr"
+    },
+    {
+      "code": "OFB",
+      "name": "Oil-Free Barrier+ Crème",
+      "pattern": "oil-free barrier"
+    },
+    {
+      "code": "NLG",
+      "name": "New Light Gel Face Moisturiser",
+      "pattern": "new light gel"
+    },
+    {
+      "code": "RAD",
+      "name": "Radiance Serum",
+      "pattern": "radiance serum"
+    },
+    {
+      "code": "REP",
+      "name": "Radiance Exfoliating Powder",
+      "pattern": "radiance exfoliating"
+    },
+    {
+      "code": "MRA",
+      "name": "MultiRepair Age Serum",
+      "pattern": "multirepair age serum"
+    },
+    {
+      "code": "PBS",
+      "name": "Pigment Balance Serum",
+      "pattern": "pigment balance serum"
+    },
+    {
+      "code": "FSS",
+      "name": "Fresh Start Smoothening Scrub",
+      "pattern": "fresh start smoothening scrub"
+    },
+    {
+      "code": "MSC",
+      "name": "Moisture Splash Face Cleanser",
+      "pattern": "moisture splash"
+    },
+    {
+      "code": "DCS",
+      "name": "Daily Clear Salicylic Cleanser",
+      "pattern": "daily clear salicylic"
+    },
+    {
+      "code": "IMG",
+      "name": "Intense Moisture Gel",
+      "pattern": "intense moisture gel"
+    },
+    {
+      "code": "MSG",
+      "name": "Matte Sheerscreen Gel",
+      "pattern": "matte sheerscreen gel"
+    },
+    {
+      "code": "TPC",
+      "name": "Time Perfect Crème",
+      "pattern": "time perfect"
+    },
+    {
+      "code": "ORC",
+      "name": "Overnight Revive Crème",
+      "pattern": "overnight revive"
+    },
+    {
+      "code": "GIO",
+      "name": "Glow-in-One Sunscreen",
+      "pattern": "glow-in-one"
+    },
+    {
+      "code": "SDM",
+      "name": "Sun Drip Mineral Sunscreen",
+      "pattern": "sun drip"
+    },
+    {
+      "code": "MRB",
+      "name": "Moisture Restore Bath & Shower Oil",
+      "pattern": "bath & shower oil"
+    },
+    {
+      "code": "LHC",
+      "name": "Lush Hand Cream",
+      "pattern": "hand cream"
+    },
+    {
+      "code": "SHM",
+      "name": "Sheet Masks & Home Spa",
+      "pattern": "sheet mask|home spa"
+    },
+    {
+      "code": "RRN",
+      "name": "Rise Renewed Night Cream",
+      "pattern": "rise renewed"
+    },
+    {
+      "code": "BLB",
+      "name": "BOBA Lip Balm",
+      "pattern": "lip balm"
+    }
   ],
-
-  "other": {"code": "OTH", "name": "Other products & seasonal sets"},
-
-  "pack_pattern": "pack ?of ?2|packof2|set of 2|\\bx ?2\\b|2 pack|bundle of 2"
+  "other": {
+    "code": "OTH",
+    "name": "Other products & seasonal sets"
+  },
+  "pack_pattern": "pack ?of ?2|packof2|set of 2|\\bx ?2\\b|2 pack|bundle of 2",
+  "exclude_if_type_unknown": [
+    {
+      "reason": "mini or trial size",
+      "pattern": "\\bmini\\b|\\bminis\\b|little luxuries"
+    },
+    {
+      "reason": "travel kit with minis",
+      "pattern": "travel kit"
+    }
+  ],
+  "groups": [
+    {
+      "code": "GFT",
+      "name": "Gift boxes & festive sets",
+      "pattern": "gift|gifting|box of joy|hello sunshine|lush lovin|morning m|mon cheri|rootin|winning streak|up a notch|p\\.s\\. i love you|love actually|scented snuggles|mother.s day|valentine|raksha"
+    },
+    {
+      "code": "OST",
+      "name": "Other sets & bundles (not on the website now)",
+      "pattern": "\\bset\\b|\\bduo\\b|\\bkit\\b|bundle|trio|routine|combo|\\bpack\\b"
+    }
+  ]
 }

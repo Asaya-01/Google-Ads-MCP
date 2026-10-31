@@ -29,18 +29,21 @@
         .split("|")
         .map((part) => {
           const c = part.indexOf(":");
-          return [+part.slice(0, c), part.slice(c + 1).split(",").map(Number)];
+          const rest = part.slice(c + 1);
+          const t = rest.indexOf("~"); // order value in rupees; absent in older censuses
+          const vars = t < 0 ? rest : rest.slice(0, t);
+          return [+part.slice(0, c), vars.split(",").map(Number), t < 0 ? 0 : +rest.slice(t + 1)];
         })
     );
     // the same timelines collapsed to product level
     const MULTI = MULTI_V.map((tl) =>
-      tl.map(([d, vv]) => {
+      tl.map(([d, vv, rev]) => {
         const st = [];
         for (const v of vv) {
           const k = SKU_OF[v];
           if (st.indexOf(k) < 0) st.push(k);
         }
-        return [d, st];
+        return [d, st, rev];
       })
     );
     const SINGLES_V = {};

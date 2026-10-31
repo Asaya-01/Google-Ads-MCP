@@ -47,9 +47,9 @@ def test_a_repeat_customer_becomes_a_timeline_and_a_one_off_a_count():
     uas, ass, itb = skus.index("UAS"), skus.index("ASS"), skus.index("ITB")
     vid = {v["s"]: i for i, v in enumerate(c["vars"])}
     d1, d2 = 0, 41
-    assert c["multi"][0] == f"N{d1}:{vid[uas]}|{d2}:{vid[ass]}"
-    assert c["singles_s"][str(itb)] == [[5, 1, 0]]
-    assert c["sbrand"] == [[5, 1, 1, 0]]
+    assert c["multi"][0] == f"N{d1}:{vid[uas]}~400|{d2}:{vid[ass]}~400"
+    assert c["singles_s"][str(itb)] == [[5, 1, 0, 400]]
+    assert c["sbrand"] == [[5, 1, 1, 0, 400]]
     assert c["ndays"] == (THROUGH - dt.date(2025, 1, 10)).days
 
 
@@ -70,26 +70,82 @@ def test_free_gifts_merch_minis_and_books_never_count():
         [
             line("1", "A", "2025-01-10", UAS),
             line("2", "A", "2025-03-01", "Sunshine Charm", ptype="freebie"),
-            line("3", "A", "2025-03-02", ASS + " - Mini"),
+            line("3", "A", "2025-03-02", ASS + " - Mini", ptype="freebie"),
             line("4", "A", "2025-03-03", ITB, revenue=0.0),
             line("5", "A", "2025-03-04", "Make It Stick", ptype="book"),
         ]
     )
     assert c["multi"] == [] and c["stats"]["customers_single"] == 1
     ex = c["stats"]["excluded"]
-    assert "zero revenue (free)" in ex and "mini or trial size" in ex
-    assert any(k.startswith("product type") for k in ex)
+    assert "zero revenue (free)" in ex
+    assert "product type: freebie" in ex and "product type: book" in ex
 
 
-def test_unmapped_paid_products_go_to_other_not_nowhere():
+def test_sets_and_gift_boxes_not_on_the_website_are_grouped_not_lost():
     c = census(
         [
-            line("1", "A", "2025-01-10", "Floral Affair Set", revenue=999.0),
+            line(
+                "1",
+                "A",
+                "2025-01-10",
+                "Floral Affair Set",
+                revenue=999.0,
+                ptype="combo",
+            ),
+            line(
+                "2",
+                "A",
+                "2025-02-10",
+                "Winning Streak Gift Box",
+                revenue=1500.0,
+                ptype="combo",
+            ),
+            line("3", "A", "2025-03-10", UAS),
+        ]
+    )
+    assert [s[0] for s in c["skus"]] == ["UAS", "GFT", "OST"]
+
+
+def test_a_paid_line_nothing_recognises_goes_to_other_and_is_listed():
+    c = census(
+        [
+            line("1", "A", "2025-01-10", "Mystery Elixir", revenue=500.0),
             line("2", "A", "2025-02-10", UAS),
         ]
     )
     assert [s[0] for s in c["skus"]] == ["UAS", "OTH"]
-    assert c["stats"]["other_top"][0]["title"] == "Floral Affair Set"
+    assert c["stats"]["other_top"][0]["title"] == "Mystery Elixir"
+
+
+def test_shopify_type_decides_and_every_website_product_counts():
+    kw = dict(revenue=500.0)
+    cl = lambda t, ptype: CAT.classify(t, "x", kw["revenue"], ptype, TYPES)
+    # a paid mini that Shopify types as a Serum is a product; a Freebie one is not
+    assert cl("5% Multi Peptide Complex - Mini Glow", "serum")[0].code == "MPC"
+    assert cl("Even Evermore Creme - Mini", "freebie")[0] is None
+    # the same title can be a product or a freebie depending on its type
+    assert cl("Fresh Start Smoothening Scrub", "scrub")[0].code == "FSS"
+    assert cl("Fresh Start Smoothening Scrub", "freebie")[0] is None
+    # website products that were missing from the first rules
+    assert cl("Rapid Dark Spot Correction Set", "combo")[0].code == "RDS"
+    assert cl("Travel Friendly Kit", "combo")[0].code == "TFK"
+    assert cl("Better Daily Essentials", "combo")[0].code == "BDE"
+    assert cl("Even Tone Underarm Mist - Pack of 2", "treatment")[0].pack == 2
+
+
+def test_blank_type_counts_only_for_a_named_product():
+    cl = lambda t, ptype: CAT.classify(t, "x", 500.0, ptype, TYPES)
+    assert cl("Rise Renewed Night Cream", "")[0].code == "RRN"
+    line_, why = cl("Mystery Elixir", "")
+    assert line_ is None and "blank" in why
+
+
+def test_a_product_shopify_no_longer_has_is_judged_by_its_title():
+    cl = lambda t: CAT.classify(t, "x", 400.0, "(no product match)", TYPES)
+    assert cl("Travel Kit (4 minis + Pouch)")[0] is None
+    assert cl("Glow & Lift Creme - Mini")[1] == "mini or trial size"
+    assert cl("Anti Pigmentation Set + Pouch")[0].code == "APS"
+    assert cl("Even Tone Underarm Mist")[0].code == "UAS"
 
 
 def test_variants_and_packs_are_kept_apart():
@@ -194,3 +250,9 @@ def test_the_engine_reproduces_an_independent_count_from_the_built_census(
 
 def census_for(rows):
     return rb.build(rows, CAT, TYPES, THROUGH)
+
+
+def test_a_paid_lip_balm_is_a_product_but_the_free_lip_pot_is_not():
+    cl = lambda t, ptype: CAT.classify(t, "x", 190.0, ptype, TYPES)
+    assert cl("BOBA Lip Balm", "")[0].code == "BLB"
+    assert cl("Soft Spot Lip & Cheek Blurring Pot", "freebie")[0] is None

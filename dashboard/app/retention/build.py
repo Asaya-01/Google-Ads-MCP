@@ -28,12 +28,16 @@ def build(
 ) -> dict:
     variant_titles = variant_titles or {}
     customers: dict[str, dict[str, list]] = {}
+    order_rev: dict[str, float] = defaultdict(float)
     excluded = defaultdict(lambda: [0, 0.0])
     counted = defaultdict(lambda: [0, 0.0])
     other_titles: Counter = Counter()
     lines_in = 0
     for order_id, customer_id, ts, title, sku, ptype, revenue in rows:
         lines_in += 1
+        # an order's value is every line on it (so it ties back to GMV), even
+        # the lines that do not count as a product
+        order_rev[order_id] += revenue or 0.0
         line, why = cat.classify(
             title,
             sku,
@@ -53,28 +57,35 @@ def build(
         if line.code == cat.other["code"]:
             other_titles[title] += revenue or 0.0
         order = customers.setdefault(customer_id, {}).setdefault(
-            order_id, [ts, set()]
+            order_id, [ts, set(), [order_id]]
         )
         order[1].add(line)
 
     gap = dt.timedelta(hours=dedupe_hours)
     merged_pairs = orders_counted = orders_empty = 0
-    timelines: dict[str, list[tuple[dt.date, set[Line]]]] = {}
+    timelines: dict[str, list[tuple[dt.date, set[Line], float]]] = {}
+    revenue_total = 0.0
     for cid, orders in customers.items():
         seq: list[list] = []
-        for ts, lines in sorted(orders.values(), key=lambda o: o[0]):
+        for ts, lines, oids in sorted(orders.values(), key=lambda o: o[0]):
             if seq and ts - seq[-1][0] < gap:
                 seq[-1][1] |= lines
+                seq[-1][2] = seq[-1][2] + oids
                 merged_pairs += 1
             else:
-                seq.append([ts, set(lines)])
+                seq.append([ts, set(lines), list(oids)])
         orders_counted += len(seq)
-        timelines[cid] = [((ts + IST).date(), lines) for ts, lines in seq]
+        tl = []
+        for ts, lines, oids in seq:
+            rev = sum(order_rev[o] for o in oids)
+            revenue_total += rev
+            tl.append(((ts + IST).date(), lines, rev))
+        timelines[cid] = tl
 
     first = min(tl[0][0] for tl in timelines.values())
     ndays = (through - first).days
 
-    present = {ln for tl in timelines.values() for _, ls in tl for ln in ls}
+    present = {ln for tl in timelines.values() for _, ls, _ in tl for ln in ls}
     codes = [c for c in cat.order if any(ln.code == c for ln in present)]
     sku_idx = {c: i for i, c in enumerate(codes)}
     ordered = sorted(
@@ -84,32 +95,42 @@ def build(
     var_idx = {ln: i for i, ln in enumerate(ordered)}
 
     multi: list[str] = []
-    singles: dict[int, Counter] = defaultdict(Counter)
-    singles_s: dict[int, Counter] = defaultdict(Counter)
-    sbrand: Counter = Counter()
+    new_cell = lambda: [0, 0.0]  # customers, revenue
+    singles: dict[int, dict] = defaultdict(lambda: defaultdict(new_cell))
+    singles_s: dict[int, dict] = defaultdict(lambda: defaultdict(new_cell))
+    sbrand: dict = defaultdict(new_cell)
     n_multi = n_single = 0
     for tl in timelines.values():
         if len(tl) >= 2:
             n_multi += 1
             parts = []
-            for d, lines in tl:
+            for d, lines, rev in tl:
                 vids = sorted({var_idx[ln] for ln in lines})
-                parts.append(f"{(d - first).days}:{','.join(map(str, vids))}")
+                parts.append(
+                    f"{(d - first).days}:{','.join(map(str, vids))}~{round(rev)}"
+                )
             multi.append("N" + "|".join(parts))
         else:
             n_single += 1
-            d, lines = tl[0]
+            d, lines, rev = tl[0]
             day = (d - first).days
             for v in {var_idx[ln] for ln in lines}:
-                singles[v][day] += 1
+                cell = singles[v][day]
+                cell[0] += 1
+                cell[1] += rev
             skus = {sku_idx[ln.code] for ln in lines}
-            for s in skus:
-                singles_s[s][day] += 1
-            sbrand[(day, min(len(skus), 3))] += 1
+            for sk in skus:
+                cell = singles_s[sk][day]
+                cell[0] += 1
+                cell[1] += rev
+            cell = sbrand[(day, min(len(skus), 3))]
+            cell[0] += 1
+            cell[1] += rev
 
     def pack_singles(src):
+        # [day, new to brand, already known, revenue]
         return {
-            str(k): sorted([d, n, 0] for d, n in v.items())
+            str(k): sorted([d, c[0], 0, round(c[1])] for d, c in v.items())
             for k, v in src.items()
         }
 
@@ -129,7 +150,10 @@ def build(
         "multi": multi,
         "singles": pack_singles(singles),
         "singles_s": pack_singles(singles_s),
-        "sbrand": sorted([d, z, n, 0] for (d, z), n in sbrand.items()),
+        "sbrand": sorted(
+            [d, z, c[0], 0, round(c[1])] for (d, z), c in sbrand.items()
+        ),
+        "has_revenue": True,
         "stats": {
             "through": through.isoformat(),
             "lines_in": lines_in,
@@ -138,6 +162,7 @@ def build(
             "customers_single": n_single,
             "orders_with_lines": orders_counted + merged_pairs,
             "orders_counted": orders_counted,
+            "revenue_total": round(revenue_total),
             "merged_pairs": merged_pairs,
             "excluded": {
                 k: {"lines": v[0], "revenue": round(v[1])}
