@@ -326,7 +326,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       { label: "Google spend", render: (r) => partialCell(r, "google_spend", "spend", "inr") }, { key: "spend", label: "Total spend", unit: "inr" },
       { key: "mer", label: "MER", unit: "x" }, { key: "perf_spend", label: "Perf spend", unit: "inr" },
       { key: "perf_roas", label: "Perf ROAS", unit: "x" },
-      { key: "meta_platform_roas", label: "Meta platform ROAS", unit: "x" }, { label: "Google platform ROAS", render: (r) => partialCell(r, "google_platform_roas", "platform_roas", "x") },
+      { key: "meta_platform_roas", label: "Meta sales ROAS", unit: "x" }, { label: "Google sales ROAS", render: (r) => partialCell(r, "google_platform_roas", "platform_roas", "x") },
     ];
     // A period with some Google days missing shows the days that exist, labelled.
     const partialCell = (r, key, pkey, unit) => {

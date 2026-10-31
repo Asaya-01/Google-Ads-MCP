@@ -18,8 +18,8 @@ PERIOD_FIELDS = [
     "perf_spend",
     "mer",
     "perf_roas",
-    "meta_platform_value",
-    "google_platform_value",
+    "meta_perf_value",
+    "google_perf_value",
 ]
 
 
@@ -37,11 +37,12 @@ def build(ctx: Context) -> dict:
         row = {"label": label, "start": dates[0], "end": dates[-1]}
         for k in PERIOD_FIELDS:
             row[k] = w.get(k)
+        # Sales campaigns only: Awareness is left out of both value and spend.
         row["meta_platform_roas"] = rules.ratio(
-            w.get("meta_platform_value"), w.get("meta_spend")
+            w.get("meta_perf_value"), w.get("meta_perf_spend")
         )
         row["google_platform_roas"] = rules.ratio(
-            w.get("google_platform_value"), w.get("google_spend")
+            w.get("google_perf_value"), w.get("google_perf_spend")
         )
         row["na"] = {k: v for k, v in w["na"].items() if k in PERIOD_FIELDS}
         if row["google_spend"] is None:
@@ -81,7 +82,8 @@ def build(ctx: Context) -> dict:
             "Meta is pulled from the Marketing API for Asaya Sales (act_666565859450360) and Asaya Top Funnel "
             "(act_1040064540569018) only. Google comes from GOOGLEADS_CONSOLIDATED.",
             "MER = GMV / total ad spend. Performance ROAS = GMV / spend on non-awareness campaigns. "
-            "Platform ROAS is each platform's own attributed purchase value / its spend.",
+            "Platform ROAS is each platform's own attributed purchase value / its spend, on sales campaigns only: "
+            "Awareness campaigns are left out of both the value and the spend.",
         ],
         "zero_spend_days": [
             {"date": d, "reason": why}
@@ -115,11 +117,12 @@ def _google_partial(ctx: Context, dates: list[str]) -> dict | None:
     if not have or not missing:
         return None
     spend = sum(ctx.facts[d]["google_spend"] for d in have)
-    values = [ctx.facts[d].get("google_platform_value") for d in have]
-    value = sum(values) if None not in values else None
+    perf = [ctx.facts[d].get("google_perf_spend") for d in have]
+    values = [ctx.facts[d].get("google_perf_value") for d in have]
+    ok = None not in perf and None not in values
     return {
         "spend": spend,
-        "platform_roas": rules.ratio(value, spend),
+        "platform_roas": (rules.ratio(sum(values), sum(perf)) if ok else None),
         "days": len(have),
         "excluded": missing,
     }

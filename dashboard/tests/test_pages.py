@@ -350,7 +350,7 @@ def test_a_sync_gap_gives_a_labelled_partial_google_total():
     part = mtd["google_partial"]
     assert part["excluded"] == ["2026-10-07"]
     assert part["spend"] == 25000.0 * part["days"]
-    assert part["platform_roas"] == pytest.approx(60000 / 25000)
+    assert part["platform_roas"] == pytest.approx(60000 / 20000)
     # Complete periods carry no partial figure
     assert "google_partial" not in periods["D-1"]
 
@@ -388,3 +388,15 @@ def test_an_empty_meta_day_is_unavailable_not_zero():
     assert f["meta_spend"] is None and f["mer"] is None
     assert "meta_spend" in f["na"]
     assert ctx.facts["2026-10-27"]["meta_spend"] == 150000.0
+
+
+def test_platform_roas_leaves_out_awareness_campaigns(built_with_meta):
+    pages, ctx = built_with_meta
+    f = ctx.facts[D1]
+    # Meta: only WOA_MOF_Sales counts (300,000 value on 100,000 spend);
+    # Google: only the Pmax campaign (60,000 on 20,000).
+    assert f["meta_perf_value"] == 300000.0
+    assert f["google_perf_value"] == 60000.0
+    d1 = pages["marketing"]["periods"][0]
+    assert d1["meta_platform_roas"] == pytest.approx(3.0)
+    assert d1["google_platform_roas"] == pytest.approx(3.0)

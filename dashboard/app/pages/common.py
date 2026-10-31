@@ -28,10 +28,10 @@ COUNT_FIELDS = [
     "repeat_gmv",
     "meta_spend",
     "meta_perf_spend",
-    "meta_platform_value",
+    "meta_perf_value",
     "google_spend",
     "google_perf_spend",
-    "google_platform_value",
+    "google_perf_value",
     "spend",
     "perf_spend",
 ]
@@ -179,9 +179,9 @@ class Context:
         for r in d.get("google_ads", []):
             g = google[r["date"]]
             g[0] += r["spend"] or 0
-            g[2] += r.get("conversion_value") or 0
             if r["campaign_id"] not in self.aware_ids:
                 g[1] += r["spend"] or 0
+                g[2] += r.get("conversion_value") or 0
         google_latest = self._latest("google_ads")
         funnel_latest = self._latest("gokwik_funnel")
         meta_days = d.get("meta") or {}
@@ -248,7 +248,7 @@ class Context:
                 (
                     f["google_spend"],
                     f["google_perf_spend"],
-                    f["google_platform_value"],
+                    f["google_perf_value"],
                 ) = google[day]
             elif (
                 day in self.cfg["google_ads"].get("zero_spend_dates", {})
@@ -258,7 +258,7 @@ class Context:
                 # Confirmed in config: the account had no budget, so no rows
                 # is a real zero, not a sync gap.
                 f["google_spend"] = f["google_perf_spend"] = f[
-                    "google_platform_value"
+                    "google_perf_value"
                 ] = 0.0
             else:
                 # No rows at all inside the synced range is a sync gap, not zero spend.
@@ -268,44 +268,46 @@ class Context:
                     else NA["google_gap"]
                 )
                 f["google_spend"] = f["google_perf_spend"] = f[
-                    "google_platform_value"
+                    "google_perf_value"
                 ] = None
                 for k in (
                     "google_spend",
                     "google_perf_spend",
-                    "google_platform_value",
+                    "google_perf_value",
                 ):
                     f["na"][k] = reason
 
             if meta_days.get(day):
                 rows = meta_days[day]
                 f["meta_spend"] = sum(r["spend"] for r in rows)
-                f["meta_platform_value"] = sum(
-                    r["purchase_value"] for r in rows
-                )
                 if any(r.get("campaign_name") is None for r in rows):
                     # Account-level rows: the Awareness split needs campaign names.
-                    f["meta_perf_spend"] = None
-                    f["na"][
-                        "meta_perf_spend"
-                    ] = "Meta campaign names not available for this day (account-level data)"
+                    why = "Meta campaign names not available for this day (account-level data)"
+                    f["meta_perf_spend"] = f["meta_perf_value"] = None
+                    f["na"]["meta_perf_spend"] = f["na"]["meta_perf_value"] = (
+                        why
+                    )
                 else:
-                    f["meta_perf_spend"] = sum(
-                        r["spend"]
+                    sales = [
+                        r
                         for r in rows
                         if not rules.is_awareness_name(
                             r["campaign_name"], self.cfg["sessions"]
                         )
+                    ]
+                    f["meta_perf_spend"] = sum(r["spend"] for r in sales)
+                    f["meta_perf_value"] = sum(
+                        r["purchase_value"] for r in sales
                     )
             else:
                 reason = self.unavailable.get("meta", NA["meta"])
                 f["meta_spend"] = f["meta_perf_spend"] = f[
-                    "meta_platform_value"
+                    "meta_perf_value"
                 ] = None
                 for k in (
                     "meta_spend",
                     "meta_perf_spend",
-                    "meta_platform_value",
+                    "meta_perf_value",
                 ):
                     f["na"][k] = reason
 
