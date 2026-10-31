@@ -100,7 +100,7 @@ Needs `gcloud` signed in with Owner (or equivalent) on `asaya-data-room-487110`.
    history so sale detection and month-to-date spend have it:
    ```
    gcloud run jobs execute asaya-d2c-refresh --region asia-south1
-   gcloud run jobs execute asaya-d2c-refresh --region asia-south1 --args="-m,app.refresh,--force,--meta-backfill-days,100"
+   gcloud run jobs execute asaya-d2c-refresh --region asia-south1 --args="-m,app.refresh,--force,--meta-backfill-days,400"
    ```
 7. Allowlist people: `python -m app.allowlist add name@company.com` (removal
    takes effect within 5 minutes).

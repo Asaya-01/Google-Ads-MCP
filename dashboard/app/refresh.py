@@ -15,7 +15,7 @@ Usage:
   python -m app.refresh                        # normal scheduled run
   python -m app.refresh --force                # rebuild even if complete
   python -m app.refresh --date 2026-10-28      # build for a specific D-1
-  python -m app.refresh --meta-backfill-days 100   # one-off campaign-level Meta history
+  python -m app.refresh --meta-backfill-days 400   # one-off campaign-level Meta history
   python -m app.refresh --dump-inputs DIR          # also save the inputs, for app.preview
 """
 
@@ -130,21 +130,35 @@ def collect(
             days=cfg["refresh"]["refetch_recent_days"] - 1
         )
         sessions, landing = {}, {}
-        for day in _days(start, d1_date):
+        # A long history is filled over several runs: at most this many days
+        # are pulled from Shopify per run, newest first, and the rest show as
+        # "not pulled yet" until they are cached. D-1 is never held back.
+        budget = cfg["refresh"].get("backfill_days_per_run", 40)
+        pulled = 0
+        for day in reversed(_days(start, d1_date)):
             s_path, l_path = (
                 f"cache/sessions/{day}.json",
                 f"cache/landing/{day}.json",
             )
             fresh = dt.date.fromisoformat(day) >= refetch_from
             s = None if fresh else store.get_json(s_path)
+            l = None if fresh else store.get_json(l_path)
+            if (s is None or l is None) and not fresh:
+                if pulled >= budget:
+                    continue
+                pulled += 1
             if s is None:
                 s = shop.sessions_day(day, cfg["sessions"]["breakdown_limit"])
                 store.put_json(s_path, s)
-            l = None if fresh else store.get_json(l_path)
             if l is None:
                 l = shop.landing_day(day, cfg["sessions"]["landing_page_limit"])
                 store.put_json(l_path, l)
             sessions[day], landing[day] = s, l
+        if pulled >= budget:
+            data["unavailable"]["history_backfill"] = (
+                "Older days are still being pulled from Shopify "
+                f"({budget} days per run); they fill in over the next runs"
+            )
         data["sessions"], data["landing"] = sessions, landing
         if not sessions.get(d1, {}).get("totals", {}).get("sessions"):
             missing["shopify_sessions"] = (

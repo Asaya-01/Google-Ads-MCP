@@ -32,7 +32,8 @@
     "bq_ready_by": "06:30",
     "alert_from": "10:00",
     "retry_minutes": 30,
-    "history_days": 100,
+    "history_days": 400,
+    "backfill_days_per_run": 40,
     "refetch_recent_days": 3,
     "reconcile": {
       "orders":       {"pct": 0.01,  "min_abs": 3,  "block": true},
