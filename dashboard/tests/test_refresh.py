@@ -32,7 +32,6 @@ def test_meta_gives_up_after_the_retries_and_reports_what_it_has(monkeypatch):
 
 
 CREDS = {
-    "google-ads-developer-token": "dev",
     "google-ads-client-id": "cid",
     "google-ads-client-secret": "csec",
     "google-ads-refresh-token": "rt",
@@ -76,13 +75,12 @@ def test_google_rows_come_back_in_the_bigquery_shape(monkeypatch):
     def fake_post(url, **kw):
         if url == google_ads.TOKEN_URL:
             return Resp({"access_token": "tok"})
-        assert kw["headers"]["developer-token"] == "dev"
+        assert "developer-token" not in kw["headers"]
         assert kw["headers"]["login-customer-id"] == "2013716241"
         return Resp(stream)
 
     monkeypatch.setattr(google_ads.requests, "post", fake_post)
     creds = {
-        "developer_token": "dev",
         "client_id": "cid",
         "client_secret": "csec",
         "refresh_token": "rt",

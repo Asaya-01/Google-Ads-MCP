@@ -112,12 +112,15 @@ day. `GOOGLEADS_CONSOLIDATED` (BigQuery) lands around 12:15 IST and is the
 automatic fallback while the credentials are not in Secret Manager, or if the
 API call fails. The Marketing tab says which source it used.
 
+Google retired developer tokens on 9 Sep 2026: API access levels now belong to
+the Google Cloud project that owns the OAuth client, and are requested from the
+Google Ads API page in Cloud Console. The code sends no developer token.
+
 Secrets (Secret Manager, never in code or chat):
 
 | Secret | What it is |
 |---|---|
-| `google-ads-developer-token` | From the manager account (2013716241) under Admin, API Center. Needs Explorer or Basic access; a test-level token cannot read a live account. |
-| `google-ads-client-id`, `google-ads-client-secret` | An OAuth client of type Web application, with `https://developers.google.com/oauthplayground` as an authorised redirect URI. |
+| `google-ads-client-id`, `google-ads-client-secret` | An OAuth client of type Web application, with `https://developers.google.com/oauthplayground` as an authorised redirect URI. Its Cloud project (asaya-data-room-487110) must hold a Google Ads API access level (Explorer or Basic). |
 | `google-ads-refresh-token` | Minted once in the OAuth Playground (gear icon, own credentials, scope `https://www.googleapis.com/auth/adwords`), signed in as a user with read access to the Google Ads account. |
 
 `config.json` (`google_ads`): `account_id` (the World of Asaya account),

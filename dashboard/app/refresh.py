@@ -197,7 +197,6 @@ def _google_from_api(
     None (with the reason in `unavailable`) so the BigQuery copy is used."""
     gcfg = cfg["google_ads"]
     creds = {
-        "developer_token": secrets.get_secret(gcfg["developer_token_secret"]),
         "client_id": secrets.get_secret(gcfg["client_id_secret"]),
         "client_secret": secrets.get_secret(gcfg["client_secret_secret"]),
         "refresh_token": secrets.get_secret(gcfg["refresh_token_secret"]),

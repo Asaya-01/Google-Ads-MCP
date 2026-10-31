@@ -42,7 +42,6 @@ def _search_stream(cfg: dict, creds: dict, query: str) -> list[dict]:
     )
     headers = {
         "Authorization": f"Bearer {token}",
-        "developer-token": creds["developer_token"],
         "Content-Type": "application/json",
     }
     if cfg.get("login_customer_id"):
