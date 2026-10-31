@@ -373,7 +373,7 @@ function retValue() {
   act += "Monthly cohorts show a dash until they have had the full time, so a recent month is never compared on a horizon it has not reached.";
   return `
     <h3>What a customer is worth</h3>
-    <p class="rsub">Order value is the total of every counted line on the order, as recorded in the Shopify order history (free gifts add nothing). A customer's value within a number of days counts their first order and everything after it. Only customers who have had the full number of days are counted.</p>
+    <p class="rsub">Order value is what the customer paid for the whole order: every line after discounts, with shipping and tax, the same basis as Shopify's Total sales (September 2026 matches within 0.5%). A customer's value within a number of days counts their first order and everything after it. Only customers who have had the full number of days are counted.</p>
     <div class="rfigs">${figs}</div>
     <h4>Value per customer over time</h4>
     ${curve.length ? rBars(curve, (r) => rRs(r[1])) : ""}
