@@ -51,6 +51,46 @@
     "stale_minutes": {"shopify": 20, "ads": 60, "gokwik": 90}
   },
 
+  "manual_spends": {
+    "note": "Spends that have no API, read from the team's Google Sheets on every refresh. Sheet ids come from the SPEND_SHEET_* environment variables (see deploy.env.example); the sheets are shared with the dashboard's service account as Viewer.",
+    "sources": {
+      "affiliate": {
+        "label": "Affiliate",
+        "sheet_env": "SPEND_SHEET_AFFILIATE",
+        "tab": "Daily - report",
+        "header_row": 2,
+        "date_col": "B",
+        "date_format": "%Y-%m-%d",
+        "columns": {"spend": "F", "revenue": "E"}
+      },
+      "crm_flow": {
+        "label": "CRM flow",
+        "sheet_env": "SPEND_SHEET_CRM_FLOW",
+        "tab": "Daily Flow Spends",
+        "header_row": 2,
+        "date_col": "A",
+        "date_format": "%d/%m/%Y",
+        "columns": {"spend": "F", "revenue": "G"}
+      },
+      "crm_broadcast": {
+        "label": "CRM broadcast",
+        "sheet_env": "SPEND_SHEET_CRM_BROADCAST",
+        "tab": "Broadcast Daily Spends",
+        "header_row": 1,
+        "date_col": "A",
+        "date_format": "%b %d",
+        "start_year": 2026,
+        "columns": {"spend": "B", "revenue": "C"},
+        "filled_through_follows": "crm_flow"
+      }
+    },
+    "live_estimate": {
+      "affiliate": "per_gmv",
+      "crm": "per_hour",
+      "basis_days": 7
+    }
+  },
+
   "pulse": {
     "baseline_days": 28,
     "min_baseline_days": 5,

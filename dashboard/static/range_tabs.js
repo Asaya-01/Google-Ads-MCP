@@ -4,9 +4,42 @@
 const MK = { phase: null };
 const RG_MKT = [
   ["gmv", "GMV", "inr"], ["meta_spend", "Meta spend", "inr"], ["google_spend", "Google spend", "inr"],
-  ["spend", "Total ad spend", "inr"], ["mer", "MER (GMV / ad spend)", "x"], ["perf_roas", "Shopify ROAS (Perf)", "x"],
+  ["affiliate_spend", "Affiliate spend", "inr"], ["crm_spend", "CRM spend (flow + broadcast)", "inr"],
+  ["all_spend", "Overall spend", "inr"], ["spend", "Meta + Google spend", "inr"],
+  ["overall_roas", "Overall ROAS (GMV / all spend)", "x"], ["mer", "MER (GMV / Meta + Google)", "x"], ["perf_roas", "Shopify ROAS (Perf)", "x"],
   ["meta_sales_roas", "Meta ROAS", "x"], ["google_sales_roas", "Google Ads ROAS", "x"],
+  ["affiliate_roas", "Affiliate ROAS", "x"], ["crm_roas", "CRM ROAS", "x"],
 ];
+const RG_CHANNELS = [
+  ["Meta", "meta_spend", "meta_perf_value", "meta_sales_roas", "Meta-reported purchase value, sales campaigns"],
+  ["Google Ads", "google_spend", "google_perf_value", "google_sales_roas", "Google-reported conversion value, sales campaigns"],
+  ["Affiliate", "affiliate_spend", "affiliate_revenue", "affiliate_roas", "sales the affiliates are credited with"],
+  ["CRM flow", "crm_flow_spend", "crm_flow_revenue", "crm_flow_roas", "revenue the flows are credited with"],
+  ["CRM broadcast", "crm_broadcast_spend", "crm_broadcast_revenue", "crm_broadcast_roas", "revenue the broadcasts are credited with"],
+];
+// spend and return, channel by channel, for one block of days
+function rgChannelTable(g) {
+  const w = g.w, pw = g.pw;
+  const all = w.all_spend, nums = (k, who) => (who ? who[k] : null);
+  const share = (v) => (v == null || all == null || all === 0 ? null : v / all);
+  const rows = RG_CHANNELS.map(([label, sk, rk, roas, what]) => ({
+    label, what, spend: w[sk], share: share(w[sk]), rev: w[rk], roas: w[roas], prevRoas: nums(roas, pw),
+    dSpend: pw && w[sk] != null && pw[sk] != null ? rgAvgChange(w[sk], w.days, pw[sk], pw.days) : null,
+    dRoas: pw ? g.change(roas) : null, na: w.na[sk] || w.na[rk] || null,
+  }));
+  const cell = (v, unit, na) => (v == null ? `<span class="cell-na" title="Data unavailable: ${esc(na || "not available")}">n/a</span>` : esc(fmt(v, unit)));
+  const cols = [
+    { label: "Channel", text: true, render: (r) => `${esc(r.label)}<br><span class="sub">${esc(r.what)}</span>` },
+    { label: "Spend", render: (r) => cell(r.spend, "inr", r.na) },
+    { label: "Δ spend", render: (r) => (pw ? deltaHtml(r.dSpend, "spend") : '<span class="flat">–</span>') },
+    { label: "Share of all spend", render: (r) => (r.share == null ? '<span class="na">–</span>' : esc((r.share * 100).toFixed(1) + "%")) },
+    { label: "Channel revenue", render: (r) => cell(r.rev, "inr", r.na) },
+    { label: "Channel ROAS", render: (r) => cell(r.roas, "x", r.na) + (r.prevRoas == null ? "" : `<br><span class="sub">vs ${esc(fmt(r.prevRoas, "x"))}</span>`) },
+    { label: "Δ ROAS", render: (r) => (pw ? deltaHtml(r.dRoas, "roas") : '<span class="flat">–</span>') },
+  ];
+  const total = { label: "All channels", what: "GMV from Shopify, all spend", spend: all, share: all == null ? null : 1, rev: w.gmv, roas: w.overall_roas, prevRoas: pw ? pw.overall_roas : null, dSpend: pw && all != null && pw.all_spend != null ? rgAvgChange(all, w.days, pw.all_spend, pw.days) : null, dRoas: pw ? g.change("overall_roas") : null, na: w.na.all_spend || w.na.gmv, _class: "total" };
+  return table(cols, [...rows, total]);
+}
 RG_NEUTRAL.add("meta_spend"); RG_NEUTRAL.add("google_spend");
 
 // A tab with its own picker bar, its body filled once the day-by-day data is in.
@@ -96,7 +129,9 @@ function rgSpendCharts() {
 R.marketing = (p) => {
   const metaNA = p.unavailable?.meta;
   const chk = p.classification_check, m = chk.google_match;
-  const head = metaNA ? `<div class="banner">Meta Ads: data unavailable. ${esc(metaNA)}. Meta spend, total spend, MER and Perf ROAS stay blank until it is in place.</div>` : "";
+  const sheetNA = Object.entries(p.unavailable || {}).filter(([k]) => k.startsWith("sheet_")).map(([, v]) => v);
+  const head = (metaNA ? `<div class="banner">Meta Ads: data unavailable. ${esc(metaNA)}. Meta spend, total spend, MER and Perf ROAS stay blank until it is in place.</div>` : "")
+    + (sheetNA.length ? `<div class="banner">Spend sheets: ${sheetNA.map(esc).join("; ")}. Overall spend and ROAS stay blank for the days affected.</div>` : "");
   const tail = `<section class="card">
       <div class="section-head"><h2>Session classification check</h2><span class="sub">${dayLabel(m.start)}–${dayLabel(m.end)} · the last 7 days</span></div>
       <div class="tiles">
@@ -114,7 +149,7 @@ R.marketing = (p) => {
       const host = document.getElementById("rg-body");
       if (!c.groups.length) { host.innerHTML = `<section class="card"><p class="na">Data unavailable: there are no days in the data for ${esc(rgSpan(RG.from, RG.to))}.</p></section>` + tail; return; }
       const [g, ctl] = rgPhasePick(c, "mk-phase");
-      host.innerHTML = c.groups.map((x) => rgGroupHtml(x, c.groups.length > 1, RG_MKT, "Spend and return")).join("") + `
+      host.innerHTML = c.groups.map((x) => rgGroupHtml(x, c.groups.length > 1, RG_MKT, "Spend and return") + `<section class="card"><div class="section-head"><h2>${phaseChip(x.phase)} Spend and return by channel</h2><span class="sub">each channel's own revenue and ROAS; the last row is Shopify GMV over all spend</span></div>${rgChannelTable(x)}</section>`).join("") + `
         <div class="grid-2">
           <section class="card"><div class="section-head"><h2>Ad spend per day</h2>${legend([["--series-1", "Meta"], ["--series-2", "Google"]])}</div><div class="chart-box"><canvas id="c-rg-spend" aria-label="Meta and Google spend per day"></canvas></div></section>
           <section class="card"><div class="section-head"><h2>MER per day</h2><span class="sub">GMV / (Meta + Google spend)</span></div><div class="chart-box"><canvas id="c-rg-mer" aria-label="MER per day"></canvas></div></section>

@@ -36,6 +36,16 @@ COUNT_FIELDS = [
     "google_perf_value",
     "spend",
     "perf_spend",
+    "affiliate_spend",
+    "affiliate_revenue",
+    "crm_flow_spend",
+    "crm_flow_revenue",
+    "crm_broadcast_spend",
+    "crm_broadcast_revenue",
+    "crm_spend",
+    "crm_revenue",
+    "other_spend",
+    "all_spend",
 ]
 
 NA = {
@@ -68,6 +78,13 @@ def derive(f: dict) -> dict:
         ),
         mer=r(f.get("gmv"), f.get("spend")),
         perf_roas=r(f.get("gmv"), f.get("perf_spend")),
+        overall_roas=r(f.get("gmv"), f.get("all_spend")),
+        affiliate_roas=r(f.get("affiliate_revenue"), f.get("affiliate_spend")),
+        crm_roas=r(f.get("crm_revenue"), f.get("crm_spend")),
+        crm_flow_roas=r(f.get("crm_flow_revenue"), f.get("crm_flow_spend")),
+        crm_broadcast_roas=r(
+            f.get("crm_broadcast_revenue"), f.get("crm_broadcast_spend")
+        ),
         new_share=(
             r(f.get("new_orders"), known)
             if f.get("new_orders") is not None
@@ -361,8 +378,56 @@ class Context:
                     f["na"][total] = "; ".join(
                         sorted({f["na"][p] for p in parts if p in f["na"]})
                     )
+            self._manual_spends(f, day)
             facts[day] = derive(f)
         return facts
+
+    def _manual_spends(self, f: dict, day: str) -> None:
+        """Affiliate and CRM spends and the revenue each channel reports for
+        itself, from the team's sheets. A day nobody has filled in yet is
+        unavailable with the reason, never zero."""
+        ms = self.data.get("manual_spends") or {}
+        specs = self.cfg.get("manual_spends", {}).get("sources", {})
+        sources = ms.get("sources") or {}
+        failed = ms.get("failed") or {}
+        for name, spec in specs.items():
+            label = spec.get("label", name)
+            src = sources.get(name)
+            if src is None:
+                reason = failed.get(name) or "sheet not read yet"
+                f[f"{name}_spend"] = f[f"{name}_revenue"] = None
+                f["na"][f"{name}_spend"] = f["na"][f"{name}_revenue"] = (
+                    f"{label} sheet unavailable: {reason}"
+                )
+                continue
+            rec = src["days"].get(day)
+            if rec is None:
+                first = min(src["days"]) if src["days"] else None
+                why = (
+                    f"{label} spend is not in the sheet before {first}"
+                    if first and day < first
+                    else f"{label} spend not entered in the sheet yet "
+                    f"(filled through {src['filled_through'] or 'nothing'})"
+                )
+                f[f"{name}_spend"] = f[f"{name}_revenue"] = None
+                f["na"][f"{name}_spend"] = f["na"][f"{name}_revenue"] = why
+            else:
+                f[f"{name}_spend"] = rec["spend"]
+                f[f"{name}_revenue"] = rec["revenue"]
+        # the affiliate sheet's names are "affiliate"; CRM is flow + broadcast
+
+        def total(out: str, parts: list[str]) -> None:
+            vals = [f.get(p) for p in parts]
+            f[out] = sum(vals) if None not in vals else None
+            if f[out] is None:
+                f["na"][out] = "; ".join(
+                    sorted({f["na"][p] for p in parts if p in f["na"]})
+                )
+
+        total("crm_spend", ["crm_flow_spend", "crm_broadcast_spend"])
+        total("crm_revenue", ["crm_flow_revenue", "crm_broadcast_revenue"])
+        total("other_spend", ["affiliate_spend", "crm_spend"])
+        total("all_spend", ["spend", "other_spend"])
 
     # ------------------------------------------------------------ windows
 

@@ -469,6 +469,13 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
           : `<div class="hero">${esc(fmt(c.value, "x"))}</div>
              <div class="vs">${deltaHtml(c.delta, c.key)}<span>vs yesterday ${esc(fmt(c.yesterday, "x") ?? "n/a")}</span></div>`}
         <div class="psub">${esc(c.sub)}</div></article>`).join("")}</div></section>`;
+    const sb = p.spend_breakdown || [];
+    const breakdown = sb.length ? `<section class="card"><div class="section-head"><h2>Spend so far today</h2><span class="sub">Meta and Google are real; affiliate and CRM have no live source, so they are estimates</span></div>
+      ${table([
+        { label: "Channel", text: true, render: (r) => esc(r.label) },
+        { label: "So far today", render: (r) => (r.value == null ? '<span class="cell-na" title="Data unavailable: ' + esc(r.note) + '">n/a</span>' : esc(fmt(r.value, "inr")) + (r.kind === "estimate" && r.label !== "All channels" ? ' <span class="chip pending">estimate</span>' : "")) },
+        { label: "How", text: true, render: (r) => `<span class="sub">${esc(r.note)}</span>` },
+      ], sb.map((r) => ({ ...r, _class: r.label === "All channels" ? "total" : "" })))}</section>` : "";
     const gk = p.gokwik;
     const pct1 = (v) => (v === null || v === undefined ? "n/a" : (v * 100).toFixed(1) + "%");
     const checkout = `<section class="card"><div class="section-head"><h2>Checkout (GoKwik)</h2>
@@ -497,7 +504,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
           { label: "ROAS", render: (r) => r.roas === null ? '<span class="na">–</span>' : esc(fmt(r.roas, "x")) },
         ], rows, { maxHeight: "50vh" })}</section>`;
     };
-    $main.innerHTML = head + tiles + chart + cards + checkout + `<div class="grid-2">${adTable("Meta campaigns today", p.meta)}${adTable("Google Ads campaigns today", p.google)}</div><section class="card">${notes(p)}</section>`;
+    $main.innerHTML = head + tiles + chart + cards + breakdown + checkout + `<div class="grid-2">${adTable("Meta campaigns today", p.meta)}${adTable("Google Ads campaigns today", p.google)}</div><section class="card">${notes(p)}</section>`;
     liveTick();
     document.getElementById("live-base")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-b]"); if (b) { LIVE.base = b.dataset.b; destroyCharts(); R.live(p); } });
     document.getElementById("live-metric")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-m]"); if (b) { LIVE.metric = b.dataset.m; destroyCharts(); R.live(p); } });

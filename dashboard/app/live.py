@@ -155,6 +155,81 @@ def live_regime(
     return ratio, None
 
 
+def estimate_other_spend(
+    days: dict,
+    assumed: str | None,
+    gmv_now: float | None,
+    t: float,
+    cfg: dict,
+) -> dict:
+    """Today's spend so far on the channels that have no live source.
+
+    The sheets are filled in with a lag, so yesterday's number is usually not
+    there yet; the basis is the most recent filled days of the same kind (sale
+    with sale, BAU with BAU), falling back to any kind when there are too few.
+      per_hour: CRM sends go out through the day, so a typical day's spend x
+                the share of the day gone (hours so far / 24).
+      per_gmv : affiliate cost follows sales, so its share of GMV on those
+                days x today's GMV so far.
+    Returns {channel: {"value", "basis", "dates"}} and a "total"."""
+    mcfg = cfg["manual_spends"]["live_estimate"]
+    n = mcfg["basis_days"]
+    out: dict = {"affiliate": None, "crm": None, "total": None}
+    if not days or not days.get("dates"):
+        return out
+    dates, phase = days["dates"], days.get("phase") or []
+
+    def pick(field: str, need_gmv: bool = False):
+        rows = [
+            i
+            for i in range(len(dates))
+            if days["values"][field][i] is not None
+            and (not need_gmv or days["values"]["gmv"][i])
+        ]
+        same = [i for i in rows if assumed and phase[i] == assumed]
+        use = same if len(same) >= 3 else rows
+        kind = assumed if use is same and assumed else "any kind of"
+        use = use[-n:]
+        return use, kind
+
+    parts = []
+    for ch, field, how in (
+        ("affiliate", "affiliate_spend", mcfg["affiliate"]),
+        ("crm", "crm_spend", mcfg["crm"]),
+    ):
+        use, kind = pick(field, need_gmv=how == "per_gmv")
+        if len(use) < 2:
+            continue
+        span = f"{dates[use[0]]} to {dates[use[-1]]}"
+        label = {"bau": "BAU", "sale": "sale"}.get(kind, kind)
+        if how == "per_gmv":
+            gmv = sum(days["values"]["gmv"][i] for i in use)
+            share = sum(days["values"][field][i] for i in use) / gmv
+            if gmv_now is None:
+                continue
+            value = share * gmv_now
+            basis = (
+                f"{share * 100:.1f}% of GMV, from {len(use)} {label} days "
+                f"({span}), x today's GMV so far"
+            )
+        else:
+            daily = statistics.median(days["values"][field][i] for i in use)
+            value = daily * min(t, 24) / 24
+            basis = (
+                f"a typical {label} day's Rs {daily:,.0f} (median of "
+                f"{len(use)} days, {span}) x {min(t, 24):.1f}/24 of the day"
+            )
+        out[ch] = {
+            "value": value,
+            "basis": basis,
+            "dates": [dates[i] for i in use],
+        }
+        parts.append(value)
+    if len(parts) == 2:
+        out["total"] = sum(parts)
+    return out
+
+
 def curve(hourly: list[float], upto: int | None) -> list[float | None]:
     """Running total at the end of each hour; None after hour `upto`."""
     out, run = [], 0.0
@@ -513,6 +588,17 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
         if meta_blk.get("yesterday") and google_blk.get("yesterday")
         else None
     )
+    est = estimate_other_spend(inp.get("days_manual"), assumed, gmv_now, t, cfg)
+    dm = inp.get("days_manual") or {}
+    y_overall = None
+    if yesterday in (dm.get("dates") or []):
+        i = dm["dates"].index(yesterday)
+        y_overall = ratio(dm["values"]["gmv"][i], dm["values"]["all_spend"][i])
+    all_t = (
+        spend_t + est["total"]
+        if spend_t is not None and est["total"] is not None
+        else None
+    )
     cards = []
     for key, label, v, y, sub, na in (
         (
@@ -544,8 +630,20 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
             "MER",
             ratio(gmv_now, spend_t),
             ratio(gmv_y, spend_y),
-            "Shopify GMV so far / all ad spend so far",
+            "Shopify GMV so far / Meta + Google spend so far",
             None if spend_t is not None else "ad spend for today is not in yet",
+        ),
+        (
+            "overall_roas",
+            "Overall ROAS (est.)",
+            ratio(gmv_now, all_t),
+            y_overall,
+            "Shopify GMV so far / Meta + Google (actual) + affiliate + CRM (estimated)",
+            (
+                "ad spend for today is not in yet"
+                if spend_t is None
+                else "there are not enough filled days in the affiliate and CRM sheets to estimate them"
+            ),
         ),
     ):
         cards.append(
@@ -627,6 +725,40 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
         "meta": meta_blk,
         "google": google_blk,
         "cards": cards,
+        "spend_breakdown": [
+            {
+                "label": "Meta",
+                "value": (meta_blk.get("today") or {}).get("spend"),
+                "kind": "actual",
+                "note": "from Meta's API, a little behind real time",
+            },
+            {
+                "label": "Google Ads",
+                "value": (google_blk.get("today") or {}).get("spend"),
+                "kind": "actual",
+                "note": "from Google's API",
+            },
+            {
+                "label": "Affiliate",
+                "value": (est["affiliate"] or {}).get("value"),
+                "kind": "estimate",
+                "note": (est["affiliate"] or {}).get("basis")
+                or "not enough filled days in the sheet to estimate",
+            },
+            {
+                "label": "CRM (flow + broadcast)",
+                "value": (est["crm"] or {}).get("value"),
+                "kind": "estimate",
+                "note": (est["crm"] or {}).get("basis")
+                or "not enough filled days in the sheets to estimate",
+            },
+            {
+                "label": "All channels",
+                "value": all_t,
+                "kind": "estimate",
+                "note": "actual Meta and Google plus the two estimates",
+            },
+        ],
         "unavailable": unavailable,
         "sources": sources,
         "notes": notes,
@@ -727,6 +859,17 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
     inp["phases"] = {
         d: p for d, p in zip(days.get("dates", []), days.get("phase", [])) if p
     }
+    if days.get("dates"):
+        keep = ("gmv", "affiliate_spend", "crm_spend", "all_spend")
+        inp["days_manual"] = {
+            "dates": days["dates"],
+            "phase": days.get("phase") or [],
+            "values": {
+                k: (days.get("values") or {}).get(k)
+                or [None] * len(days["dates"])
+                for k in keep
+            },
+        }
     inp["phases_eff"] = {
         d: p
         for d, p in zip(days.get("dates", []), days.get("phase_eff", []))

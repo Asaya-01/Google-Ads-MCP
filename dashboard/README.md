@@ -144,6 +144,35 @@ falls back to BigQuery in the meantime.
   3 hours), and a failed Cloud Run execution (a Cloud Monitoring policy, created
   best-effort by `deploy.sh`).
 
+## Affiliate and CRM spends
+
+Affiliate, CRM flow and CRM broadcast spends come from the team's Google
+Sheets, read on every refresh (`app/sheets.py`, configured under
+`manual_spends` in `config.json`; the sheet ids come from the `SPEND_SHEET_*`
+variables in `deploy.env`). Each sheet is shared with the dashboard's service
+account as Viewer; `deploy.sh` enables the Sheets API and lets the service
+account request a Sheets-scoped token for itself.
+
+- **Affiliate**: spend and affiliate-credited sales from the "Daily - report"
+  tab. **CRM**: flow spend and revenue ("Daily Flow Spends") plus broadcast
+  spend and revenue ("Broadcast Daily Spends"), added together.
+- **Not entered vs zero**: these sheets are pre-filled with zeros for days that
+  have not been entered. The latest day with a number is the day a source is
+  "filled through"; later days are unavailable ("not entered in the sheet
+  yet"), never zero. The broadcast sheet is filled through the day the flow
+  sheet is, because its real no-broadcast days are zeros too. A date written
+  twice keeps the row with the larger spend.
+- **Overall ROAS** = GMV / (Meta + Google + affiliate + CRM). It stays blank for
+  a day until every part is in. The existing MER and Shopify ROAS (Perf) are
+  unchanged. Channel ROAS (affiliate, CRM flow, CRM broadcast) is each
+  channel's own revenue / its spend.
+- **Today (live)**: Meta and Google are real. Affiliate and CRM are estimates
+  from the latest filled days of the same kind (sale or BAU): CRM = a typical
+  day's spend x hours so far / 24; affiliate = its share of GMV x today's GMV so
+  far. Reddit is not included yet; add it once it lands in BigQuery.
+- If a sheet cannot be read, the last good copy is used and the dashboard says
+  so; a sheet never read stays unavailable with the reason.
+
 ## Sale and BAU days
 
 Sales are found from the hour-by-hour order counts (`orders_hourly.sql`), not

@@ -498,3 +498,42 @@ def test_range_data_pages_add_up_to_the_server_tables(built_without_meta):
     spend = sum(r["spend"] for r in ctx.data["google_ads"])
     assert round(sum(r[2] for r in g["rows"]), 0) == round(spend, 0)
     assert all(0 <= r[1] < len(g["names"]) for r in g["rows"])
+
+
+def test_affiliate_and_crm_spends_flow_into_the_overall_roas(
+    built_without_meta,
+):
+    from app.pages.common import Context
+
+    pages, ctx = built_without_meta
+    days = sorted(ctx.facts)
+    d_ok, d_late = days[-3], days[-1]
+    data = dict(ctx.data)
+    data["manual_spends"] = {
+        "sources": {
+            "affiliate": {
+                "days": {d_ok: {"spend": 1000.0, "revenue": 3000.0}},
+                "filled_through": d_ok,
+            },
+            "crm_flow": {
+                "days": {d_ok: {"spend": 500.0, "revenue": 4000.0}},
+                "filled_through": d_ok,
+            },
+            "crm_broadcast": {
+                "days": {d_ok: {"spend": 250.0, "revenue": 1000.0}},
+                "filled_through": d_ok,
+            },
+        },
+        "failed": {},
+        "stale": {},
+    }
+    c2 = Context(data, ctx.cfg)
+    f = c2.facts[d_ok]
+    assert f["crm_spend"] == 750.0 and f["crm_revenue"] == 5000.0
+    assert f["other_spend"] == 1750.0
+    assert f["affiliate_roas"] == pytest.approx(3.0)
+    assert f["crm_roas"] == pytest.approx(5000 / 750)
+    late = c2.facts[d_late]
+    assert late["affiliate_spend"] is None and late["all_spend"] is None
+    assert "not entered in the sheet yet" in late["na"]["affiliate_spend"]
+    assert late["overall_roas"] is None  # never a ROAS on a partial spend

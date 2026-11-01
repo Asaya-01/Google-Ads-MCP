@@ -40,6 +40,7 @@ from . import (
     rules,
     secrets,
     settings,
+    sheets,
 )
 from .pages import build_all
 from .shopify import Shopify
@@ -215,11 +216,45 @@ def collect(
             if rows is not None:
                 cached[day] = rows
         data["meta"] = cached
+    data["manual_spends"] = _manual_spends(cfg, store, data["unavailable"])
     data["google_id_names"] = _google_id_names(cfg, data, store, gsrc)
     data["reconcile"] = _reconcile(
         cfg, data, d1, d1_date, gsrc, shop, token, missing
     )
     return data, missing
+
+
+def _manual_spends(cfg: dict, store, unavailable: dict) -> dict:
+    """Affiliate and CRM spends from the team's Google Sheets. A source that
+    cannot be read this time falls back to the last good copy (and says so);
+    one that has never been read stays unavailable with the reason."""
+    out = {"sources": {}, "failed": {}, "stale": {}}
+    if not cfg.get("manual_spends"):
+        return out
+    try:
+        fresh, failed = sheets.load_all(cfg)
+    except Exception as exc:  # never fail the refresh over a sheet
+        fresh, failed = {}, {
+            n: f"{type(exc).__name__}: {exc}"
+            for n in cfg["manual_spends"]["sources"]
+        }
+    cache = store.get_json("cache/manual_spends.json") or {}
+    for name in cfg["manual_spends"]["sources"]:
+        if name in fresh:
+            out["sources"][name] = fresh[name]
+            cache[name] = fresh[name]
+        elif name in cache:
+            out["sources"][name] = cache[name]
+            out["stale"][name] = failed.get(name, "not read")
+        else:
+            out["failed"][name] = failed.get(name, "not read")
+    store.put_json("cache/manual_spends.json", cache)
+    for name, why in {**out["failed"], **out["stale"]}.items():
+        label = cfg["manual_spends"]["sources"][name].get("label", name)
+        unavailable[f"sheet_{name}"] = f"{label} sheet: {why}" + (
+            " (showing the last good copy)" if name in out["stale"] else ""
+        )
+    return out
 
 
 def _google_id_names(cfg: dict, data: dict, store, gsrc: dict | None) -> dict:

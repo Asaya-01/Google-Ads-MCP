@@ -93,7 +93,9 @@ def build(ctx: Context) -> dict:
             if d in ctx.facts
         ],
         "unavailable": {
-            k: v for k, v in ctx.unavailable.items() if k == "meta"
+            k: v
+            for k, v in ctx.unavailable.items()
+            if k == "meta" or k.startswith("sheet_")
         },
     }
 

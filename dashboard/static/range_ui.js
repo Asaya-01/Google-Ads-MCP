@@ -17,13 +17,18 @@ const RG_TILES = [
   ["sessions", "Sessions", "int"], ["cvr", "Conversion rate", "pct"], ["atc_rate", "Add-to-cart rate", "pct"],
   ["spend", "Ad spend (Meta + Google)", "inr"], ["mer", "MER (GMV / ad spend)", "x"], ["perf_roas", "Shopify ROAS (Perf)", "x"],
   ["meta_sales_roas", "Meta ROAS", "x"], ["google_sales_roas", "Google Ads ROAS", "x"], ["new_share", "New-customer orders", "pct"],
+  ["all_spend", "Overall spend (all channels)", "inr"], ["overall_roas", "Overall ROAS (GMV / all spend)", "x"],
+  ["affiliate_roas", "Affiliate ROAS", "x"], ["crm_roas", "CRM ROAS", "x"],
 ];
+const RG_RATES = ["aov", "cvr", "atc_rate", "mer", "perf_roas", "meta_sales_roas", "google_sales_roas", "new_share", "overall_roas", "affiliate_roas", "crm_roas", "crm_flow_roas", "crm_broadcast_roas"];
 const RG_DEP = {
   aov: ["gmv", "orders"], cvr: ["orders", "sessions"], atc_rate: ["atc", "sessions"], mer: ["gmv", "spend"],
   perf_roas: ["gmv", "perf_spend"], meta_sales_roas: ["meta_perf_value", "meta_perf_spend"],
   google_sales_roas: ["google_perf_value", "google_perf_spend"], new_share: ["new_orders", "repeat_orders"], atc_to_ic: ["atc", "ic"],
+  overall_roas: ["gmv", "all_spend"], affiliate_roas: ["affiliate_revenue", "affiliate_spend"], crm_roas: ["crm_revenue", "crm_spend"],
+  crm_flow_roas: ["crm_flow_revenue", "crm_flow_spend"], crm_broadcast_roas: ["crm_broadcast_revenue", "crm_broadcast_spend"],
 };
-const RG_NEUTRAL = new Set(["spend", "sessions"]);
+const RG_NEUTRAL = new Set(["spend", "sessions", "all_spend", "affiliate_spend", "crm_spend"]);
 const rgNa = (w, k) => w.na[k] || (RG_DEP[k] || []).map((d) => w.na[d]).find(Boolean) || null;
 const rgFmtDay = (s, year) => new Date(s + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(year ? { year: "numeric" } : {}), timeZone: "UTC" });
 const rgSpan = (a, b) => (a === b ? rgFmtDay(a, true) : `${rgFmtDay(a)} – ${rgFmtDay(b, true)}`);
@@ -249,7 +254,7 @@ function rgTile(k, label, unit, g) {
   const w = g.w, pw = g.pw, v = w[k], na = rgNa(w, k);
   if (v === null || v === undefined) return `<div class="tile"><div class="label">${esc(label)}</div><div class="na">Data unavailable: ${esc(na || "not available")}</div></div>`;
   const ch = g.change(k);
-  const count = !["aov", "cvr", "atc_rate", "mer", "perf_roas", "meta_sales_roas", "google_sales_roas", "new_share"].includes(k);
+  const count = !RG_RATES.includes(k);
   const prior = pw ? pw[k] : null;
   const foot = pw
     ? `${deltaHtml(ch, RG_NEUTRAL.has(k) ? "spend" : k)}<span>vs ${esc(prior == null ? "n/a" : fmt(prior, unit, true))}</span>`

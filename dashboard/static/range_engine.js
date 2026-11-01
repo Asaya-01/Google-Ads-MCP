@@ -58,6 +58,11 @@
       w.google_sales_roas = ratio(w.google_perf_value, w.google_perf_spend);
       w.mer = ratio(w.gmv, w.spend);
       w.perf_roas = ratio(w.gmv, w.perf_spend);
+      w.overall_roas = ratio(w.gmv, w.all_spend);
+      w.affiliate_roas = ratio(w.affiliate_revenue, w.affiliate_spend);
+      w.crm_roas = ratio(w.crm_revenue, w.crm_spend);
+      w.crm_flow_roas = ratio(w.crm_flow_revenue, w.crm_flow_spend);
+      w.crm_broadcast_roas = ratio(w.crm_broadcast_revenue, w.crm_broadcast_spend);
       const known = (w.new_orders || 0) + (w.repeat_orders || 0);
       w.new_share = w.new_orders == null ? null : ratio(w.new_orders, known);
       return w;
@@ -86,7 +91,7 @@
     }
 
     /* Per-day change: counts compare averages, rates compare directly. */
-    const RATE_FIELDS = new Set(["aov", "cvr", "atc_rate", "atc_to_ic", "address_rate", "payment_rate", "paid_rate", "meta_sales_roas", "google_sales_roas", "mer", "perf_roas", "new_share"]);
+    const RATE_FIELDS = new Set(["aov", "cvr", "atc_rate", "atc_to_ic", "address_rate", "payment_rate", "paid_rate", "meta_sales_roas", "google_sales_roas", "mer", "perf_roas", "overall_roas", "affiliate_roas", "crm_roas", "crm_flow_roas", "crm_broadcast_roas", "new_share"]);
     function change(cur, prev, key) {
       if (!prev) return null;
       let c = cur[key], p = prev[key];

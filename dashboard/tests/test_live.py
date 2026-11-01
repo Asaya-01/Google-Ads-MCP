@@ -230,3 +230,67 @@ def test_shopify_failure_leaves_a_reason_and_no_numbers():
     page = live.build(inp, CFG, NOW)
     assert page["shopify"] is None
     assert "shopify_orders" in page["unavailable"]
+
+
+def manual_days(n=12, phase="bau", gmv=300000.0, aff_pct=0.03, crm=10000.0):
+    dates = [
+        (dt.date(2026, 10, 18) + dt.timedelta(days=i)).isoformat()
+        for i in range(n)
+    ]
+    return {
+        "dates": dates,
+        "phase": [phase] * n,
+        "values": {
+            "gmv": [gmv] * n,
+            "affiliate_spend": [gmv * aff_pct] * n,
+            "crm_spend": [crm] * n,
+            "all_spend": [None] * n,
+        },
+    }
+
+
+def test_affiliate_follows_sales_and_crm_follows_the_clock():
+    est = live.estimate_other_spend(manual_days(), "bau", 120000.0, 12.0, CFG)
+    assert est["affiliate"]["value"] == pytest.approx(0.03 * 120000)
+    assert est["crm"]["value"] == pytest.approx(10000 * 12 / 24)
+    assert est["total"] == pytest.approx(3600 + 5000)
+    assert "BAU" in est["crm"]["basis"] and "12.0/24" in est["crm"]["basis"]
+
+
+def test_the_basis_is_the_same_kind_of_day_when_there_are_enough():
+    d = manual_days(n=14)
+    d["phase"] = ["sale"] * 4 + ["bau"] * 10
+    d["values"]["crm_spend"] = [40000.0] * 4 + [10000.0] * 10
+    sale = live.estimate_other_spend(d, "sale", 100000.0, 12.0, CFG)
+    bau = live.estimate_other_spend(d, "bau", 100000.0, 12.0, CFG)
+    assert sale["crm"]["value"] == pytest.approx(40000 * 12 / 24)
+    assert bau["crm"]["value"] == pytest.approx(10000 * 12 / 24)
+
+
+def test_overall_roas_is_blank_not_guessed_when_a_sheet_has_too_few_days():
+    est = live.estimate_other_spend(manual_days(n=1), "bau", 1e5, 12.0, CFG)
+    assert est["total"] is None
+    page = live.build(
+        inputs(meta_rows=ad_rows(1000, 3000), google_rows=ad_rows(500, 800)),
+        CFG,
+        NOW,
+    )
+    card = next(c for c in page["cards"] if c["key"] == "overall_roas")
+    assert card["value"] is None and "estimate" in card["na"]
+
+
+def test_overall_roas_uses_actual_ads_plus_the_two_estimates():
+    inp = inputs(meta_rows=ad_rows(1000, 3000), google_rows=ad_rows(500, 800))
+    inp["days_manual"] = manual_days()
+    page = live.build(inp, CFG, NOW)
+    card = next(c for c in page["cards"] if c["key"] == "overall_roas")
+    gmv = next(
+        x["value"] for x in page["shopify"]["tiles"] if x["key"] == "gmv"
+    )
+    meta_spend, google_spend = 1500.0, 1000.0  # incl. awareness
+    est = 0.03 * gmv + 10000 * NOW.hour / 24 + 10000 * NOW.minute / 60 / 24
+    assert card["value"] == pytest.approx(
+        gmv / (meta_spend + google_spend + est), rel=1e-3
+    )
+    kinds = {r["label"]: r["kind"] for r in page["spend_breakdown"]}
+    assert kinds["Meta"] == "actual" and kinds["Affiliate"] == "estimate"

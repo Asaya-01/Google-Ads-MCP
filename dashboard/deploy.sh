@@ -44,7 +44,8 @@ echo "==> Project ${GOOGLE_PROJECT_ID}, region ${REGION}"
 echo "==> [1/9] Enabling APIs"
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
   secretmanager.googleapis.com firestore.googleapis.com cloudscheduler.googleapis.com \
-  bigquery.googleapis.com storage.googleapis.com monitoring.googleapis.com logging.googleapis.com "${P[@]}"
+  bigquery.googleapis.com storage.googleapis.com monitoring.googleapis.com logging.googleapis.com \
+  sheets.googleapis.com iamcredentials.googleapis.com "${P[@]}"
 
 echo "==> [2/9] Service account and roles"
 gcloud iam service-accounts describe "$SA" "${P[@]}" >/dev/null 2>&1 \
@@ -54,6 +55,12 @@ for role in roles/bigquery.dataViewer roles/bigquery.jobUser roles/datastore.use
   gcloud projects add-iam-policy-binding "$GOOGLE_PROJECT_ID" --member "serviceAccount:$SA" \
     --role "$role" --condition None "${P[@]}" >/dev/null
 done
+
+# Google Sheets (affiliate and CRM spends) wants its own OAuth scope, which the
+# service account's default token does not carry: the service account asks for
+# a short-lived Sheets-scoped token for itself, which needs this one binding.
+gcloud iam service-accounts add-iam-policy-binding "$SA" --member "serviceAccount:$SA" \
+  --role roles/iam.serviceAccountTokenCreator "${P[@]}" >/dev/null
 
 echo "==> [3/9] Snapshot bucket gs://${BUCKET}"
 gcloud storage buckets describe "gs://${BUCKET}" "${P[@]}" >/dev/null 2>&1 \
@@ -91,6 +98,11 @@ gcloud builds submit "$DIR" --tag "$IMAGE" "${P[@]}"
 
 ENV_VARS="SNAPSHOT_BUCKET=${BUCKET},GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}"
 [[ -n "${ALERT_WEBHOOK_URL:-}" ]] && ENV_VARS="${ENV_VARS},ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL}"
+ENV_VARS="${ENV_VARS},RUNTIME_SA_EMAIL=${SA}"
+# Spend sheets: share each with ${SA} as Viewer, then put its id in deploy.env
+for v in SPEND_SHEET_AFFILIATE SPEND_SHEET_CRM_FLOW SPEND_SHEET_CRM_BROADCAST; do
+  [[ -n "${!v:-}" ]] && ENV_VARS="${ENV_VARS},${v}=${!v}"
+done
 
 echo "==> [7/9] Cloud Run service ${SERVICE}"
 # Public endpoint on purpose: the app itself enforces Google sign-in and the
