@@ -132,3 +132,23 @@ def test_presets_include_black_friday_and_recent_sale_runs():
     bf = next(p for p in out if p[0] == "bf")
     assert bf[1] == "2025-11-28"  # Black Friday 2025
     assert any(i.startswith("sale:") for i in ids)
+
+
+@node
+def test_each_block_names_the_sale_it_is_compared_with_to_the_hour():
+    old = [f"2026-09-{d:02d}" for d in range(20, 24)]
+    now = [f"2026-10-{d:02d}" for d in range(10, 15)]
+    page = days_page(sale=old + now)
+    page["events"] = [
+        {"start": "2026-09-19T21:00", "end": "2026-09-23T24:00"},
+        {"start": "2026-10-09T19:00", "end": "2026-10-14T24:00"},
+    ]
+    out = run(
+        page,
+        "const c=E.compare('2026-10-09','2026-10-15',{mode:'match'});"
+        "const g=c.groups.find(x=>x.phase==='sale');"
+        "return {cur:g.curEvents,prev:g.prevEvents,days:g.prev};",
+    )
+    assert [e["start"] for e in out["cur"]] == ["2026-10-09T19:00"]
+    assert [e["start"] for e in out["prev"]] == ["2026-09-19T21:00"]
+    assert out["days"] == old

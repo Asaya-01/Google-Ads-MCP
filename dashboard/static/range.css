@@ -55,3 +55,8 @@
   .rg-cals { grid-template-columns: 1fr; margin-top: 0; }
   .rg-cals .rg-month:nth-child(2) { display: none; }
 }
+
+.rg-with { display: grid; gap: 4px; font-size: 13px; color: var(--ink); margin-top: 2px; }
+.rg-with > strong { font-size: 12px; color: var(--ink-2); text-transform: uppercase; letter-spacing: .05em; }
+.rg-pair { display: grid; gap: 6px; font-size: 13px; margin: 2px 0 12px; }
+.rg-pair .rg-k { display: inline-block; min-width: 132px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }

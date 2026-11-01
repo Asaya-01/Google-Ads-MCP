@@ -55,6 +55,35 @@ const rgRangeLabel = () => {
   return p ? p.label : rgSpan(RG.from, RG.to);
 };
 
+
+// "23–26 Oct, 28 Oct": consecutive days folded into ranges, so a list of dates stays short and exact
+function rgListDays(list) {
+  if (!list || !list.length) return "";
+  const e = RG.eng, runs = [];
+  for (const d of list) {
+    const last = runs[runs.length - 1];
+    if (last && e.diffDays(last[1], d) === 1) last[1] = d; else runs.push([d, d]);
+  }
+  const mon = (s) => new Date(s + "T00:00:00Z").toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
+  const num = (s) => +s.slice(8, 10);
+  return runs.map(([a, b]) => (a === b ? rgFmtDay(a) : a.slice(0, 7) === b.slice(0, 7) ? `${num(a)}–${num(b)} ${mon(a)}` : `${rgFmtDay(a)} – ${rgFmtDay(b)}`)).join(", ");
+}
+const rgHour = (h) => (h === 0 || h === 24 ? "midnight" : `${h % 12 || 12} ${h < 12 ? "am" : "pm"}`);
+// a sale to the hour: "13 Oct, 6 pm → 16 Oct, 6 pm"
+function rgEventLabel(ev) {
+  const part = (iso) => `${rgFmtDay(iso.slice(0, 10))}, ${rgHour(+iso.slice(11, 13))}`;
+  return `${part(ev.start)} → ${part(ev.end)}`;
+}
+// the days a block is compared with, spelled out: "Sale 13 Oct, 6 pm → 16 Oct, 6 pm (sale days 14–15 Oct)"
+function rgVsText(g, who) {
+  const word = g.phase === "sale" ? "sale" : "BAU";
+  const days = (list) => `${list.length} ${word} day${list.length === 1 ? "" : "s"}: ${rgListDays(list)}`;
+  const evs = who === "cur" ? g.curEvents : g.prevEvents;
+  const list = who === "cur" ? g.cur : g.prev;
+  if (!list || !list.length) return "";
+  return (evs && evs.length ? `${evs.map(rgEventLabel).join(" and ")} (${days(list)})` : days(list));
+}
+
 // ---------------------------------------------------------------- the bar
 function rgBar() {
   const e = RG.eng, c = e.compare(RG.from, RG.to, RG.cmp);
@@ -67,6 +96,7 @@ function rgBar() {
         <span class="rg-vs">compared to</span>
         <button type="button" class="rg-chip alt" id="rg-open-cmp" aria-haspopup="dialog" aria-expanded="${RG.pop === "cmp"}"><span aria-hidden="true">⇄</span> ${esc(rgCmpLabel())} <span aria-hidden="true" class="rg-caret">▾</span></button>
       </div>
+      ${RG.cmp.mode === "none" ? "" : `<div class="rg-with"><strong>Compared with</strong>${c.groups.map((g) => `<div>${phaseChip(g.phase)} ${g.prev && g.prev.length ? esc(rgVsText(g, "prev")) : '<span class="na">nothing to compare with in that period</span>'}</div>`).join("")}</div>`}
       <div class="rg-sum"><strong>${esc(rgSpan(RG.from, RG.to))}</strong> · ${n} day${n === 1 ? "" : "s"}${mix ? ` (${esc(mix)})` : ""}${RG.cmp.mode === "none" ? "" : ` · sale days are compared with sale days, BAU with BAU`}</div>
       ${RG.pop ? rgPopover() : ""}
     </div></section>`;
@@ -98,7 +128,14 @@ function rgPopover() {
       return `${sep}<button type="button" class="rg-pre ${on ? "on" : ""}" data-pre="${esc(p.id)}">${esc(p.label)}</button>`;
     }).join("") + '<hr><button type="button" class="rg-pre ' + (RG.draft.custom ? "on" : "") + '" data-pre="custom">Custom range</button>';
   } else {
-    left = RG_CMP.map(([k, l, hint]) => `<button type="button" class="rg-pre ${d.mode === k ? "on" : ""}" data-cmp="${k}" title="${esc(hint)}">${esc(l)}${hint ? `<small>${esc(hint)}</small>` : ""}</button>`).join("");
+    left = RG_CMP.map(([k, l, hint]) => {
+      let shown = hint;
+      if (k !== "none" && !(k === "custom" && !(d.from && d.to))) {
+        const c = e.compare(RG.from, RG.to, k === "custom" ? { mode: k, from: d.from <= d.to ? d.from : d.to, to: d.from <= d.to ? d.to : d.from } : { mode: k });
+        shown = c.groups.map((g) => `${g.phase === "sale" ? "Sale" : "BAU"}: ${g.prev && g.prev.length ? (g.prevEvents && g.prevEvents.length ? g.prevEvents.map(rgEventLabel).join(" and ") : rgListDays(g.prev)) : "none"}`).join(" · ") || hint;
+      }
+      return `<button type="button" class="rg-pre ${d.mode === k ? "on" : ""}" data-cmp="${k}" title="${esc(hint)}">${esc(l)}${shown ? `<small>${esc(shown)}</small>` : ""}</button>`;
+    }).join("");
   }
   const showCal = kind === "main" || d.mode === "custom";
   const [vy, vm] = RG.view;
@@ -225,8 +262,11 @@ function rgGroupHtml(g, mixed, tiles, title) {
   const nm = g.phase === "sale" ? "Sale days" : "BAU days";
   const cmpTxt = g.prevSpan ? `${rgSpan(g.prevSpan[0], g.prevSpan[1])}${g.pw.days !== g.prev.length ? "" : ""}` : "";
   return `<section class="card">
-    <div class="section-head"><h2>${phaseChip(g.phase)} ${nm}</h2>
-      <span class="sub">${g.w.days} day${g.w.days === 1 ? "" : "s"}${g.curSpan ? ` · ${esc(rgSpan(g.curSpan[0], g.curSpan[1]))}` : ""}${g.pw ? ` vs ${g.pw.days} day${g.pw.days === 1 ? "" : "s"} · ${esc(cmpTxt)}` : ""}</span></div>
+    <div class="section-head"><h2>${phaseChip(g.phase)} ${nm}</h2></div>
+    <div class="rg-pair">
+      <div><span class="rg-k">This period</span>${esc(rgVsText(g, "cur"))}</div>
+      ${g.pw ? `<div><span class="rg-k">Compared with</span>${esc(rgVsText(g, "prev"))}</div>` : ""}
+    </div>
     ${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}
     <div class="tiles">${tiles.map(([k, l, u]) => rgTile(k, l, u, g)).join("")}</div>
     ${g.pw && g.pw.days !== g.w.days ? `<p class="legend-note">Changes compare per-day averages, because the two periods are not the same length.</p>` : ""}

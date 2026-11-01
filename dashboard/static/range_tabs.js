@@ -119,7 +119,7 @@ R.marketing = (p) => {
           <section class="card"><div class="section-head"><h2>Ad spend per day</h2>${legend([["--series-1", "Meta"], ["--series-2", "Google"]])}</div><div class="chart-box"><canvas id="c-rg-spend" aria-label="Meta and Google spend per day"></canvas></div></section>
           <section class="card"><div class="section-head"><h2>MER per day</h2><span class="sub">GMV / (Meta + Google spend)</span></div><div class="chart-box"><canvas id="c-rg-mer" aria-label="MER per day"></canvas></div></section>
         </div>
-        <section class="card"><div class="section-head"><h2>Meta campaigns</h2>${ctl}<span class="sub">${esc(g.phase === "sale" ? "sale days" : "BAU days")} in the range${g.pw ? ", against the same kind of days in the comparison" : ""}</span></div>
+        <section class="card"><div class="section-head"><h2>Meta campaigns</h2>${ctl}<span class="sub">${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>
           ${metaNA ? `<p class="na">Data unavailable: ${esc(metaNA)}</p>` : rgCampaignTable(cd.meta, g, "meta")}</section>
         <section class="card"><div class="section-head"><h2>Google campaigns</h2><span class="sub">campaigns with spend</span></div>
           ${rgCampaignTable(cd.google, g, "google")}</section>` + tail;
@@ -219,7 +219,7 @@ R.products = (p) => {
       const [prodTbl, catTbl, n] = rgProductTables(pd, g);
       const all = new Set(c.all);
       host.innerHTML = `
-        <section class="card"><div class="section-head"><h2>Products</h2>${ctl}<span class="sub">${n} products · ${esc(g.phase === "sale" ? "sale days" : "BAU days")}${g.curSpan ? ` ${esc(rgSpan(g.curSpan[0], g.curSpan[1]))}` : ""}${g.pw ? ` vs ${g.pw.days} ${g.phase === "sale" ? "sale" : "BAU"} day${g.pw.days === 1 ? "" : "s"}` : ""}, excluded product types left out</span></div>
+        <section class="card"><div class="section-head"><h2>Products</h2>${ctl}<span class="sub">${n} products · ${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""} · excluded product types left out</span></div>
           ${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}${prodTbl}</section>
         <section class="card"><div class="section-head"><h2>Categories</h2></div>${catTbl}</section>
         <section class="card"><div class="section-head"><h2>Excluded product types</h2><span class="sub">${esc(rgSpan(RG.from, RG.to))}, all days</span></div>${rgExcluded(pd, all)}</section>` + tail;
@@ -282,7 +282,7 @@ R.d1 = (p) => {
     const e = RG.eng, c2 = e.compare(RG.from, RG.to, RG.cmp);
     const host = document.getElementById("rg-body");
     const funnels = c2.groups.length
-      ? c2.groups.map((g) => `<section class="card"><div class="section-head"><h2>Funnel ${phaseChip(g.phase)}</h2><span class="sub">${esc(span(g.prevSpan))} vs ${esc(span(g.curSpan))}</span></div>${statusStrip()}${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}${funnel(g)}</section>`).join("")
+      ? c2.groups.map((g) => `<section class="card"><div class="section-head"><h2>Funnel ${phaseChip(g.phase)}</h2><span class="sub">${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${statusStrip()}${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}${funnel(g)}</section>`).join("")
       : `<section class="card"><p class="na">Data unavailable: there are no days in the data for ${esc(rgSpan(RG.from, RG.to))}.</p></section>`;
     host.innerHTML = funnels + tail;
     host.querySelectorAll("[data-drill]").forEach((b) => b.addEventListener("click", () => {

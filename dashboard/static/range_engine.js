@@ -135,6 +135,9 @@
       return rangeOf(ca, cb).filter((d) => phaseOf(d) === phase);
     }
 
+    const EV = (D.events || []).map((e) => ({ ...e, a: e.start.slice(0, 10), b: e.end.slice(0, 10) }));
+    const eventsFor = (list) => (list && list.length ? EV.filter((e) => list.some((d) => d >= e.a && d <= e.b)) : []);
+
     function span(list) {
       return list && list.length ? [list[0], list[list.length - 1]] : null;
     }
@@ -158,7 +161,7 @@
         } else if (pw && cmp.mode !== "match" && pw.days < Math.max(1, Math.round(w.days / 2))) {
           note = `Only ${pw.days} ${phase === "sale" ? "sale" : "BAU"} day${pw.days === 1 ? "" : "s"} in the comparison period against ${w.days}; changes use per-day averages.`;
         }
-        groups.push({ phase, cur, prev: prevDays, w, pw, note, curSpan: span(cur), prevSpan: span(prevDays), change: (k) => change(w, pw, k) });
+        groups.push({ phase, cur, prev: prevDays, w, pw, note, curSpan: span(cur), prevSpan: span(prevDays), curEvents: phase === "sale" ? eventsFor(cur) : [], prevEvents: phase === "sale" ? eventsFor(prevDays) : [], change: (k) => change(w, pw, k) });
       }
       const outside = rangeOf(a, b).length - all.length;
       // days when a sale went live or ended: neither BAU nor sale, so they sit out of both
