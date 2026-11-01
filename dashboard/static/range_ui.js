@@ -250,8 +250,29 @@ document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && RG.pop
 document.addEventListener("click", (ev) => { if (RG.pop && !ev.target.closest("#rg-bar")) rgClose(); });
 
 // ---------------------------------------------------------------- overview
+// a ratio over only the days that have every input: the spend sheets are filled in
+// a day or two late, so the newest days are missing. Never for counts or totals.
+function rgPartial(k, list) {
+  const need = RG_DEP[k];
+  if (!need || !list || !list.length) return null;
+  const e = RG.eng, ok = list.filter((d) => e.hasAll(d, need));
+  if (!ok.length || ok.length === list.length) return null;
+  const w = e.windowOf(ok), v = w[k];
+  return v == null ? null : { v, ok: ok.length, of: list.length, missing: list.filter((d) => !ok.includes(d)) };
+}
 function rgTile(k, label, unit, g) {
   const w = g.w, pw = g.pw, v = w[k], na = rgNa(w, k);
+  if ((v === null || v === undefined) && RG_RATES.includes(k)) {
+    const part = rgPartial(k, g.cur);
+    if (part) {
+      const pp = pw && pw[k] == null ? rgPartial(k, g.prev) : null;
+      const prior = pw ? (pw[k] != null ? pw[k] : pp ? pp.v : null) : null;
+      const ch = prior ? part.v / prior - 1 : null;
+      return `<div class="tile"><div class="label">${esc(label)}</div><div class="value">${esc(fmt(part.v, unit, true))}</div>
+        <div class="foot">${pw ? `${deltaHtml(ch, k)}<span>vs ${esc(prior == null ? "n/a" : fmt(prior, unit, true))}</span>` : ""}</div>
+        <div class="foot sub" title="${esc(rgNa(w, k) || "")}">${part.ok} of ${part.of} days · ${esc(rgListDays(part.missing))} not entered yet</div></div>`;
+    }
+  }
   if (v === null || v === undefined) return `<div class="tile"><div class="label">${esc(label)}</div><div class="na">Data unavailable: ${esc(na || "not available")}</div></div>`;
   const ch = g.change(k);
   const count = !RG_RATES.includes(k);

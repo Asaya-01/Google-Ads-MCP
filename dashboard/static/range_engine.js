@@ -143,6 +143,9 @@
     const EV = (D.events || []).map((e) => ({ ...e, a: e.start.slice(0, 10), b: e.end.slice(0, 10) }));
     const eventsFor = (list) => (list && list.length ? EV.filter((e) => list.some((d) => d >= e.a && d <= e.b)) : []);
 
+    // true when every one of these fields has a value on that day
+    const hasAll = (d, fields) => at.has(d) && fields.every((f) => D.values[f] && D.values[f][at.get(d)] != null);
+
     function span(list) {
       return list && list.length ? [list[0], list[list.length - 1]] : null;
     }
@@ -165,6 +168,12 @@
             : "There are no BAU days in the comparison period.";
         } else if (pw && cmp.mode !== "match" && pw.days < Math.max(1, Math.round(w.days / 2))) {
           note = `Only ${pw.days} ${phase === "sale" ? "sale" : "BAU"} day${pw.days === 1 ? "" : "s"} in the comparison period against ${w.days}; changes use per-day averages.`;
+        }
+        if (phase === "sale" && pw && !note) {
+          const mine = new Set(eventsFor(cur).map((e) => e.start)), theirs = eventsFor(prevDays);
+          if (mine.size && theirs.length && theirs.every((e) => mine.has(e.start))) {
+            note = "Both periods are inside the same sale, so this compares later days of that sale with earlier days of it, not two different sales. Choose “Last matching period” to compare with the previous sale.";
+          }
         }
         groups.push({ phase, cur, prev: prevDays, w, pw, note, curSpan: span(cur), prevSpan: span(prevDays), curEvents: phase === "sale" ? eventsFor(cur) : [], prevEvents: phase === "sale" ? eventsFor(prevDays) : [], change: (k) => change(w, pw, k) });
       }
@@ -210,7 +219,7 @@
 
     return {
       first, last, N, dates, FIELDS,
-      phaseOf, noteOf, windowOf, change, compare, presets, derive, inData,
+      phaseOf, noteOf, hasAll, windowOf, change, compare, presets, derive, inData,
       addDays, diffDays, rangeOf, shiftMonths, monthStart, daysInMonth, iso, toMs, runsOf,
     };
   }

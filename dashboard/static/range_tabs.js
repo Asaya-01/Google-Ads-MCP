@@ -22,11 +22,18 @@ function rgChannelTable(g) {
   const w = g.w, pw = g.pw;
   const all = w.all_spend, nums = (k, who) => (who ? who[k] : null);
   const share = (v) => (v == null || all == null || all === 0 ? null : v / all);
-  const rows = RG_CHANNELS.map(([label, sk, rk, roas, what]) => ({
-    label, what, spend: w[sk], share: share(w[sk]), rev: w[rk], roas: w[roas], prevRoas: nums(roas, pw),
-    dSpend: pw && w[sk] != null && pw[sk] != null ? rgAvgChange(w[sk], w.days, pw[sk], pw.days) : null,
-    dRoas: pw ? g.change(roas) : null, na: w.na[sk] || w.na[rk] || null,
-  }));
+  const rows = RG_CHANNELS.map(([label, sk, rk, roas, what]) => {
+    // a channel whose newest days are not in its sheet yet still gets its ROAS, over the days that are
+    const part = w[roas] == null ? rgPartial(roas, g.cur) : null;
+    const pprev = pw && pw[roas] == null ? rgPartial(roas, g.prev) : null;
+    const rv = part ? part.v : w[roas], pv = pw ? (pw[roas] != null ? pw[roas] : pprev ? pprev.v : null) : null;
+    return {
+      label, what, spend: w[sk], share: share(w[sk]), rev: w[rk], roas: rv, prevRoas: pv,
+      partial: part ? `${part.ok} of ${part.of} days` : null,
+      dSpend: pw && w[sk] != null && pw[sk] != null ? rgAvgChange(w[sk], w.days, pw[sk], pw.days) : null,
+      dRoas: pw && rv != null && pv ? rv / pv - 1 : null, na: w.na[sk] || w.na[rk] || null,
+    };
+  });
   const cell = (v, unit, na) => (v == null ? `<span class="cell-na" title="Data unavailable: ${esc(na || "not available")}">n/a</span>` : esc(fmt(v, unit)));
   const cols = [
     { label: "Channel", text: true, render: (r) => `${esc(r.label)}<br><span class="sub">${esc(r.what)}</span>` },
@@ -34,10 +41,13 @@ function rgChannelTable(g) {
     { label: "Δ spend", render: (r) => (pw ? deltaHtml(r.dSpend, "spend") : '<span class="flat">–</span>') },
     { label: "Share of all spend", render: (r) => (r.share == null ? '<span class="na">–</span>' : esc((r.share * 100).toFixed(1) + "%")) },
     { label: "Channel revenue", render: (r) => cell(r.rev, "inr", r.na) },
-    { label: "Channel ROAS", render: (r) => cell(r.roas, "x", r.na) + (r.prevRoas == null ? "" : `<br><span class="sub">vs ${esc(fmt(r.prevRoas, "x"))}</span>`) },
+    { label: "Channel ROAS", render: (r) => cell(r.roas, "x", r.na) + (r.partial ? `<br><span class="sub">${esc(r.partial)}</span>` : "") + (r.prevRoas == null ? "" : `<br><span class="sub">vs ${esc(fmt(r.prevRoas, "x"))}</span>`) },
     { label: "Δ ROAS", render: (r) => (pw ? deltaHtml(r.dRoas, "roas") : '<span class="flat">–</span>') },
   ];
-  const total = { label: "All channels", what: "GMV from Shopify, all spend", spend: all, share: all == null ? null : 1, rev: w.gmv, roas: w.overall_roas, prevRoas: pw ? pw.overall_roas : null, dSpend: pw && all != null && pw.all_spend != null ? rgAvgChange(all, w.days, pw.all_spend, pw.days) : null, dRoas: pw ? g.change("overall_roas") : null, na: w.na.all_spend || w.na.gmv, _class: "total" };
+  const op = w.overall_roas == null ? rgPartial("overall_roas", g.cur) : null;
+  const opp = pw && pw.overall_roas == null ? rgPartial("overall_roas", g.prev) : null;
+  const orv = op ? op.v : w.overall_roas, opv = pw ? (pw.overall_roas != null ? pw.overall_roas : opp ? opp.v : null) : null;
+  const total = { label: "All channels", what: "GMV from Shopify, all spend", spend: all, share: all == null ? null : 1, rev: w.gmv, roas: orv, prevRoas: opv, partial: op ? `${op.ok} of ${op.of} days` : null, dSpend: pw && all != null && pw.all_spend != null ? rgAvgChange(all, w.days, pw.all_spend, pw.days) : null, dRoas: pw && orv != null && opv ? orv / opv - 1 : null, na: w.na.all_spend || w.na.gmv, _class: "total" };
   return table(cols, [...rows, total]);
 }
 RG_NEUTRAL.add("meta_spend"); RG_NEUTRAL.add("google_spend");

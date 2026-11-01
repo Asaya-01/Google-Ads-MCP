@@ -152,3 +152,28 @@ def test_each_block_names_the_sale_it_is_compared_with_to_the_hour():
     assert [e["start"] for e in out["cur"]] == ["2026-10-09T19:00"]
     assert [e["start"] for e in out["prev"]] == ["2026-09-19T21:00"]
     assert out["days"] == old
+
+
+@node
+def test_has_all_tells_which_days_have_every_input():
+    page = days_page()
+    page["values"]["gmv"][3] = None
+    out = run(
+        page,
+        "return [E.hasAll(E.dates[2],['gmv','orders']),"
+        "E.hasAll(E.dates[3],['gmv','orders']),E.hasAll('1999-01-01',['gmv'])];",
+    )
+    assert out == [True, False, False]
+
+
+@node
+def test_two_periods_inside_one_sale_are_called_out():
+    sale = [f"2026-10-{d:02d}" for d in range(10, 20)]
+    page = days_page(sale=sale)
+    page["events"] = [{"start": "2026-10-10T19:00", "end": "2026-10-19T24:00"}]
+    out = run(
+        page,
+        "const c=E.compare('2026-10-16','2026-10-18',{mode:'custom',from:'2026-10-12',to:'2026-10-14'});"
+        "return c.groups.map(g=>g.note);",
+    )
+    assert any(n and "same sale" in n for n in out)
