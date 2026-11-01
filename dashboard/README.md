@@ -144,6 +144,24 @@ falls back to BigQuery in the meantime.
   3 hours), and a failed Cloud Run execution (a Cloud Monitoring policy, created
   best-effort by `deploy.sh`).
 
+## Sale and BAU days
+
+Sales are found from the hour-by-hour order counts (`orders_hourly.sql`), not
+from daily totals, the way a person reads them: a sale goes live at some hour
+(usually 6 to 9 pm) and orders jump to several times their normal level for that
+hour, then fall back when it ends. `rules.detect_sales_hourly` builds the usual
+shape of a day, scales it to the BAU level around each date (a second pass that
+ignores sale days, so a long sale cannot lift its own yardstick), and calls a
+sale from the hour the 3-hour average passes `on_ratio` until it stays under
+`off_ratio`. Bumps shorter than `min_hours` (a one-day push) are not sales.
+A day is **sale** when at least 85% of its orders came while a sale was live,
+**BAU** when at most 10%, and **transition** in between (the sale went live or
+ended that day, with the hour shown); transition days sit out of both sides of
+every comparison. The Today tab reads today's last three hours the same way, so
+it notices a sale going live. Sessions are not used: they move with ad spend and
+did not step up at launch. A date can still be forced in `phases.overrides`
+(empty by default). Without enough hourly history the older daily rule is used.
+
 ## Date ranges
 
 Overview, Daily, Marketing, Products and D-1 share one date picker and one

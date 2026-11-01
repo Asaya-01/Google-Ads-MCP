@@ -99,6 +99,8 @@ def collect(
     }
     fb = cfg["freebies"]
     data["orders_daily"] = bq.run("orders_daily", **orders)
+    # hour-by-hour orders: sales are found from these (when one went live)
+    data["orders_hourly"] = bq.run("orders_hourly", **orders)
     data["order_attribution"] = bq.run("order_attribution", **orders)
     data["products"] = bq.run(
         "product_daily",

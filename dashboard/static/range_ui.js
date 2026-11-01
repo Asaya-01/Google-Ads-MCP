@@ -59,7 +59,7 @@ const rgRangeLabel = () => {
 function rgBar() {
   const e = RG.eng, c = e.compare(RG.from, RG.to, RG.cmp);
   const n = e.diffDays(RG.from, RG.to) + 1;
-  const mix = c.groups.map((g) => `${g.cur.length} ${g.phase === "sale" ? "sale" : "BAU"}`).join(" · ");
+  const mix = [...c.groups.map((g) => `${g.cur.length} ${g.phase === "sale" ? "sale" : "BAU"}`), ...(c.mixed.length ? [`${c.mixed.length} transition`] : [])].join(" · ");
   return `<section class="card rg-barcard" id="rg-bar">
     <div class="rg-wrap">
       <div class="rg-chips">
@@ -81,8 +81,8 @@ function rgCal(y, m) { // m: 0-11
     const s = `${y}-${String(m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const off = s < e.first || s > e.last;
     const ph = off ? "" : e.phaseOf(s);
-    const cls = ["rg-day", s === lo || s === hi ? "edge" : "", lo && hi && s > lo && s < hi ? "mid" : "", off ? "off" : "", ph === "sale" ? "sale" : ""].join(" ");
-    cells += `<button type="button" class="${cls}" data-day="${s}" ${off ? "disabled" : ""} aria-label="${esc(rgFmtDay(s, true))}${ph === "sale" ? ", sale day" : ""}">${day}</button>`;
+    const cls = ["rg-day", s === lo || s === hi ? "edge" : "", lo && hi && s > lo && s < hi ? "mid" : "", off ? "off" : "", ph === "sale" ? "sale" : ph === "mixed" ? "mixed" : ""].join(" ");
+    cells += `<button type="button" class="${cls}" data-day="${s}" ${off ? "disabled" : ""} aria-label="${esc(rgFmtDay(s, true))}${ph === "sale" ? ", sale day" : ph === "mixed" ? ", " + esc(e.noteOf(s) || "sale going live or ending") : ""}" title="${ph === "mixed" ? esc(e.noteOf(s) || "") : ""}">${day}</button>`;
   }
   return `<div class="rg-month"><div class="rg-mname">${rgMonthName(y, m)}</div><div class="rg-dow">${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((x) => `<span>${x}</span>`).join("")}</div><div class="rg-grid">${cells}</div></div>`;
 }
@@ -108,7 +108,7 @@ function rgPopover() {
       <div class="rg-inputs"><input type="date" id="rg-in-from" value="${d.from || ""}" min="${e.first}" max="${e.last}" aria-label="Start date"><span aria-hidden="true">→</span><input type="date" id="rg-in-to" value="${d.to || ""}" min="${e.first}" max="${e.last}" aria-label="End date"></div>
       <div class="rg-nav"><button type="button" id="rg-prev" aria-label="Earlier months">‹</button><button type="button" id="rg-next" aria-label="Later months">›</button></div>
       <div class="rg-cals">${rgCal(vy, vm)}${rgCal(ny, nm)}</div>
-      <p class="rg-hint"><i class="rg-dot"></i> sale day · data runs ${esc(rgFmtDay(e.first, true))} to ${esc(rgFmtDay(e.last, true))}</p>`
+      <p class="rg-hint"><i class="rg-dot"></i> sale day · <i class="rg-dot half"></i> sale went live or ended that day · data runs ${esc(rgFmtDay(e.first, true))} to ${esc(rgFmtDay(e.last, true))}</p>`
     : `<p class="rg-hint pad">${kind === "cmp" && d.mode === "none" ? "Numbers will be shown without a comparison." : "Sale days are only compared with sale days, and BAU days with BAU days, whichever way you compare."}</p>`;
   return `<div class="rg-pop" role="dialog" aria-label="${kind === "main" ? "Choose dates" : "Choose comparison"}">
       <div class="rg-left">${left}</div>
@@ -237,7 +237,7 @@ function rgCharts(c) {
   if (!days.length) return "";
   const withCmp = RG.cmp.mode !== "none" && RG.cmp.mode !== "match";
   return `<div class="grid-2">
-    <section class="card"><div class="section-head"><h2>GMV per day</h2>${legend([["--series-1", "BAU day"], ["--series-2", "Sale day"]])}</div><div class="chart-box"><canvas id="c-rg-gmv" aria-label="GMV per day in the selected range"></canvas></div>${withCmp ? '<p class="legend-note">The dashed line is the comparison period, day by day.</p>' : ""}</section>
+    <section class="card"><div class="section-head"><h2>GMV per day</h2>${legend([["--series-1", "BAU day"], ["--series-2", "Sale day"]])}</div><div class="chart-box"><canvas id="c-rg-gmv" aria-label="GMV per day in the selected range"></canvas></div><p class="legend-note">${withCmp ? "The dashed line is the comparison period, day by day. " : ""}A faded bar is a day a sale went live or ended.</p></section>
     <section class="card"><div class="section-head"><h2>Orders per day</h2>${legend([["--series-1", "BAU day"], ["--series-2", "Sale day"]])}</div><div class="chart-box"><canvas id="c-rg-orders" aria-label="Orders per day in the selected range"></canvas></div></section>
   </div>`;
 }
@@ -255,7 +255,7 @@ function rgDrawCharts() {
     const el = document.getElementById(canvasId);
     if (!el) return;
     const val = (d) => { const w = e.windowOf([d]); return w[key]; };
-    const datasets = [{ type: "bar", label, data: days.map(val), ...barStyle, backgroundColor: days.map((d) => (e.phaseOf(d) === "sale" ? css("--series-2") : css("--series-1"))) }];
+    const datasets = [{ type: "bar", label, data: days.map(val), ...barStyle, backgroundColor: days.map((d) => { const ph = e.phaseOf(d); return ph === "sale" ? css("--series-2") : ph === "mixed" ? css("--series-2") + "80" : css("--series-1"); }) }];
     if (cmpDays.length) datasets.push({ type: "line", label: "Comparison", data: days.map((_, i) => (cmpDays[i] && e.phaseOf(cmpDays[i]) ? val(cmpDays[i]) : null)), borderColor: css("--ink-2"), borderDash: [5, 4], borderWidth: 2, pointRadius: 0, tension: 0.2, spanGaps: false });
     baseChart(el, { type: "bar", data: { labels: days.map((d) => dayLabel(d)), datasets } }, unit);
   };
@@ -270,6 +270,7 @@ function rgBody() {
   if (!c.groups.length) {
     html = `<section class="card"><p class="na">Data unavailable: there are no days in the data for ${esc(rgSpan(RG.from, RG.to))}. The history runs ${esc(rgFmtDay(e.first, true))} to ${esc(rgFmtDay(e.last, true))}.</p></section>`;
   } else {
+    if (c.mixed.length) html += `<div class="banner">${c.mixed.length} transition day${c.mixed.length === 1 ? "" : "s"} (${c.mixed.slice(0, 6).map((d) => `${esc(rgFmtDay(d))}: ${esc(e.noteOf(d) || "sale going live or ending")}`).join("; ")}${c.mixed.length > 6 ? "; …" : ""}) are left out of both blocks, because part of the day was a sale and part was not. They are in the whole-range figures.</div>`;
     if (c.outside) html += `<div class="banner">${c.outside} day${c.outside === 1 ? "" : "s"} of this range fall outside the data (${esc(rgFmtDay(e.first, true))} to ${esc(rgFmtDay(e.last, true))}) and are left out.</div>`;
     html += c.groups.map((g) => rgGroupHtml(g, c.groups.length > 1)).join("");
     if (c.groups.length > 1) {
@@ -307,12 +308,12 @@ R.daily = (p) => {
     rgBind();
     const e = RG.eng, days = e.rangeOf(RG.from, RG.to).filter((d) => e.phaseOf(d)).reverse();
     const cols = p.columns.map((c) => (c.key === "date" ? { label: c.label, text: true, render: (r) => esc(dayLabel(r.date)) }
-      : c.key === "phase" ? { label: c.label, text: true, render: (r) => phaseChip(r.phase) } : c));
+      : c.key === "phase" ? { label: c.label, text: true, render: (r) => phaseChip(r.phase, r.note) } : c));
     const rows = days.map((d) => {
       const w = e.windowOf([d]);
       const na = {};
       for (const k of Object.keys(RG_DEP)) na[k] = rgNa(w, k);
-      return { ...w, date: d, phase: e.phaseOf(d), na: { ...w.na, ...Object.fromEntries(Object.entries(na).filter(([, v]) => v)) } };
+      return { ...w, date: d, phase: e.phaseOf(d), note: e.noteOf(d), na: { ...w.na, ...Object.fromEntries(Object.entries(na).filter(([, v]) => v)) } };
     });
     document.getElementById("rg-dsub").textContent = `${rows.length} day${rows.length === 1 ? "" : "s"}, newest first. Hover “n/a” for the reason.`;
     document.getElementById("rg-dtable").innerHTML = table(cols, rows, { maxHeight: "70vh" });

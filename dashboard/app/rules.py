@@ -210,6 +210,231 @@ def detect_phases(days: list[dict], cfg: dict) -> dict[str, dict]:
     return out
 
 
+def _quantile(values: list[float], q: float) -> float:
+    vals = sorted(values)
+    if not vals:
+        return 0.0
+    pos = q * (len(vals) - 1)
+    lo = int(pos)
+    hi = min(lo + 1, len(vals) - 1)
+    return vals[lo] + (vals[hi] - vals[lo]) * (pos - lo)
+
+
+def detect_sales_hourly(rows: list[dict], cfg: dict) -> dict:
+    """Find sales from the hour-by-hour order counts, the way a person would
+    read them: a sale goes live at some hour (often 6 to 8 pm) and orders jump
+    to several times their normal level for that hour, then fall back when it
+    ends.
+
+    rows: [{"date", "hour", "orders"}] for complete days, any order.
+
+    Normal = the usual shape of a day (a low quantile of each hour across all
+    days) scaled to the BAU level around that date. The level is found in two
+    passes: first from a low quantile of the surrounding weeks, which spots the
+    sales; then again from the days that are NOT in a sale, so a long sale
+    cannot lift its own yardstick and its quiet days before and after set the
+    bar. A sale starts when the 3-hour average passes `on_ratio` times normal
+    and ends when it stays under `off_ratio`; bumps shorter than `min_hours`
+    (a one-day push) are not sales.
+
+    Returns {"phases": {date: {...}}, "events": [{"start", "end", ...}]}.
+    A day is "sale" when at least `full_day_share` of its orders came while a
+    sale was live, "bau" when at most `bau_max_share`, and "mixed" (a
+    transition day: the sale went live or ended that day) in between.
+    """
+    h = cfg["hourly"]
+    grid: dict[str, list[float]] = {}
+    for r in rows:
+        grid.setdefault(str(r["date"])[:10], [0.0] * 24)[int(r["hour"])] += (
+            r.get("orders") or 0
+        )
+    if not grid:
+        return {"phases": {}, "events": []}
+    dates = date_range(to_date(min(grid)), to_date(max(grid)))
+    for d in dates:
+        grid.setdefault(d, [0.0] * 24)
+    totals = [sum(grid[d]) for d in dates]
+    n = len(dates) * 24
+    flat = [grid[d][k] for d in dates for k in range(24)]
+
+    shape = [
+        max(_quantile([grid[d][k] for d in dates], h["shape_quantile"]), 0.05)
+        for k in range(24)
+    ]
+    shape_sum = sum(shape)
+    shape = [x / shape_sum for x in shape]
+    half = h["level_window_days"]
+
+    def find(level: list[float]):
+        ratio = [
+            flat[i * 24 + k] / max(level[i] * shape[k], 0.5)
+            for i in range(len(dates))
+            for k in range(24)
+        ]
+        smooth = [
+            sum(ratio[max(0, t - 1) : t + 2])
+            / len(ratio[max(0, t - 1) : t + 2])
+            for t in range(n)
+        ]
+        runs: list[list[int]] = []
+        t = 0
+        while t < n:
+            if smooth[t] >= h["on_ratio"] and ratio[t] >= h["on_ratio"] * 0.8:
+                a, last, under, u = t, t, 0, t
+                while u < n:
+                    if smooth[u] >= h["off_ratio"]:
+                        last, under = u, 0
+                    else:
+                        under += 1
+                        if under >= 3:
+                            break
+                    u += 1
+                last += (
+                    1  # exclusive end, then trim hours already back to normal
+                )
+                while last - 1 > a and ratio[last - 1] < h["off_ratio"]:
+                    last -= 1
+                last -= 1
+                back = 0  # the ramp: step back over hours already climbing
+                while a > 0 and back < 3 and ratio[a - 1] >= h["off_ratio"]:
+                    a -= 1
+                    back += 1
+                runs.append([a, last + 1])
+                t = last + 1
+            else:
+                t += 1
+        merged: list[list[int]] = []
+        for a, b in runs:
+            if merged and a - merged[-1][1] < h["merge_gap_hours"]:
+                merged[-1][1] = b
+            else:
+                merged.append([a, b])
+        keep = [
+            [a, b]
+            for a, b in merged
+            if b - a >= h["min_hours"]
+            and sum(ratio[a:b]) / (b - a) >= h["min_mean_ratio"]
+        ]
+        return keep, ratio
+
+    # pass 1: the level from a low quantile of the surrounding weeks
+    level = [
+        max(
+            _quantile(
+                totals[max(0, i - half) : i + half + 1], h["level_quantile"]
+            ),
+            1.0,
+        )
+        for i in range(len(dates))
+    ]
+    events1, _ = find(level)
+    # pass 2: the level from the days outside any sale
+    in_sale = [False] * len(dates)
+    for a, b in events1:
+        for t in range(a, b):
+            in_sale[t // 24] = True
+    level2 = []
+    for i in range(len(dates)):
+        calm = [
+            totals[j]
+            for j in range(max(0, i - half), min(len(dates), i + half + 1))
+            if not in_sale[j]
+        ]
+        level2.append(
+            max(_quantile(calm, h["level_quantile"]), 1.0)
+            if len(calm) >= 7
+            else level[i]
+        )
+    spans, ratio = find(level2)
+    level = level2
+
+    live = [False] * n
+    events = []
+    for a, b in spans:
+        for t in range(a, b):
+            live[t] = True
+        end_day, end_hour = dates[(b - 1) // 24], (b - 1) % 24 + 1
+        events.append(
+            {
+                "start": f"{dates[a // 24]}T{a % 24:02d}:00",
+                "end": f"{end_day}T{end_hour:02d}:00",
+                "hours": b - a,
+                "uplift": round(sum(ratio[a:b]) / (b - a), 2),
+            }
+        )
+
+    overrides = cfg.get("overrides") or {}
+    phases: dict[str, dict] = {}
+    for i, d in enumerate(dates):
+        hrs = live[i * 24 : i * 24 + 24]
+        sale_hours = sum(hrs)
+        total = totals[i]
+        share = (
+            sum(grid[d][k] for k in range(24) if hrs[k]) / total
+            if total
+            else 0.0
+        )
+        day_ratio = total / level[i]
+        out = {
+            "sale_hours": sale_hours,
+            "sale_share": round(share, 3),
+            "gmv_ratio": day_ratio,
+            "spend_ratio": None,
+            "start_hour": None,
+            "end_hour": None,
+        }
+        if share >= h["full_day_share"]:
+            out.update(
+                phase="sale",
+                basis=f"sale live, orders {day_ratio:.1f}x a normal day",
+            )
+        elif share <= h["bau_max_share"]:
+            out.update(
+                phase="bau",
+                basis=f"no sale, orders {day_ratio:.1f}x a normal day",
+            )
+        else:
+            first = hrs.index(True)
+            lastk = 23 - hrs[::-1].index(True)
+            starts = first > 0 and not (i > 0 and live[i * 24 - 1])
+            ends = lastk < 23 and not (
+                i + 1 < len(dates) and live[(i + 1) * 24]
+            )
+            if starts and not ends:
+                out.update(
+                    start_hour=first,
+                    basis=f"sale went live at {_clock(first)}",
+                )
+            elif ends and not starts:
+                out.update(
+                    end_hour=lastk + 1,
+                    basis=f"sale ended at {_clock(lastk + 1)}",
+                )
+            else:
+                out.update(
+                    start_hour=first,
+                    end_hour=lastk + 1,
+                    basis=f"sale live {_clock(first)} to {_clock(lastk + 1)}",
+                )
+            out["phase"] = "mixed"
+        out["phase_eff"] = (
+            "sale" if out["phase"] == "sale" or share >= 0.5 else "bau"
+        )
+        if d in overrides:
+            out.update(
+                phase=overrides[d],
+                phase_eff=overrides[d],
+                basis="manual override",
+            )
+        phases[d] = out
+    return {"phases": phases, "events": events}
+
+
+def _clock(hour: int) -> str:
+    hour = hour % 24
+    return f"{hour % 12 or 12} {'am' if hour < 12 else 'pm'}"
+
+
 def _runs(
     dates: list[str], phases: dict[str, dict], phase: str
 ) -> list[list[str]]:

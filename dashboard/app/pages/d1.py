@@ -29,7 +29,7 @@ DRILL_COUNTS = ["sessions", "perf_sessions", "atc", "ic", "orders", "gmv"]
 
 
 def build(ctx: Context, commentary: dict | None = None) -> dict:
-    win = rules.d1_windows(ctx.d1, ctx.phases, ctx.cfg["d1"])
+    win = rules.d1_windows(ctx.d1, ctx.phases_eff, ctx.cfg["d1"])
     cur_dates, prior_dates = win["current"], win["prior"]
     per_day = len(cur_dates) != len(prior_dates)
     cur_total, prior_total = ctx.window(cur_dates), ctx.window(prior_dates)

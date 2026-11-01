@@ -99,17 +99,37 @@ class Context:
             data.get("order_attribution", [])
         )
         self.facts = self._build_facts()
-        self.phases = rules.detect_phases(
-            [
-                {"date": d, "gmv": f["gmv"], "meta_spend": f["meta_spend"]}
-                for d, f in self.facts.items()
-            ],
-            cfg["phases"],
-        )
+        self.sale_events: list[dict] = []
+        hourly = data.get("orders_hourly") or []
+        if len({str(r["date"])[:10] for r in hourly}) >= cfg["phases"][
+            "hourly"
+        ].get("min_days", 45):
+            # Sales found from the hour-by-hour orders: when each went live
+            # and ended, not just which days were busy.
+            found = rules.detect_sales_hourly(hourly, cfg["phases"])
+            self.phases = found["phases"]
+            self.sale_events = found["events"]
+            self.phase_source = "hourly"
+        else:
+            self.phases = rules.detect_phases(
+                [
+                    {"date": d, "gmv": f["gmv"], "meta_spend": f["meta_spend"]}
+                    for d, f in self.facts.items()
+                ],
+                cfg["phases"],
+            )
+            self.phase_source = "daily"
+        # A two-way label for code that needs one (D-1 windows, the pulse):
+        # a transition day counts as the side most of its orders were on.
+        self.phases_eff = {
+            d: {**p, "phase": p.get("phase_eff", p["phase"])}
+            for d, p in self.phases.items()
+        }
         for d, f in self.facts.items():
             p = self.phases.get(d)
             f["phase"] = p["phase"] if p else None
             f["phase_basis"] = p["basis"] if p else None
+            f["phase_eff"] = p.get("phase_eff", p["phase"]) if p else None
 
     # ------------------------------------------------------------ classify
 

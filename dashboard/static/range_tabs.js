@@ -234,7 +234,7 @@ R.d1 = (p) => {
   const F = [["sessions", "Sessions", "int"], ["perf_sessions", "Perf sessions", "int"], ["atc", "ATC", "int"], ["ic", "IC", "int"], ["orders", "Orders", "int"], ["gmv", "Revenue", "inr"], ["aov", "AOV", "inr"], ["atc_rate", "Sessions → ATC", "pct"], ["atc_to_ic", "ATC → IC", "pct"], ["cvr", "CVR", "pct"]];
   const e0 = () => RG.eng;
   const span = (s) => (s ? rgSpan(s[0], s[1]) : "no matching period");
-  const dayRows = (list) => list.map((d) => { const w = e0().windowOf([d]); const na = { ...w.na }; for (const k of Object.keys(RG_DEP)) { const x = rgNa(w, k); if (x) na[k] = x; } return { ...w, date: d, phase: e0().phaseOf(d), na }; });
+  const dayRows = (list) => list.map((d) => { const w = e0().windowOf([d]); const na = { ...w.na }; for (const k of Object.keys(RG_DEP)) { const x = rgNa(w, k); if (x) na[k] = x; } return { ...w, date: d, phase: e0().phaseOf(d), note: e0().noteOf(d), na }; });
   const totalRow = (w, label) => { const na = { ...w.na }; for (const k of Object.keys(RG_DEP)) { const x = rgNa(w, k); if (x) na[k] = x; } return { ...w, _label: label, _class: "total", na }; };
   const funnel = (g) => {
     const head = `<tr><th class="text" scope="col">Day</th>${F.map(([, l]) => `<th scope="col">${esc(l)}</th>`).join("")}</tr>`;
@@ -246,7 +246,7 @@ R.d1 = (p) => {
     if (g.pw) rows.push({ _label: "Δ vs comparison", _class: "delta", _delta: true });
     const body = rows.map((r) => {
       if (r._group) return `<tr class="group"><td colspan="${F.length + 1}">${esc(r._group)}</td></tr>`;
-      const first = r._label ? esc(r._label) : `${esc(dayLabel(r.date))} ${phaseChip(r.phase)}`;
+      const first = r._label ? esc(r._label) : `${esc(dayLabel(r.date))} ${phaseChip(r.phase, r.note)}`;
       return `<tr class="${r._class || ""}"><td class="text">${first}</td>${F.map(([k, , u]) => `<td>${r._delta ? deltaHtml(g.change(k), k) : cell(r[k], u, r.na?.[k])}</td>`).join("")}</tr>`;
     }).join("");
     return `<div class="table-wrap"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;

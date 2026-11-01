@@ -36,6 +36,12 @@ def build(ctx: Context) -> dict:
         "as_of": ctx.d1,
         "dates": dates,
         "phase": [ctx.facts[d].get("phase") for d in dates],
+        # why a day got its label; for a transition day, when the sale
+        # went live or ended
+        "phase_note": [ctx.facts[d].get("phase_basis") for d in dates],
+        "phase_eff": [ctx.facts[d].get("phase_eff") for d in dates],
+        "phase_source": ctx.phase_source,
+        "events": ctx.sale_events,
         "fields": COUNT_FIELDS,
         "values": values,
         "na": na,

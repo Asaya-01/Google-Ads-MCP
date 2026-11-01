@@ -28,6 +28,7 @@ KEYS = [
     "google_ads",
     "google_campaigns",
     "checks",
+    "orders_hourly",
     "sessions",
     "landing",
     "meta",

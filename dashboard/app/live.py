@@ -124,6 +124,37 @@ def pick_typical(
     return same_wd[: lcfg["typical_days"]], phase or "unknown", True
 
 
+def live_regime(
+    today_hours: list[float],
+    base: dict,
+    phases: dict[str, str],
+    now: dt.datetime,
+    cfg: dict,
+) -> tuple[float | None, str | None]:
+    """Read today's regime from the last three complete hours of orders against
+    the same hours on recent BAU days: a sale goes live in the evening, and
+    orders jump several times over at that moment. Returns (ratio, regime)
+    where regime is "sale", "bau" or None when it cannot tell."""
+    h = now.hour
+    if h < 3:
+        return None, None
+    lo = h - 3
+    bau = [d for d in base if phases.get(d) == "bau"]
+    if len(bau) < 3:
+        return None, None
+    ref = statistics.median(sum(base[d]["orders"][lo:h]) for d in bau)
+    recent = sum(today_hours[lo:h])
+    if ref < 5:
+        return None, None
+    ratio = recent / ref
+    on = cfg["hourly"]["on_ratio"]
+    if ratio >= on and recent >= 20:
+        return ratio, "sale"
+    if ratio <= cfg["hourly"]["off_ratio"] - 0.1:
+        return ratio, "bau"
+    return ratio, None
+
+
 def curve(hourly: list[float], upto: int | None) -> list[float | None]:
     """Running total at the end of each hour; None after hour `upto`."""
     out, run = [], 0.0
@@ -222,13 +253,37 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
     notes: list[str] = []
 
     phases = inp.get("phases") or {}
+    phases_eff = inp.get("phases_eff") or phases
     overrides = cfg.get("phases", {}).get("overrides") or {}
-    assumed = overrides.get(today) or phases.get(yesterday)
+    assumed = overrides.get(today) or (
+        phases_eff.get(yesterday) or phases.get(yesterday)
+    )
+    regime_note = None
+    if inp.get("today") is not None and today not in overrides:
+        lr, regime = live_regime(
+            inp["today"]["orders"], base, phases, now, cfg["phases"]
+        )
+        if regime == "sale" and assumed != "sale":
+            assumed = "sale"
+            regime_note = (
+                f"Orders over the last 3 hours are {lr:.1f}x a normal BAU "
+                "day at this time, so a sale looks to have gone live: today is "
+                "being compared with sale days."
+            )
+        elif regime == "bau" and assumed == "sale":
+            assumed = "bau"
+            regime_note = (
+                f"Orders over the last 3 hours are back to {lr:.1f}x normal, "
+                "so the sale looks to be over: today is being compared with "
+                "BAU days."
+            )
     typ_dates, typ_phase, mixed = pick_typical(
         now.date(), phases, assumed, list(base), lcfg
     )
     weekday = now.strftime("%A")
-    if assumed:
+    if regime_note:
+        notes.append(regime_note)
+    elif assumed:
         why = (
             "set in config.json" if today in overrides else "same as yesterday"
         )
@@ -668,11 +723,14 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
     inp: dict = {"unavailable": unavailable, "notes": notes, "base": {}}
 
     # phases from the Daily tab's last build, so sale days compare with sale
-    daily = store.get_json("pages/daily.json") or {}
+    days = store.get_json("pages/days.json") or {}
     inp["phases"] = {
-        r["date"]: r.get("phase")
-        for r in daily.get("rows", [])
-        if r.get("phase")
+        d: p for d, p in zip(days.get("dates", []), days.get("phase", [])) if p
+    }
+    inp["phases_eff"] = {
+        d: p
+        for d, p in zip(days.get("dates", []), days.get("phase_eff", []))
+        if p
     }
 
     shop = None

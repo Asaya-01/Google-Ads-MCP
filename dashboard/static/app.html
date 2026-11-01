@@ -79,6 +79,7 @@ section.card { background: var(--surface); border: 1px solid var(--line); border
 .phase { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 7px; border-radius: 4px; }
 .phase.sale { background: color-mix(in srgb, var(--series-2) 16%, transparent); color: var(--ink); }
 .phase.bau { background: color-mix(in srgb, var(--series-1) 12%, transparent); color: var(--ink-2); }
+.phase.mixed { background: linear-gradient(90deg, color-mix(in srgb, var(--series-1) 12%, transparent) 45%, color-mix(in srgb, var(--series-2) 16%, transparent) 55%); color: var(--ink); text-transform: none; letter-spacing: 0; }
 
 .pulse { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); }
 .pcard { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; display: grid; gap: 10px; align-content: start; min-width: 0; font-variant-numeric: tabular-nums; }
@@ -203,7 +204,9 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     return `<span class="cell-na" title="Data unavailable: ${esc(reason || "not available")}">n/a</span>`;
   }
   const dayLabel = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-  const phaseChip = (p) => p ? `<span class="phase ${p}">${p === "sale" ? "Sale" : "BAU"}</span>` : "";
+  const phaseChip = (p, note) => !p ? ""
+    : p === "mixed" ? `<span class="phase mixed" title="${esc(note || "A sale went live or ended on this day")}">${esc(note ? note.replace(/^sale /, "") : "Transition")}</span>`
+    : `<span class="phase ${p}" ${note ? `title="${esc(note)}"` : ""}>${p === "sale" ? "Sale" : "BAU"}</span>`;
 
   // ------------------------------------------------------------ charts
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();

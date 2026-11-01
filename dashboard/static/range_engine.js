@@ -44,6 +44,7 @@
     const at = new Map(dates.map((d, i) => [d, i]));
     const first = dates[0], last = dates[N - 1];
     const phaseOf = (d) => (at.has(d) ? D.phase[at.get(d)] || "bau" : null);
+    const noteOf = (d) => (at.has(d) && D.phase_note ? D.phase_note[at.get(d)] || null : null);
 
     function derive(w) {
       w.aov = ratio(w.gmv, w.orders);
@@ -160,7 +161,9 @@
         groups.push({ phase, cur, prev: prevDays, w, pw, note, curSpan: span(cur), prevSpan: span(prevDays), change: (k) => change(w, pw, k) });
       }
       const outside = rangeOf(a, b).length - all.length;
-      return { groups, all, outside, w: windowOf(all) };
+      // days when a sale went live or ended: neither BAU nor sale, so they sit out of both
+      const mixed = all.filter((d) => phaseOf(d) === "mixed");
+      return { groups, all, outside, mixed, w: windowOf(all) };
     }
 
     // ------------------------------------------------------------- presets
@@ -186,9 +189,12 @@
         if (cm >= first && cm <= L) { out.push({ id: "cm", label: "Cyber Monday", from: cm, to: cm, group: 3 }); }
         if (out.some((p) => p.id === "bf" || p.id === "cm")) break;
       }
-      for (const run of sales()) {
-        const a = run[0], b = run[run.length - 1];
-        const lab = (s) => new Date(s + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+      const lab = (s) => new Date(s + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+      // sales: from the hour-by-hour detection when there is one (a sale goes live
+      // in the evening, so it runs from that day to the day it ended)
+      const spans = (D.events && D.events.length ? D.events : []).slice(-4).reverse().map((e) => [e.start.slice(0, 10), e.end.slice(0, 10)]);
+      const runs = spans.length ? spans : sales().map((r) => [r[0], r[r.length - 1]]);
+      for (const [a, b] of runs) {
         out.push({ id: "sale:" + a, label: `Sale · ${a === b ? lab(a) : lab(a) + " – " + lab(b)}`, from: a, to: b, group: 4 });
       }
       return out.map((p) => ({ ...p, from: p.from < first ? first : p.from }));
@@ -196,7 +202,7 @@
 
     return {
       first, last, N, dates, FIELDS,
-      phaseOf, windowOf, change, compare, presets, derive, inData,
+      phaseOf, noteOf, windowOf, change, compare, presets, derive, inData,
       addDays, diffDays, rangeOf, shiftMonths, monthStart, daysInMonth, iso, toMs, runsOf,
     };
   }

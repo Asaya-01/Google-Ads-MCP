@@ -182,7 +182,7 @@ def _pulse(ctx: Context) -> dict:
     kind, so a sale day is never judged against a BAU day."""
     pcfg = ctx.cfg["pulse"]
     f = ctx.facts[ctx.d1]
-    phase = f.get("phase")
+    phase = f.get("phase_eff") or f.get("phase")
     d1 = rules.to_date(ctx.d1)
     last7 = rules.date_range(d1 - dt.timedelta(days=6), d1)
     mtd, _ = month_to_date(ctx.d1)
