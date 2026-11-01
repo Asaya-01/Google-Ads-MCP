@@ -294,3 +294,55 @@ def test_overall_roas_uses_actual_ads_plus_the_two_estimates():
     )
     kinds = {r["label"]: r["kind"] for r in page["spend_breakdown"]}
     assert kinds["Meta"] == "actual" and kinds["Affiliate"] == "estimate"
+
+
+class _Store:
+    def __init__(self):
+        self.saved = {}
+
+    def get_json(self, path):
+        return self.saved.get(path)
+
+    def put_json(self, path, value):
+        self.saved[path] = value
+
+
+class _Shop:
+    def __init__(self, orders):
+        self._orders = orders
+
+    def orders_between(self, start, end):
+        return self._orders
+
+    def sessions_hourly(self, day):
+        return [[10] * 24, [1] * 24, [0] * 24]
+
+
+def test_yesterday_comes_from_shopify_not_the_half_synced_bigquery_copy(
+    monkeypatch,
+):
+    rows = []
+    for d in range(1, 31):  # BigQuery: 30 older days, yesterday nearly empty
+        day = (NOW.date() - dt.timedelta(days=d)).isoformat()
+        n = 3 if d == 1 else 40
+        rows += [
+            {"date": day, "hour": h, "orders": n, "gmv": n * 800.0}
+            for h in range(24)
+        ]
+    monkeypatch.setattr(live.bq, "run", lambda *a, **k: rows)
+    yday = (NOW.date() - dt.timedelta(days=1)).isoformat()
+    api = [
+        {
+            "name": f"#{i}",
+            "created_at": f"{yday}T08:00:00Z",
+            "total": 900.0,
+            "test": False,
+            "cancelled": False,
+        }
+        for i in range(500)
+    ]
+    out = live.baseline(CFG, _Store(), _Shop(api), NOW, {})
+    assert sum(out[yday]["orders"]) == 500  # not BigQuery's 72
+    assert sum(out[yday]["gmv"]) == pytest.approx(500 * 900)
+    older = (NOW.date() - dt.timedelta(days=7)).isoformat()
+    assert sum(out[older]["orders"]) == 40 * 24  # older days stay on BigQuery

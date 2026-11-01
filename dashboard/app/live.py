@@ -813,6 +813,24 @@ def baseline(
             )
             d["orders"][int(r["hour"])] = int(r["orders"])
             d["gmv"][int(r["hour"])] = float(r["gmv"] or 0)
+        y = yesterday.isoformat()
+        if y in todo:
+            # Yesterday comes straight from Shopify, not BigQuery: the BigQuery
+            # copy is still catching up for much of the day after, and a
+            # half-synced yesterday made every "vs yesterday" figure wrong.
+            try:
+                api = shop.orders_between(
+                    f"{y}T00:00:00+05:30", f"{today.isoformat()}T00:00:00+05:30"
+                )
+                counts, gmv = order_hours(
+                    api, y, cfg["orders"]["exclude_name_regex"]
+                )
+                by_day[y] = {"orders": counts, "gmv": gmv}
+            except Exception as exc:
+                notes["yesterday_orders"] = (
+                    "Yesterday's orders could not be read from Shopify, so "
+                    f"the BigQuery copy is used and may be incomplete: {exc}"
+                )
         for d in todo:
             day = by_day.get(d)
             if not day:
@@ -829,19 +847,6 @@ def baseline(
     store.put_json(
         "cache/live/baseline.json", {"built": today.isoformat(), "days": keep}
     )
-    y = yesterday.isoformat()
-    if y in keep:
-        try:
-            theirs = shop.orders_count(y)
-            ours = sum(keep[y]["orders"])
-            if theirs and abs(ours - theirs) / theirs > 0.015:
-                notes["yesterday_sync"] = (
-                    f"BigQuery has {ours:,} orders for yesterday against "
-                    f"Shopify's {theirs:,}, so yesterday's curve may be "
-                    "incomplete until the BigQuery sync finishes."
-                )
-        except Exception:
-            pass
     return keep
 
 
