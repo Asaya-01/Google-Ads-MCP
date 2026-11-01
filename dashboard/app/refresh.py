@@ -111,6 +111,7 @@ def collect(
     data["funnel"] = bq.run("funnel_daily", **window)
     data["google_ads"] = bq.run("google_ads_daily", **window)
     data["google_campaigns"] = bq.run("google_campaigns")
+    data["google_tree"] = (gsrc or {}).get("tree") or []
     if gsrc:
         data["google_ads"] = gsrc["rows"]
         known = {c["campaign_id"]: c for c in data["google_campaigns"]}
@@ -207,6 +208,12 @@ def collect(
                 store.put_json(f"cache/meta/{day}.json", day_rows)
             if not by_day.get(d1):
                 missing["meta_ads"] = f"Meta returned no rows for {d1}"
+            try:
+                _meta_ad_history(token, mcfg, store, d1_date)
+            except Exception as exc:  # a bonus: never fail the run for it
+                data["unavailable"][
+                    "meta_ad_history"
+                ] = f"Meta ad-level history: {exc}"
         except Exception as exc:
             data["unavailable"]["meta"] = f"Meta API: {exc}"
             missing["meta_ads"] = data["unavailable"]["meta"]
@@ -388,10 +395,24 @@ def _google_from_api(
             f"Google Ads API: {exc}; using the BigQuery copy"
         )
         return None
+    tree = None
+    try:
+        tree = google_ads.fetch_tree(
+            gcfg,
+            creds,
+            (
+                dt.date.fromisoformat(d1)
+                - dt.timedelta(days=gcfg.get("tree_days", 90) - 1)
+            ).isoformat(),
+            d1,
+        )
+    except Exception as exc:  # the drill-down is a bonus; never fail the run
+        unavailable["google_tree"] = f"Google Ads ad groups and ads: {exc}"
     dates = [r["date"] for r in rows if r["date"] <= d1]
     return {
         "rows": rows,
         "campaigns": campaigns,
+        "tree": tree,
         "creds": creds,
         "check": {
             "source": "google_ads",
@@ -444,6 +465,51 @@ def _meta_backfill(
             ):
                 store.put_json(f"cache/meta/{day}.json", by_day[day])
         end = chunk_start - dt.timedelta(days=1)
+
+
+def _meta_ad_history(token: str, mcfg: dict, store, d1_date: dt.date) -> None:
+    """Ad-level history behind the campaign > ad set > ad drill-down. The last
+    few days are re-read every run (see lookback_days); this fills the older
+    days once, newest first, a few weeks per run, and remembers the days that
+    had no spend so they are not asked for again."""
+    hist = mcfg.get("ad_history_days", 90)
+    budget = mcfg.get("ad_backfill_days_per_run", 21)
+    recent_from = d1_date - dt.timedelta(days=mcfg["lookback_days"] - 1)
+    older = _days(
+        d1_date - dt.timedelta(days=hist - 1),
+        recent_from - dt.timedelta(days=1),
+    )
+    checked = set(store.get_json("cache/meta_ad_checked.json") or [])
+    todo = []
+    for day in reversed(older):
+        rows = store.get_json(f"cache/meta/{day}.json")
+        if rows and all(r.get("ad_id") is not None for r in rows):
+            continue
+        if not rows and day in checked:
+            continue
+        todo.append(day)
+    todo = sorted(todo[:budget])
+    i = 0
+    while i < len(todo):
+        chunk = [todo[i]]
+        while (
+            i + len(chunk) < len(todo)
+            and len(chunk) < 7
+            and dt.date.fromisoformat(todo[i + len(chunk)])
+            - dt.date.fromisoformat(chunk[-1])
+            == dt.timedelta(days=1)
+        ):
+            chunk.append(todo[i + len(chunk)])
+        rows = meta.fetch_all(token, mcfg, chunk[0], chunk[-1], level="ad")
+        by_day: dict[str, list] = {}
+        for r in rows:
+            by_day.setdefault(r["date"], []).append(r)
+        for day in chunk:
+            if by_day.get(day):
+                store.put_json(f"cache/meta/{day}.json", by_day[day])
+            checked.add(day)
+        i += len(chunk)
+    store.put_json("cache/meta_ad_checked.json", sorted(checked))
 
 
 def _days(start: dt.date, end: dt.date) -> list[str]:

@@ -24,4 +24,6 @@ def build_all(
     pages["days"] = days.build(ctx)
     pages["campaign_days"] = range_data.campaigns(ctx)
     pages["product_days"] = range_data.products(ctx)
+    pages["meta_tree"] = range_data.meta_tree(ctx)
+    pages["google_tree"] = range_data.google_tree(ctx)
     return pages, ctx

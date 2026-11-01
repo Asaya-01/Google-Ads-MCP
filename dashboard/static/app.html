@@ -447,6 +447,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
         <span class="sub">updated <span id="live-age"></span> · refreshes itself every ${Math.round((p.refresh_seconds || 180) / 60)} min · D-1 stays on the other tabs</span></div>
       <div class="banner" id="live-stale" hidden>This view is more than 30 minutes old, so the live refresh may be failing. The numbers below are the last good ones.</div>
       <div class="status" aria-label="Data sources and freshness">${chips}</div>
+      <div class="live-ctl"><span class="sub">Campaigns</span><div class="seg" id="live-mode" role="group" aria-label="Campaign type">${RG_MODES.map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${RG.mode === k}">${l}</button>`).join("")}</div></div>
       ${sh ? `<div class="live-ctl"><span class="sub">Compare today so far with</span>
         <div class="seg" id="live-base"><button type="button" data-b="typical" aria-pressed="${LIVE.base === "typical"}">${esc(sh.typical_label)}</button><button type="button" data-b="yesterday" aria-pressed="${LIVE.base === "yesterday"}">Yesterday, same time</button></div></div>` : ""}
     </section>`;
@@ -462,7 +463,18 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
         <div class="seg" id="live-metric">${[["gmv", "GMV"], ["orders", "Orders"], ["sessions", "Sessions"]].map(([k, l]) => `<button type="button" data-m="${k}" aria-pressed="${LIVE.metric === k}">${l}</button>`).join("")}</div></div>
       ${legend([["--accent", "Today"], ["--muted", baseLabel]])}
       <div class="chart-box"><canvas id="c-live" aria-label="Running total through the day, today against the comparison"></canvas></div></section>` : "";
-    const cards = `<section class="card"><div class="section-head"><h2>Returns so far today</h2><span class="sub">vs yesterday's final · ad platforms report late, so today reads low</span></div>
+    const awKeep = (blk) => (blk.campaigns || []).filter((c) => c.awareness);
+    const awSum = (blk) => awKeep(blk).reduce((a, c) => ({ spend: a.spend + c.spend, impr: a.impr + (c.impressions || 0), clicks: a.clicks + c.clicks }), { spend: 0, impr: 0, clicks: 0 });
+    const awCards = () => {
+      const m = awSum(p.meta), g = awSum(p.google), t = { spend: m.spend + g.spend, impr: m.impr + g.impr, clicks: m.clicks + g.clicks };
+      const card = (label, v, sub) => `<article class="pcard"><div class="plabel">${esc(label)}</div>${v == null ? '<div class="na">Data unavailable: no awareness delivery reported yet</div>' : `<div class="hero">${esc(v)}</div>`}<div class="psub">${esc(sub)}</div></article>`;
+      return `<section class="card"><div class="section-head"><h2>Awareness so far today</h2><span class="sub">delivery and cost of delivery; platforms report with a delay</span></div><div class="pulse">
+        ${card("Awareness spend", t.spend ? fmt(t.spend, "inr", true) : null, `Meta ${fmt(m.spend, "inr", true)} · Google ${fmt(g.spend, "inr", true)}`)}
+        ${card("Impressions", t.impr ? fmt(t.impr, "int") : null, "Meta + Google awareness campaigns")}
+        ${card("CPM", t.impr ? fmt((t.spend / t.impr) * 1000, "inr") : null, "spend per 1,000 impressions")}
+        ${card("CTR", t.impr ? fmt(t.clicks / t.impr, "pct") : null, "clicks / impressions")}</div></section>`;
+    };
+    const cards = RG.mode === "aw" ? awCards() : `<section class="card"><div class="section-head"><h2>Returns so far today</h2><span class="sub">vs yesterday's final · ad platforms report late, so today reads low</span></div>
       <div class="pulse">${p.cards.map((c) => `<article class="pcard">
         <div class="plabel">${esc(c.label)}</div>
         ${c.value === null || c.value === undefined ? `<div class="na">Data unavailable: ${esc(c.na || "not available")}</div>`
@@ -494,9 +506,9 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     const adTable = (title, blk) => {
       if (blk.na && !blk.today) return `<section class="card"><div class="section-head"><h2>${esc(title)}</h2></div><p class="na">Data unavailable: ${esc(blk.na)}</p></section>`;
       const t = blk.today || {};
-      const rows = blk.campaigns.map((c) => ({ ...c }));
+      const rows = blk.campaigns.filter((c) => rgKeep(c.awareness)).map((c) => ({ ...c }));
       return `<section class="card"><div class="section-head"><h2>${esc(title)}</h2>
-        <span class="sub">spend ${esc(fmt(t.spend, "inr", true) ?? "n/a")}${blk.spend_pct_of_yesterday === null || blk.spend_pct_of_yesterday === undefined ? "" : ` · ${(blk.spend_pct_of_yesterday * 100).toFixed(0)}% of yesterday's`} · sales-campaign ROAS ${esc(fmt(t.roas, "x") ?? "n/a")}</span></div>
+        <span class="sub">spend ${esc(fmt(t.spend, "inr", true) ?? "n/a")}${blk.spend_pct_of_yesterday === null || blk.spend_pct_of_yesterday === undefined ? "" : ` · ${(blk.spend_pct_of_yesterday * 100).toFixed(0)}% of yesterday's`}${RG.mode === "aw" ? "" : ` · sales-campaign ROAS ${esc(fmt(t.roas, "x") ?? "n/a")}`}</span></div>
         ${table([
           { label: "Campaign", text: true, render: (r) => `${esc(r.campaign)}${r.awareness ? ' <span class="sub">Awareness, not in ROAS</span>' : ""}` },
           { label: "Spend", render: (r) => esc(fmt(r.spend, "inr") ?? "n/a") },
@@ -504,8 +516,11 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
           { label: "ROAS", render: (r) => r.roas === null ? '<span class="na">–</span>' : esc(fmt(r.roas, "x")) },
         ], rows, { maxHeight: "50vh" })}</section>`;
     };
-    $main.innerHTML = head + tiles + chart + cards + breakdown + checkout + `<div class="grid-2">${adTable("Meta campaigns today", p.meta)}${adTable("Google Ads campaigns today", p.google)}</div><section class="card">${notes(p)}</section>`;
+    const wholeStore = `<p class="legend-note" style="margin:6px 0 0">${RG.mode === "aw" ? "These are for the whole store." : "Whole store, awareness traffic included."} Shopify cannot split live sessions and orders by campaign type, so the day-by-day tabs are the place for that split.</p>`;
+    const awOnly = `<section class="card"><div class="section-head"><h2>Awareness</h2></div><p class="na">Live sessions, orders and checkout cannot be split by campaign type, so they are not shown in this view. Below: what the awareness campaigns have spent and delivered so far today. For awareness traffic and orders, use the Overview, Daily or Marketing tabs.</p></section>`;
+    $main.innerHTML = head + (RG.mode === "aw" ? awOnly : tiles.replace("</section>", wholeStore + "</section>") + chart) + cards + (RG.mode === "aw" ? "" : breakdown) + (RG.mode === "aw" ? "" : checkout) + `<div class="grid-2">${adTable("Meta campaigns today", p.meta)}${adTable("Google Ads campaigns today", p.google)}</div><section class="card">${notes(p)}</section>`;
     liveTick();
+    document.getElementById("live-mode")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-mode]"); if (b) rgSetMode(b.dataset.mode); });
     document.getElementById("live-base")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-b]"); if (b) { LIVE.base = b.dataset.b; destroyCharts(); R.live(p); } });
     document.getElementById("live-metric")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-m]"); if (b) { LIVE.metric = b.dataset.m; destroyCharts(); R.live(p); } });
     const canvas = document.getElementById("c-live");

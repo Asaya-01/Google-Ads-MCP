@@ -152,3 +152,88 @@ def fetch_campaign_names(
     return {
         str(r["campaign"]["id"]): r["campaign"].get("name") or "" for r in rows
     }
+
+
+_TREE_METRICS = (
+    "metrics.cost_micros, metrics.impressions, metrics.clicks, "
+    "metrics.conversions, metrics.conversions_value"
+)
+
+
+def _tree_row(r: dict) -> dict:
+    m = r.get("metrics") or {}
+    return {
+        "date": r["segments"]["date"],
+        "campaign_id": str((r.get("campaign") or {}).get("id", "")),
+        "spend": int(m.get("costMicros") or 0) / 1_000_000,
+        "impressions": int(m.get("impressions") or 0),
+        "clicks": int(m.get("clicks") or 0),
+        "conversions": float(m.get("conversions") or 0),
+        "conversion_value": float(m.get("conversionsValue") or 0),
+    }
+
+
+def fetch_tree(cfg: dict, creds: dict, since: str, until: str) -> list[dict]:
+    """The levels under a campaign, one row per day:
+      ad_group    ad groups (Search, Demand Gen, ...)
+      asset_group Performance Max asset groups
+      ad          ads inside ad groups
+    Google reports no spend per asset in Performance Max, so an asset group
+    has no ads below it."""
+    where = (
+        f"WHERE segments.date BETWEEN '{since}' AND '{until}' "
+        "AND metrics.impressions > 0"
+    )
+    out: list[dict] = []
+    for r in _search_stream(
+        cfg,
+        creds,
+        "SELECT segments.date, campaign.id, ad_group.id, ad_group.name, "
+        f"{_TREE_METRICS} FROM ad_group {where}",
+    ):
+        row = _tree_row(r)
+        g = r.get("adGroup") or {}
+        out.append(
+            {
+                **row,
+                "level": "ad_group",
+                "group_id": str(g.get("id", "")),
+                "group_name": g.get("name") or "",
+            }
+        )
+    for r in _search_stream(
+        cfg,
+        creds,
+        "SELECT segments.date, campaign.id, asset_group.id, asset_group.name, "
+        f"{_TREE_METRICS} FROM asset_group {where}",
+    ):
+        row = _tree_row(r)
+        g = r.get("assetGroup") or {}
+        out.append(
+            {
+                **row,
+                "level": "asset_group",
+                "group_id": str(g.get("id", "")),
+                "group_name": g.get("name") or "",
+            }
+        )
+    for r in _search_stream(
+        cfg,
+        creds,
+        "SELECT segments.date, campaign.id, ad_group.id, "
+        "ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, "
+        f"{_TREE_METRICS} FROM ad_group_ad {where}",
+    ):
+        row = _tree_row(r)
+        ad = (r.get("adGroupAd") or {}).get("ad") or {}
+        out.append(
+            {
+                **row,
+                "level": "ad",
+                "group_id": str((r.get("adGroup") or {}).get("id", "")),
+                "ad_id": str(ad.get("id", "")),
+                "ad_name": ad.get("name") or "",
+                "ad_type": ad.get("type") or "",
+            }
+        )
+    return out

@@ -264,12 +264,14 @@ def _ad_totals(rows: list[dict], cfg: dict, value_key: str, count_key: str):
                 "value": 0.0,
                 "results": 0.0,
                 "clicks": 0,
+                "impressions": 0,
             },
         )
         c["spend"] += r.get("spend") or 0
         c["value"] += r.get(value_key) or 0
         c["results"] += r.get(count_key) or 0
         c["clicks"] += r.get("clicks") or 0
+        c["impressions"] += r.get("impressions") or 0
     table = sorted(camps.values(), key=lambda c: -c["spend"])
     perf = [c for c in table if not c["awareness"]]
     out = {

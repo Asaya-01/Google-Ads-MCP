@@ -46,6 +46,27 @@ COUNT_FIELDS = [
     "crm_revenue",
     "other_spend",
     "all_spend",
+    # the same numbers split by campaign type: Awareness (campaigns named
+    # "awareness") and Performance (everything else)
+    "perf_orders",
+    "perf_gmv",
+    "awareness_orders",
+    "awareness_gmv",
+    "awareness_atc",
+    "perf_ic",
+    "awareness_ic",
+    "perf_gk_converted",
+    "awareness_gk_converted",
+    "perf_gk_address",
+    "awareness_gk_address",
+    "perf_gk_payment",
+    "awareness_gk_payment",
+    "meta_aw_spend",
+    "meta_aw_value",
+    "google_aw_spend",
+    "google_aw_value",
+    "aw_spend",
+    "perf_all_spend",
 ]
 
 NA = {
@@ -223,6 +244,7 @@ class Context:
             ic[r["date"]][1] += r.get("converted") or 0
             ic[r["date"]][2] += r.get("address_landed") or 0
             ic[r["date"]][3] += r.get("payment_step_reached") or 0
+        maps = self._kind_maps()
         google = defaultdict(lambda: [0.0, 0.0, 0.0])
         for r in d.get("google_ads", []):
             g = google[r["date"]]
@@ -378,9 +400,119 @@ class Context:
                     f["na"][total] = "; ".join(
                         sorted({f["na"][p] for p in parts if p in f["na"]})
                     )
+            self._kind_split(f, day, maps)
             self._manual_spends(f, day)
             facts[day] = derive(f)
         return facts
+
+    def _kind_maps(self) -> dict:
+        """Per-day sums split by campaign type, from the classified rows."""
+        from collections import defaultdict as dd
+
+        orders = dd(lambda: {"perf": [0, 0.0], "awareness": [0, 0.0]})
+        for r in self.order_rows:
+            k = "awareness" if r["kind"] == "awareness" else "perf"
+            o = orders[r["date"]][k]
+            o[0] += r.get("orders") or 0
+            o[1] += r.get("gmv") or 0.0
+        gk = dd(lambda: {"perf": [0, 0, 0, 0], "awareness": [0, 0, 0, 0]})
+        for r in self.funnel_rows:
+            k = "awareness" if r["kind"] == "awareness" else "perf"
+            g = gk[r["date"]][k]
+            g[0] += r.get("checkout_started") or 0
+            g[1] += r.get("converted") or 0
+            g[2] += r.get("address_landed") or 0
+            g[3] += r.get("payment_step_reached") or 0
+        scfg = self.cfg["sessions"]
+        meta_aw: dict[str, float] = {}
+        for day, rows in (self.data.get("meta") or {}).items():
+            if rows and not any(r.get("campaign_name") is None for r in rows):
+                meta_aw[day] = sum(
+                    r.get("purchase_value") or 0
+                    for r in rows
+                    if rules.is_awareness_name(r["campaign_name"], scfg)
+                )
+        google_aw: dict[str, float] = defaultdict(float)
+        for r in self.data.get("google_ads") or []:
+            if r["campaign_id"] in self.aware_ids:
+                google_aw[r["date"]] += r.get("conversion_value") or 0
+        return {
+            "orders": orders,
+            "gk": gk,
+            "meta_aw": meta_aw,
+            "google_aw": google_aw,
+        }
+
+    def _kind_split(self, f: dict, day: str, maps: dict) -> None:
+        """Performance and Awareness side by side, for the toggle. Awareness
+        is whatever the UTM or the campaign name marks as awareness; the rest
+        is Performance. Missing inputs stay missing, never zero."""
+        na = f["na"]
+        # sessions and add-to-carts
+        if f.get("atc") is not None and f.get("perf_atc") is not None:
+            f["awareness_atc"] = f["atc"] - f["perf_atc"]
+        else:
+            f["awareness_atc"] = None
+            na["awareness_atc"] = na.get("atc") or na.get("perf_atc")
+        # orders and GMV, by the campaign the order came from
+        if day in maps["orders"]:
+            o = maps["orders"][day]
+            f["perf_orders"], f["perf_gmv"] = o["perf"]
+            f["awareness_orders"], f["awareness_gmv"] = o["awareness"]
+        else:
+            for k in (
+                "perf_orders",
+                "perf_gmv",
+                "awareness_orders",
+                "awareness_gmv",
+            ):
+                f[k] = None
+                na[k] = (
+                    "orders by campaign type are not in BigQuery for this day"
+                )
+        # GoKwik checkout steps
+        if f.get("ic") is not None and day in maps["gk"]:
+            g = maps["gk"][day]
+            for kind in ("perf", "awareness"):
+                (
+                    f[f"{kind}_ic"],
+                    f[f"{kind}_gk_converted"],
+                    f[f"{kind}_gk_address"],
+                    f[f"{kind}_gk_payment"],
+                ) = g[kind]
+        else:
+            for kind in ("perf", "awareness"):
+                for k in ("ic", "gk_converted", "gk_address", "gk_payment"):
+                    f[f"{kind}_{k}"] = None
+                    na[f"{kind}_{k}"] = NA["ic"]
+        # Meta and Google
+        for plat in ("meta", "google"):
+            tot, perf = f.get(f"{plat}_spend"), f.get(f"{plat}_perf_spend")
+            aw_val = (
+                maps["meta_aw"].get(day)
+                if plat == "meta"
+                else (
+                    maps["google_aw"].get(day, 0.0)
+                    if tot is not None and perf is not None
+                    else None
+                )
+            )
+            if tot is not None and perf is not None and aw_val is not None:
+                f[f"{plat}_aw_spend"] = tot - perf
+                f[f"{plat}_aw_value"] = aw_val
+            else:
+                f[f"{plat}_aw_spend"] = f[f"{plat}_aw_value"] = None
+                na[f"{plat}_aw_spend"] = na[f"{plat}_aw_value"] = (
+                    na.get(f"{plat}_spend")
+                    or na.get(f"{plat}_perf_spend")
+                    or "not split by campaign for this day"
+                )
+        parts = [f["meta_aw_spend"], f["google_aw_spend"]]
+        f["aw_spend"] = sum(parts) if None not in parts else None
+        if f["aw_spend"] is None:
+            na["aw_spend"] = na.get("meta_aw_spend") or na.get(
+                "google_aw_spend"
+            )
 
     def _manual_spends(self, f: dict, day: str) -> None:
         """Affiliate and CRM spends and the revenue each channel reports for
@@ -428,6 +560,7 @@ class Context:
         total("crm_revenue", ["crm_flow_revenue", "crm_broadcast_revenue"])
         total("other_spend", ["affiliate_spend", "crm_spend"])
         total("all_spend", ["spend", "other_spend"])
+        total("perf_all_spend", ["perf_spend", "other_spend"])
 
     # ------------------------------------------------------------ windows
 

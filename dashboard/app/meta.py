@@ -74,6 +74,7 @@ def fetch_insights(
                     "account_name": cfg["accounts"][account_id],
                     "campaign_id": r.get("campaign_id"),
                     "campaign_name": r.get("campaign_name") or "",
+                    "adset_id": r.get("adset_id"),
                     "adset_name": r.get("adset_name") or "",
                     "ad_id": r.get("ad_id"),
                     "ad_name": r.get("ad_name") or "",

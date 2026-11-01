@@ -3,7 +3,11 @@
    dayLabel(), deltaHtml(), baseChart(), the R registry and $main. The numbers
    come from range_engine.js, over the per-day "days" page. */
 
-const RG = { eng: null, from: null, to: null, preset: "mtd", cmp: { mode: "month" }, cmpAuto: true, pop: null, draft: null, view: null, error: null };
+const RG = { eng: null, raw: null, mode: "perf", from: null, to: null, preset: "mtd", cmp: { mode: "month" }, cmpAuto: true, pop: null, draft: null, view: null, error: null };
+try {
+  const savedMode = (JSON.parse(sessionStorage.getItem("asaya-range") || "null") || {}).mode;
+  if (["perf", "aw", "all"].includes(savedMode)) RG.mode = savedMode;
+} catch (e) { /* storage blocked: stay on Performance */ }
 const RG_CMP = [
   ["previous", "Previous period", "The same number of days straight before"],
   ["month", "Same period last month", "The same dates one month earlier"],
@@ -38,17 +42,19 @@ async function rgEnsure() {
   if (RG.eng) return;
   const p = await loadPage("days");
   if (!p || !p.dates || !p.dates.length) throw new Error("The day-by-day data has not been built yet.");
-  RG.eng = createRangeEngine(p);
-  const e = RG.eng, pre = e.presets().find((x) => x.id === "mtd");
-  RG.from = pre.from; RG.to = pre.to;
+  RG.raw = p;
   let saved = null;
   try { saved = JSON.parse(sessionStorage.getItem("asaya-range") || "null"); } catch (err) { /* storage blocked */ }
+  if (saved && ["perf", "aw", "all"].includes(saved.mode)) RG.mode = saved.mode;
+  RG.eng = createRangeEngine(p, RG.mode);
+  const e = RG.eng, pre = e.presets().find((x) => x.id === "mtd");
+  RG.from = pre.from; RG.to = pre.to;
   if (saved && saved.from >= e.first && saved.to <= e.last && saved.from <= saved.to) {
     Object.assign(RG, { from: saved.from, to: saved.to, preset: saved.preset, cmp: saved.cmp || RG.cmp, cmpAuto: saved.cmpAuto !== false });
   }
 }
 function rgSave() {
-  try { sessionStorage.setItem("asaya-range", JSON.stringify({ from: RG.from, to: RG.to, preset: RG.preset, cmp: RG.cmp, cmpAuto: RG.cmpAuto })); } catch (e) { /* storage blocked */ }
+  try { sessionStorage.setItem("asaya-range", JSON.stringify({ from: RG.from, to: RG.to, preset: RG.preset, cmp: RG.cmp, cmpAuto: RG.cmpAuto, mode: RG.mode })); } catch (e) { /* storage blocked */ }
 }
 const rgCmpLabel = () => {
   const m = RG.cmp.mode;
@@ -89,6 +95,37 @@ function rgVsText(g, who) {
   return (evs && evs.length ? `${evs.map(rgEventLabel).join(" and ")} (${days(list)})` : days(list));
 }
 
+
+// ------------------------------------------------ Performance / Awareness views
+const RG_MODES = [["perf", "Performance"], ["aw", "Awareness"], ["all", "All campaigns"]];
+const RG_MODE_NOTE = {
+  perf: "Performance campaigns only: every campaign not named “awareness”, with the sessions and orders that came from them and from everything else that is not awareness.",
+  aw: "Awareness campaigns only: spend, delivery and whatever sessions and orders were credited to them. Awareness is judged on reach and cost of reach, so ROAS here is attribution only.",
+  all: "Everything together, so the totals tie back to Shopify.",
+};
+const RG_AW_DROP = new Set(["affiliate_spend", "crm_spend", "all_spend", "overall_roas", "affiliate_roas", "crm_roas", "perf_roas", "new_share"]);
+const RG_AW_LABEL = {
+  gmv: "GMV credited to awareness", orders: "Orders credited to awareness", sessions: "Sessions from awareness",
+  spend: "Awareness spend (Meta + Google)", meta_spend: "Meta awareness spend", google_spend: "Google awareness spend",
+  mer: "Attributed ROAS (GMV / awareness spend)", meta_sales_roas: "Meta awareness ROAS (reported)", google_sales_roas: "Google awareness ROAS (reported)",
+};
+// the tiles that make sense for the current view
+function rgAdapt(tiles) {
+  if (RG.mode !== "aw") return tiles;
+  return tiles.filter(([k]) => !RG_AW_DROP.has(k)).map(([k, l, u]) => [k, RG_AW_LABEL[k] || l, u]);
+}
+function rgSetMode(m) {
+  if (m === RG.mode) return;
+  RG.mode = m;
+  if (RG.raw) RG.eng = createRangeEngine(RG.raw, m);
+  try {
+    const cur = JSON.parse(sessionStorage.getItem("asaya-range") || "null") || {};
+    sessionStorage.setItem("asaya-range", JSON.stringify({ ...cur, mode: m }));
+  } catch (e) { /* storage blocked */ }
+  destroyCharts();
+  R[state.tab](state.pages[state.tab]);
+}
+
 // ---------------------------------------------------------------- the bar
 function rgBar() {
   const e = RG.eng, c = e.compare(RG.from, RG.to, RG.cmp);
@@ -96,6 +133,7 @@ function rgBar() {
   const mix = [...c.groups.map((g) => `${g.cur.length} ${g.phase === "sale" ? "sale" : "BAU"}`), ...(c.mixed.length ? [`${c.mixed.length} transition`] : [])].join(" · ");
   return `<section class="card rg-barcard" id="rg-bar">
     <div class="rg-wrap">
+      <div class="rg-modebar"><div class="seg rg-mode" id="rg-mode" role="group" aria-label="Campaign type">${RG_MODES.map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${RG.mode === k}">${l}</button>`).join("")}</div><span class="rg-modenote">${esc(RG_MODE_NOTE[RG.mode])}</span></div>
       <div class="rg-chips">
         <button type="button" class="rg-chip" id="rg-open-main" aria-haspopup="dialog" aria-expanded="${RG.pop === "main"}"><span aria-hidden="true">▦</span> ${esc(rgRangeLabel())} <span aria-hidden="true" class="rg-caret">▾</span></button>
         <span class="rg-vs">compared to</span>
@@ -203,6 +241,7 @@ function rgApply() {
 function rgBind() {
   const bar = document.getElementById("rg-bar");
   if (!bar) return;
+  bar.querySelector("#rg-mode").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-mode]"); if (b) rgSetMode(b.dataset.mode); });
   bar.querySelector("#rg-open-main").addEventListener("click", () => (RG.pop === "main" ? rgClose() : rgOpen("main")));
   bar.querySelector("#rg-open-cmp").addEventListener("click", () => (RG.pop === "cmp" ? rgClose() : rgOpen("cmp")));
   const pop = bar.querySelector(".rg-pop");
@@ -284,11 +323,11 @@ function rgTile(k, label, unit, g) {
   return `<div class="tile"><div class="label">${esc(label)}</div><div class="value">${esc(fmt(v, unit, true))}</div><div class="foot">${foot}</div>${perDay}</div>`;
 }
 function rgGroupHtml(g, mixed, tiles, title) {
-  tiles = tiles || RG_TILES;
+  tiles = rgAdapt(tiles || RG_TILES);
   const nm = g.phase === "sale" ? "Sale days" : "BAU days";
   const cmpTxt = g.prevSpan ? `${rgSpan(g.prevSpan[0], g.prevSpan[1])}${g.pw.days !== g.prev.length ? "" : ""}` : "";
   return `<section class="card">
-    <div class="section-head"><h2>${phaseChip(g.phase)} ${nm}</h2></div>
+    <div class="section-head"><h2>${phaseChip(g.phase)} ${nm}</h2><span class="chip">${esc((RG_MODES.find((m) => m[0] === RG.mode) || [])[1])}</span></div>
     <div class="rg-pair">
       <div><span class="rg-k">This period</span>${esc(rgVsText(g, "cur"))}</div>
       ${g.pw ? `<div><span class="rg-k">Compared with</span>${esc(rgVsText(g, "prev"))}</div>` : ""}
@@ -341,7 +380,7 @@ function rgBody() {
     html += c.groups.map((g) => rgGroupHtml(g, c.groups.length > 1)).join("");
     if (c.groups.length > 1) {
       const whole = { w: c.w, pw: null, prev: null, change: () => null };
-      html += `<details class="card rg-all"><summary>The whole range, for reference</summary><p class="legend-note">Sale and BAU days together are not a like-for-like comparison, so there is no change shown here.</p><div class="tiles">${RG_TILES.map(([k, l, u]) => rgTile(k, l, u, whole)).join("")}</div></details>`;
+      html += `<details class="card rg-all"><summary>The whole range, for reference</summary><p class="legend-note">Sale and BAU days together are not a like-for-like comparison, so there is no change shown here.</p><div class="tiles">${rgAdapt(RG_TILES).map(([k, l, u]) => rgTile(k, l, u, whole)).join("")}</div></details>`;
     }
     html += rgCharts(c);
   }

@@ -144,6 +144,28 @@ falls back to BigQuery in the meantime.
   3 hours), and a failed Cloud Run execution (a Cloud Monitoring policy, created
   best-effort by `deploy.sh`).
 
+## Performance and Awareness views, and the ad drill-down
+
+A toggle at the top of Overview, Daily, Marketing, D-1 and Today switches
+between **Performance**, **Awareness** and **All campaigns** (default
+Performance). Awareness is a campaign whose name contains "awareness" (Meta,
+or Google by campaign id, as everywhere else); Performance is everything else.
+Each view reads only its own data: spend, sessions, add-to-carts, GoKwik
+checkouts and the orders and GMV credited to it by UTM. Fields that cannot be
+split (new vs repeat; affiliate and CRM for Awareness) say so instead of
+showing a number. The Today tab cannot split live Shopify sessions and orders,
+so in the Awareness view it shows spend and delivery only. Awareness is judged
+on impressions, CPM, CTR and cost of reach, so the Awareness tables lead with
+those and not ROAS.
+
+On Marketing, every Meta and Google campaign opens: Meta campaign > ad set > ad;
+Google campaign > ad group > ad (Performance Max has asset groups and nothing
+below them, because Google reports no spend per asset). Campaign rows come from
+every day we have; what is below comes from `meta_tree` and `google_tree`,
+which cover the last 90 days (`meta.ad_history_days`, `google_ads.tree_days`).
+Meta's older ad-level days are filled in 21 days per refresh, newest first.
+A range that reaches before the detail says how many days it covers.
+
 ## Affiliate and CRM spends
 
 Affiliate, CRM flow and CRM broadcast spends come from the team's Google

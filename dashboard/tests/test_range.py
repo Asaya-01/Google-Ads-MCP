@@ -177,3 +177,80 @@ def test_two_periods_inside_one_sale_are_called_out():
         "return c.groups.map(g=>g.note);",
     )
     assert any(n and "same sale" in n for n in out)
+
+
+MODE_FIELDS = [
+    "sessions",
+    "perf_sessions",
+    "awareness_sessions",
+    "orders",
+    "perf_orders",
+    "awareness_orders",
+    "gmv",
+    "perf_gmv",
+    "awareness_gmv",
+    "new_orders",
+    "affiliate_spend",
+]
+
+
+def mode_page():
+    n = 4
+    dates = [f"2026-10-0{i + 1}" for i in range(n)]
+    col = lambda v: [v] * n
+    return {
+        "dates": dates,
+        "phase": ["bau"] * n,
+        "fields": MODE_FIELDS,
+        "values": {
+            "sessions": col(100),
+            "perf_sessions": col(80),
+            "awareness_sessions": col(20),
+            "orders": col(10),
+            "perf_orders": col(9),
+            "awareness_orders": col(1),
+            "gmv": col(8000),
+            "perf_gmv": col(7500),
+            "awareness_gmv": col(500),
+            "new_orders": col(6),
+            "affiliate_spend": col(100),
+        },
+        "na": {},
+        "reasons": [],
+    }
+
+
+@node
+def test_performance_and_awareness_are_separate_views_of_the_same_days():
+    out = run_mode(
+        mode_page(),
+        "const f=(m)=>{const e=E(D,m);const w=e.windowOf(e.dates);"
+        "return {s:w.sessions,o:w.orders,g:w.gmv,aov:w.aov,new:w.new_orders,"
+        "aff:w.affiliate_spend,why:w.na.new_orders};};"
+        "return {all:f('all'),perf:f('perf'),aw:f('aw')};",
+    )
+    assert out["all"]["s"] == 400 and out["all"]["g"] == 32000
+    assert out["perf"]["s"] == 320 and out["perf"]["g"] == 30000
+    assert out["aw"]["s"] == 80 and out["aw"]["g"] == 2000
+    assert out["perf"]["aov"] == pytest.approx(30000 / 36)
+    # the two views add up to the whole
+    assert out["perf"]["g"] + out["aw"]["g"] == out["all"]["g"]
+    # fields that cannot be split say so instead of showing a number
+    assert out["perf"]["new"] is None and "not split" in out["perf"]["why"]
+    assert out["aw"]["aff"] is None
+    assert out["perf"]["aff"] == 400
+
+
+def run_mode(page, body):
+    script = (
+        "const D=JSON.parse(process.argv[1]);"
+        f"const E=require('{ENGINE}');"
+        f"console.log(JSON.stringify((()=>{{{body}}})()));"
+    )
+    done = subprocess.run(
+        ["node", "-e", script, json.dumps(page)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return json.loads(done.stdout)

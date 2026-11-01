@@ -269,6 +269,8 @@ def test_every_phase1_tab_builds_and_serialises(built_without_meta):
         "days",
         "campaign_days",
         "product_days",
+        "meta_tree",
+        "google_tree",
     }
     for page in pages.values():
         json.dumps(page, default=str)
@@ -537,3 +539,122 @@ def test_affiliate_and_crm_spends_flow_into_the_overall_roas(
     assert late["affiliate_spend"] is None and late["all_spend"] is None
     assert "not entered in the sheet yet" in late["na"]["affiliate_spend"]
     assert late["overall_roas"] is None  # never a ROAS on a partial spend
+
+
+def test_performance_and_awareness_add_up_to_the_whole(built_without_meta):
+    _, ctx = built_without_meta
+    checked = 0
+    for f in ctx.facts.values():
+        if f.get("orders") is None or f.get("perf_orders") is None:
+            continue
+        assert f["perf_orders"] + f["awareness_orders"] == f["orders"]
+        assert f["perf_gmv"] + f["awareness_gmv"] == pytest.approx(f["gmv"])
+        if f.get("sessions") is not None:
+            assert f["perf_sessions"] + f["awareness_sessions"] == f["sessions"]
+            assert f["perf_atc"] + f["awareness_atc"] == f["atc"]
+        if f.get("ic") is not None:
+            assert f["perf_ic"] + f["awareness_ic"] == f["ic"]
+        checked += 1
+    assert checked > 10
+
+
+def _tree_ctx(built):
+    from app.pages.common import Context
+
+    _, ctx = built
+    day = ctx.d1
+    data = dict(ctx.data)
+
+    def ad(adset, ad_id, name, spend, camp="WOA_Sales_BOF", cid="c1"):
+        return {
+            "date": day,
+            "account_name": "Asaya Sales",
+            "campaign_id": cid,
+            "campaign_name": camp,
+            "adset_id": adset,
+            "adset_name": f"set {adset}",
+            "ad_id": ad_id,
+            "ad_name": name,
+            "spend": spend,
+            "impressions": 1000,
+            "clicks": 20,
+            "purchases": 2,
+            "purchase_value": spend * 3,
+        }
+
+    data["meta"] = {
+        day: [
+            ad("s1", "a1", "Video A", 100.0),
+            ad("s1", "a2", "Video B", 50.0),
+            ad("s2", "a3", "Static", 70.0),
+            ad("s9", "a9", "Reach", 30.0, camp="WOA_Awareness_Reach", cid="c2"),
+        ]
+    }
+    data["google_tree"] = [
+        {
+            "date": day,
+            "campaign_id": "11",
+            "level": "ad_group",
+            "group_id": "g1",
+            "group_name": "Brand",
+            "spend": 40.0,
+            "impressions": 900,
+            "clicks": 90,
+            "conversions": 4.0,
+            "conversion_value": 400.0,
+        },
+        {
+            "date": day,
+            "campaign_id": "11",
+            "level": "ad",
+            "group_id": "g1",
+            "ad_id": "x1",
+            "ad_name": "",
+            "ad_type": "RESPONSIVE_SEARCH_AD",
+            "spend": 40.0,
+            "impressions": 900,
+            "clicks": 90,
+            "conversions": 4.0,
+            "conversion_value": 400.0,
+        },
+        {
+            "date": day,
+            "campaign_id": "22",
+            "level": "asset_group",
+            "group_id": "p1",
+            "group_name": "All_Products",
+            "spend": 60.0,
+            "impressions": 5000,
+            "clicks": 60,
+            "conversions": 2.0,
+            "conversion_value": 200.0,
+        },
+    ]
+    return Context(data, ctx.cfg)
+
+
+def test_meta_tree_rolls_ads_up_to_ad_sets_and_campaigns(built_without_meta):
+    from app.pages import range_data
+
+    t = range_data.meta_tree(_tree_ctx(built_without_meta))
+    assert len(t["campaigns"]) == 2 and len(t["adsets"]) == 3
+    assert len(t["ads"]) == 4 and len(t["rows"]) == 4
+    aw = next(c for c in t["campaigns"] if c["id"] == "c2")
+    assert aw["awareness"] is True
+    # every ad points at an ad set, every ad set at a campaign
+    assert all(0 <= a["s"] < len(t["adsets"]) for a in t["ads"])
+    assert all(0 <= s["c"] < len(t["campaigns"]) for s in t["adsets"])
+    spend = sum(r[2] for r in t["rows"])
+    assert spend == 250.0
+
+
+def test_google_tree_has_asset_groups_without_ads_below_them(
+    built_without_meta,
+):
+    from app.pages import range_data
+
+    t = range_data.google_tree(_tree_ctx(built_without_meta))
+    kinds = {g["name"]: g["kind"] for g in t["groups"]}
+    assert kinds == {"Brand": "ad_group", "All_Products": "asset_group"}
+    assert len(t["ads"]) == 1 and t["ads"][0]["name"].startswith("Responsive")
+    assert len(t["group_rows"]) == 2 and len(t["ad_rows"]) == 1

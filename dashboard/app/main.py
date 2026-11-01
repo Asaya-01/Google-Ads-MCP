@@ -223,6 +223,8 @@ def page(tab: str, user: str = Depends(current_user)):
         "days",
         "campaign_days",
         "product_days",
+        "meta_tree",
+        "google_tree",
     }:
         raise HTTPException(404, "No such tab")
     payload = store().get_json(f"pages/{tab}.json")

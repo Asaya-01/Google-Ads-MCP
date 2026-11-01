@@ -39,6 +39,50 @@
     return `${year}-11-${String(thu + 1).padStart(2, "0")}`;
   }
 
+
+  /* Performance and Awareness as two separate views of the same days. A view
+     points each headline field at its split counterpart, so everything built on
+     the engine (tiles, tables, charts, comparisons) reads one kind of campaign
+     and nothing else: Performance is every campaign not named "awareness",
+     Awareness is the ones that are. Fields with no such split (new vs repeat,
+     and the affiliate and CRM spends for Awareness) say so instead of showing a
+     number that belongs to something else. */
+  const GK = ["ic", "gk_converted", "gk_address", "gk_payment"];
+  const MODES = {
+    perf: {
+      alias: Object.assign(
+        { sessions: "perf_sessions", atc: "perf_atc", orders: "perf_orders", gmv: "perf_gmv",
+          meta_spend: "meta_perf_spend", google_spend: "google_perf_spend", spend: "perf_spend", all_spend: "perf_all_spend" },
+        ...GK.map((k) => ({ [k]: "perf_" + k }))),
+      blank: { new_orders: 1, repeat_orders: 1, new_gmv: 1, repeat_gmv: 1 },
+      why: "not split by campaign type",
+    },
+    aw: {
+      alias: Object.assign(
+        { sessions: "awareness_sessions", perf_sessions: "awareness_sessions", atc: "awareness_atc", perf_atc: "awareness_atc",
+          orders: "awareness_orders", gmv: "awareness_gmv", meta_spend: "meta_aw_spend", google_spend: "google_aw_spend",
+          spend: "aw_spend", perf_spend: "aw_spend", all_spend: "aw_spend", meta_perf_spend: "meta_aw_spend",
+          meta_perf_value: "meta_aw_value", google_perf_spend: "google_aw_spend", google_perf_value: "google_aw_value" },
+        ...GK.map((k) => ({ [k]: "awareness_" + k }))),
+      blank: { new_orders: 1, repeat_orders: 1, new_gmv: 1, repeat_gmv: 1, affiliate_spend: 1, affiliate_revenue: 1, crm_flow_spend: 1,
+        crm_flow_revenue: 1, crm_broadcast_spend: 1, crm_broadcast_revenue: 1, crm_spend: 1, crm_revenue: 1, other_spend: 1, perf_all_spend: 1 },
+      why: "not an awareness channel, or not split by campaign type",
+    },
+  };
+  function applyMode(D, mode) {
+    const m = MODES[mode];
+    if (!m) return D; // "all": the data as it is
+    const n = D.dates.length, values = {}, na = {};
+    const reasons = D.reasons.concat([m.why]), why = reasons.length - 1;
+    for (const k of D.fields) {
+      if (m.blank[k]) { values[k] = new Array(n).fill(null); na[k] = { "*": why }; continue; }
+      const src = m.alias[k] || k;
+      values[k] = D.values[src] || new Array(n).fill(null);
+      na[k] = D.na[src] || {};
+    }
+    return { ...D, values, na, reasons, mode };
+  }
+
   function createEngine(D) {
     const dates = D.dates, FIELDS = D.fields, N = dates.length;
     const at = new Map(dates.map((d, i) => [d, i]));
@@ -79,7 +123,8 @@
           const v = i === undefined ? null : D.values[k][i];
           if (v == null) {
             if (miss === null) {
-              const idx = i === undefined ? undefined : (D.na[k] || {})[d];
+              const nk = D.na[k] || {};
+              const idx = i === undefined ? undefined : nk[d] !== undefined ? nk[d] : nk["*"];
               miss = idx === undefined ? (i === undefined ? `no data for ${d}` : `not available for ${d}`) : `${D.reasons[idx]} (${d})`;
             }
           } else sum += v;
@@ -224,6 +269,6 @@
     };
   }
 
-  root.createRangeEngine = createEngine;
-  if (typeof module !== "undefined" && module.exports) module.exports = createEngine;
+  root.createRangeEngine = (D, mode) => createEngine(applyMode(D, mode));
+  if (typeof module !== "undefined" && module.exports) module.exports = (D, mode) => createEngine(applyMode(D, mode));
 })(typeof window !== "undefined" ? window : globalThis);

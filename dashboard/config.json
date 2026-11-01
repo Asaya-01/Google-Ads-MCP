@@ -123,6 +123,8 @@
   "meta": {
     "graph_api_version": "v24.0",
     "lookback_days": 7,
+    "ad_history_days": 90,
+    "ad_backfill_days_per_run": 21,
     "accounts": {
       "act_666565859450360": "Asaya Sales",
       "act_1040064540569018": "Asaya Top Funnel"
@@ -135,6 +137,7 @@
     "account_id": "6548153452",
     "login_customer_id": "2013716241",
     "api_version": "v23",
+    "tree_days": 90,
     "client_id_secret": "google-ads-client-id",
     "client_secret_secret": "google-ads-client-secret",
     "refresh_token_secret": "google-ads-refresh-token",

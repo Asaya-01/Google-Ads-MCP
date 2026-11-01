@@ -60,3 +60,18 @@
 .rg-with > strong { font-size: 12px; color: var(--ink-2); text-transform: uppercase; letter-spacing: .05em; }
 .rg-pair { display: grid; gap: 6px; font-size: 13px; margin: 2px 0 12px; }
 .rg-pair .rg-k { display: inline-block; min-width: 132px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+
+.rg-modebar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 4px; }
+.rg-mode button { font-weight: 600; }
+.rg-modenote { font-size: 12px; color: var(--ink-2); max-width: 70ch; }
+
+table.tree tr[data-k] { cursor: pointer; }
+table.tree tr[data-k]:hover td { background: color-mix(in srgb, var(--accent-wash) 70%, transparent); }
+table.tree tr.tr-l1 td.text { padding-left: 30px; }
+table.tree tr.tr-l2 td.text { padding-left: 54px; }
+table.tree tr.tr-l1 td, table.tree tr.tr-l2 td { font-size: 12.5px; background: color-mix(in srgb, var(--accent-wash) 25%, transparent); }
+table.tree tr.tr-l0.open td { font-weight: 600; }
+table.tree tr.tr-note td { font-size: 12px; color: var(--muted); font-style: italic; background: transparent; padding-left: 30px; }
+table.tree .tw { display: inline-block; width: 16px; color: var(--accent); }
+table.tree .tsub { margin-left: 16px; }
+table.tree td.text { max-width: 460px; white-space: normal; }
