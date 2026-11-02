@@ -154,22 +154,40 @@ function rgCal(y, m) { // m: 0-11
     const s = `${y}-${String(m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const off = s < e.first || s > e.last;
     const ph = off ? "" : e.phaseOf(s);
-    const cls = ["rg-day", s === lo || s === hi ? "edge" : "", lo && hi && s > lo && s < hi ? "mid" : "", off ? "off" : "", ph === "sale" ? "sale" : ph === "mixed" ? "mixed" : ""].join(" ");
+    const pv = d.preview, inPrev = pv && s >= pv[0] && s <= pv[1];
+    const cls = ["rg-day", s === lo || s === hi ? "edge" : "", lo && hi && s > lo && s < hi ? "mid" : "", off ? "off" : "", ph === "sale" ? "sale" : ph === "mixed" ? "mixed" : "", inPrev ? "prev" : ""].join(" ");
     cells += `<button type="button" class="${cls}" data-day="${s}" ${off ? "disabled" : ""} aria-label="${esc(rgFmtDay(s, true))}${ph === "sale" ? ", sale day" : ph === "mixed" ? ", " + esc(e.noteOf(s) || "sale going live or ending") : ""}" title="${ph === "mixed" ? esc(e.noteOf(s) || "") : ""}">${day}</button>`;
   }
   return `<div class="rg-month"><div class="rg-mname">${rgMonthName(y, m)}</div><div class="rg-dow">${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((x) => `<span>${x}</span>`).join("")}</div><div class="rg-grid">${cells}</div></div>`;
+}
+
+// what the picked dates contain: how many BAU, sale and transition days
+function rgSelSummary(d) {
+  if (!d.from) return `<div class="rg-selsum na">Pick a start date and an end date.</div>`;
+  const e = RG.eng, a = d.to && d.to < d.from ? d.to : d.from, b = d.to && d.to < d.from ? d.from : d.to || d.from;
+  const days = e.rangeOf(a, b), n = {};
+  for (const x of days) { const p = e.phaseOf(x) || "none"; n[p] = (n[p] || 0) + 1; }
+  const part = (k, l, cls) => (n[k] ? `<span class="rg-chipcount ${cls}"><b>${n[k]}</b> ${l}</span>` : "");
+  return `<div class="rg-selsum"><strong>${esc(rgSpan(a, b))}</strong> · ${days.length} day${days.length === 1 ? "" : "s"}
+    ${part("bau", "BAU", "bau")}${part("sale", "sale", "sale")}${part("mixed", "transition", "mixed")}${part("none", "outside the data", "none")}</div>`;
 }
 function rgPopover() {
   const e = RG.eng, d = RG.draft, kind = RG.pop;
   let left = "";
   if (kind === "main") {
-    let last = -1;
-    left = e.presets().map((p) => {
-      const sep = last !== -1 && p.group !== last ? '<hr>' : "";
-      last = p.group;
+    const ps = e.presets();
+    const btn = (p) => {
       const on = d.from === p.from && d.to === p.to;
-      return `${sep}<button type="button" class="rg-pre ${on ? "on" : ""}" data-pre="${esc(p.id)}">${esc(p.label)}</button>`;
-    }).join("") + '<hr><button type="button" class="rg-pre ' + (RG.draft.custom ? "on" : "") + '" data-pre="custom">Custom range</button>';
+      return `<button type="button" class="rg-pre ${p.kind} ${on ? "on" : ""}" data-pre="${esc(p.id)}"><span class="l">${esc(p.label)}</span>${p.sub ? `<small>${esc(p.sub)}</small>` : ""}</button>`;
+    };
+    const sec = (title, kindName, note) => {
+      const items = ps.filter((p) => p.kind === kindName);
+      return items.length ? `<div class="rg-sec ${kindName}"><span>${title}</span>${note ? `<small>${note}</small>` : ""}</div>${items.map(btn).join("")}` : "";
+    };
+    left = sec("Quick ranges", "quick") +
+      sec("Sales", "sale", "found from hourly orders") +
+      sec("BAU stretches", "bau", "between sales") +
+      `<div class="rg-sec custom"><span>Custom range</span></div><button type="button" class="rg-pre custom ${d.custom ? "on" : ""}" data-pre="custom"><span class="l">Pick your own dates</span><small>type them, or click two days on the calendar</small></button>`;
   } else {
     left = RG_CMP.map(([k, l, hint]) => {
       let shown = hint;
@@ -188,7 +206,8 @@ function rgPopover() {
       <div class="rg-inputs"><input type="date" id="rg-in-from" value="${d.from || ""}" min="${e.first}" max="${e.last}" aria-label="Start date"><span aria-hidden="true">→</span><input type="date" id="rg-in-to" value="${d.to || ""}" min="${e.first}" max="${e.last}" aria-label="End date"></div>
       <div class="rg-nav"><button type="button" id="rg-prev" aria-label="Earlier months">‹</button><button type="button" id="rg-next" aria-label="Later months">›</button></div>
       <div class="rg-cals">${rgCal(vy, vm)}${rgCal(ny, nm)}</div>
-      <p class="rg-hint"><i class="rg-dot"></i> sale day · <i class="rg-dot half"></i> sale went live or ended that day · data runs ${esc(rgFmtDay(e.first, true))} to ${esc(rgFmtDay(e.last, true))}</p>`
+      ${rgSelSummary(d)}
+      <p class="rg-hint rg-legend"><span><i class="rg-sw sale"></i>sale day</span><span><i class="rg-sw mixed"></i>sale went live or ended</span><span><i class="rg-sw"></i>BAU day</span><span class="rg-span">data runs ${esc(rgFmtDay(e.first, true))} to ${esc(rgFmtDay(e.last, true))}</span></p>`
     : `<p class="rg-hint pad">${kind === "cmp" && d.mode === "none" ? "Numbers will be shown without a comparison." : "Sale days are only compared with sale days, and BAU days with BAU days, whichever way you compare."}</p>`;
   return `<div class="rg-pop" role="dialog" aria-label="${kind === "main" ? "Choose dates" : "Choose comparison"}">
       <div class="rg-left">${left}</div>
@@ -268,9 +287,18 @@ function rgBind() {
     if (t.closest("#rg-apply")) return rgApply();
   });
   pop.addEventListener("mouseover", (ev) => {
+    const pre = ev.target.closest("[data-pre]");
+    if (pre) {
+      const p = pre.dataset.pre === "custom" ? null : e.presets().find((x) => x.id === pre.dataset.pre);
+      const want = p ? [p.from, p.to] : null;
+      if (JSON.stringify(want) !== JSON.stringify(d.preview || null)) { d.preview = want; rgPaintCals(); }
+      return;
+    }
     const day = ev.target.closest("[data-day]");
     if (day && d.from && !d.to && d.hover !== day.dataset.day) { d.hover = day.dataset.day; rgPopRepaint(true); }
   });
+  const leftPane = pop.querySelector(".rg-left");
+  if (leftPane) leftPane.addEventListener("mouseleave", () => { if (d.preview) { d.preview = null; rgPaintCals(); } });
   for (const id of ["rg-in-from", "rg-in-to"]) {
     const el = pop.querySelector("#" + id);
     if (el) el.addEventListener("change", () => {
@@ -285,6 +313,13 @@ function rgBind() {
   }
 }
 function rgPopRepaint() { rgRepaint(); }
+// repaint just the two months (hovering a preset previews it on the calendar without rebuilding the popover)
+function rgPaintCals() {
+  const el = document.querySelector("#rg-bar .rg-cals");
+  if (!el || !RG.view) return;
+  const [vy, vm] = RG.view, ny = vm === 11 ? vy + 1 : vy, nm = (vm + 1) % 12;
+  el.innerHTML = rgCal(vy, vm) + rgCal(ny, nm);
+}
 document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && RG.pop) rgClose(); });
 document.addEventListener("click", (ev) => { if (RG.pop && !ev.target.closest("#rg-bar")) rgClose(); });
 

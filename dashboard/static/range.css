@@ -75,3 +75,45 @@ table.tree tr.tr-note td { font-size: 12px; color: var(--muted); font-style: ita
 table.tree .tw { display: inline-block; width: 16px; color: var(--accent); }
 table.tree .tsub { margin-left: 16px; }
 table.tree td.text { max-width: 460px; white-space: normal; }
+
+/* the redesigned date panel */
+.rg-pop { grid-template-columns: 290px minmax(0, 1fr); width: min(900px, calc(100vw - 32px)); }
+.rg-left { padding: 6px 8px 10px; gap: 2px; }
+.rg-sec { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 12px 6px 4px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+.rg-sec:first-child { margin-top: 4px; padding-top: 0; border-top: 0; }
+.rg-sec small { font-size: 10.5px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.rg-sec.sale > span::before, .rg-sec.bau > span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--series-2); }
+.rg-sec.bau > span::before { background: var(--series-1); }
+.rg-pre .l { font-weight: 600; }
+.rg-pre.quick .l { font-weight: 500; }
+.rg-pre.sale, .rg-pre.bau { border-left: 3px solid var(--series-2); padding-left: 9px; border-radius: 4px 8px 8px 4px; }
+.rg-pre.bau { border-left-color: var(--series-1); }
+.rg-pre.sale:hover { background: color-mix(in srgb, var(--series-2) 14%, transparent); }
+.rg-pre.bau:hover { background: color-mix(in srgb, var(--series-1) 12%, transparent); }
+.rg-pre.sale.on { background: color-mix(in srgb, var(--series-2) 18%, transparent); box-shadow: none; }
+.rg-pre.bau.on { background: color-mix(in srgb, var(--series-1) 14%, transparent); box-shadow: none; }
+.rg-pre.custom { border-left: 3px dashed var(--line); padding-left: 9px; border-radius: 4px 8px 8px 4px; }
+.rg-pre.custom.on { border-left-color: var(--accent); }
+.rg-day.sale { background: color-mix(in srgb, var(--series-2) 15%, transparent); }
+.rg-day.mixed { background: linear-gradient(90deg, transparent 50%, color-mix(in srgb, var(--series-2) 15%, transparent) 50%); }
+.rg-day.prev { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent); border-radius: 6px; }
+.rg-day.mid { background: var(--accent-wash); }
+.rg-day.edge, .rg-day.edge.sale, .rg-day.edge.mixed { background: var(--accent); }
+.rg-day.sale::after, .rg-day.mixed::after { display: none; }
+.rg-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; }
+.rg-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.rg-legend .rg-span { margin-left: auto; color: var(--muted); }
+.rg-sw { display: inline-block; width: 14px; height: 14px; border-radius: 4px; background: transparent; border: 1px solid var(--line); }
+.rg-sw.sale { background: color-mix(in srgb, var(--series-2) 25%, transparent); border-color: transparent; }
+.rg-sw.mixed { background: linear-gradient(90deg, transparent 50%, color-mix(in srgb, var(--series-2) 25%, transparent) 50%); }
+@media (max-width: 720px) {
+  .rg-pop { grid-template-columns: 1fr; }
+  .rg-left .rg-sec { flex: none; }
+}
+
+.rg-selsum { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--accent-wash) 55%, transparent); }
+.rg-selsum.na { color: var(--muted); }
+.rg-chipcount { display: inline-flex; gap: 4px; align-items: baseline; padding: 2px 9px; border-radius: 999px; font-size: 12px; background: var(--surface); border: 1px solid var(--line); }
+.rg-chipcount.sale { background: color-mix(in srgb, var(--series-2) 16%, var(--surface)); border-color: transparent; }
+.rg-chipcount.bau { background: color-mix(in srgb, var(--series-1) 12%, var(--surface)); border-color: transparent; }
+.rg-chipcount.mixed { background: linear-gradient(90deg, color-mix(in srgb, var(--series-1) 12%, var(--surface)) 45%, color-mix(in srgb, var(--series-2) 16%, var(--surface)) 55%); border-color: transparent; }

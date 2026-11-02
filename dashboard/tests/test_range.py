@@ -121,17 +121,29 @@ def test_dates_outside_the_data_are_flagged_not_invented():
 
 
 @node
-def test_presets_include_black_friday_and_recent_sale_runs():
+def test_presets_are_quick_ranges_sales_and_bau_stretches():
     sale = [f"2025-11-{d:02d}" for d in range(5, 10)]
+    page = days_page(n=90, start=dt.date(2025, 10, 1), sale=sale)
+    page["events"] = [
+        {
+            "start": "2025-11-04T19:00",
+            "end": "2025-11-09T24:00",
+            "hours": 125,
+            "uplift": 3.1,
+        }
+    ]
     out = run(
-        days_page(n=90, start=dt.date(2025, 10, 1), sale=sale),
-        "return E.presets().map(p=>[p.id,p.from,p.to]);",
+        page,
+        "return E.presets().map(p=>({id:p.id,kind:p.kind,from:p.from,to:p.to,sub:p.sub||null}));",
     )
-    ids = [p[0] for p in out]
-    assert "bf" in ids and "cm" in ids
-    bf = next(p for p in out if p[0] == "bf")
-    assert bf[1] == "2025-11-28"  # Black Friday 2025
-    assert any(i.startswith("sale:") for i in ids)
+    ids = [p["id"] for p in out]
+    assert "bf" not in ids and "cm" not in ids  # Black Friday is not wanted
+    assert {"quick", "sale", "bau"} <= {p["kind"] for p in out}
+    sales = [p for p in out if p["kind"] == "sale"]
+    assert sales[0]["from"] == "2025-11-04" and sales[0]["to"] == "2025-11-09"
+    assert "3.1" in sales[0]["sub"] and "full sale days" in sales[0]["sub"]
+    bau = [p for p in out if p["kind"] == "bau"]
+    assert bau and all("BAU days" in p["sub"] for p in bau)
 
 
 @node

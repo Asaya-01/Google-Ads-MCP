@@ -32,14 +32,6 @@
   const ratio = (a, b) => (a == null || b == null || b === 0 ? null : a / b);
   const pctChange = (c, p) => (c == null || p == null || p === 0 ? null : (c - p) / p);
 
-  // Thanksgiving is the 4th Thursday of November; Black Friday follows it.
-  function blackFriday(year) {
-    const first = new Date(Date.UTC(year, 10, 1)).getUTCDay(); // 0 = Sunday
-    const thu = 1 + ((4 - first + 7) % 7) + 21;
-    return `${year}-11-${String(thu + 1).padStart(2, "0")}`;
-  }
-
-
   /* Performance and Awareness as two separate views of the same days. A view
      points each headline field at its split counterpart, so everything built on
      the engine (tiles, tables, charts, comparisons) reads one kind of campaign
@@ -238,26 +230,32 @@
       const y = +L.slice(0, 4), m = +L.slice(5, 7);
       const qStart = `${y}-${String(Math.floor((m - 1) / 3) * 3 + 1).padStart(2, "0")}-01`;
       const lqEnd = addDays(qStart, -1), lqStart = `${lqEnd.slice(0, 4)}-${String(Math.floor((+lqEnd.slice(5, 7) - 1) / 3) * 3 + 1).padStart(2, "0")}-01`;
-      out.push({ id: "yesterday", label: "Yesterday (D-1)", from: L, to: L, group: 0 });
-      for (const n of [7, 14, 30, 90]) out.push({ id: "last" + n, label: `Last ${n} days`, from: addDays(L, -(n - 1)), to: L, group: 1 });
-      out.push({ id: "mtd", label: "Month to date", from: mtd, to: L, group: 2 });
-      out.push({ id: "lastmonth", label: "Last month", from: lmStart, to: lmEnd, group: 2 });
-      out.push({ id: "qtd", label: "Quarter to date", from: qStart, to: L, group: 2 });
-      out.push({ id: "lastq", label: "Last quarter", from: lqStart, to: lqEnd, group: 2 });
-      // Black Friday and Cyber Monday: the latest ones that are already in the data
-      for (const yr of [y, y - 1]) {
-        const bf = blackFriday(yr), cm = addDays(bf, 3);
-        if (bf >= first && bf <= L) { out.push({ id: "bf", label: "Black Friday", from: bf, to: bf, group: 3 }); }
-        if (cm >= first && cm <= L) { out.push({ id: "cm", label: "Cyber Monday", from: cm, to: cm, group: 3 }); }
-        if (out.some((p) => p.id === "bf" || p.id === "cm")) break;
-      }
+      const quick = (id, label, from, to) => out.push({ id, label, from, to, kind: "quick" });
+      quick("yesterday", "Yesterday (D-1)", L, L);
+      for (const n of [7, 14, 30, 90]) quick("last" + n, `Last ${n} days`, addDays(L, -(n - 1)), L);
+      quick("mtd", "Month to date", mtd, L);
+      quick("lastmonth", "Last month", lmStart, lmEnd);
+      quick("qtd", "Quarter to date", qStart, L);
+      quick("lastq", "Last quarter", lqStart, lqEnd);
       const lab = (s) => new Date(s + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
-      // sales: from the hour-by-hour detection when there is one (a sale goes live
-      // in the evening, so it runs from that day to the day it ended)
-      const spans = (D.events && D.events.length ? D.events : []).slice(-4).reverse().map((e) => [e.start.slice(0, 10), e.end.slice(0, 10)]);
-      const runs = spans.length ? spans : sales().map((r) => [r[0], r[r.length - 1]]);
-      for (const [a, b] of runs) {
-        out.push({ id: "sale:" + a, label: `Sale · ${a === b ? lab(a) : lab(a) + " – " + lab(b)}`, from: a, to: b, group: 4 });
+      const span2 = (a, b) => (a === b ? lab(a) : lab(a) + " – " + lab(b));
+      const hr = (iso) => { const h = +iso.slice(11, 13) % 24; return h === 0 ? "midnight" : `${h % 12 || 12} ${h < 12 ? "am" : "pm"}`; }; // "2026-10-22T19:00" -> "7 pm"
+      const count = (a, b, ph) => rangeOf(a, b).filter((d) => phaseOf(d) === ph).length;
+      // sales: found from the hour-by-hour orders, newest first. A sale goes live in the evening,
+      // so it runs from that day to the day it ended.
+      const events = (D.events || []).slice().reverse().slice(0, 8);
+      if (events.length) {
+        for (const e of events) {
+          const a = e.start.slice(0, 10), b = e.end.slice(0, 10);
+          out.push({ id: "sale:" + a, kind: "sale", label: span2(a, b), from: a, to: b,
+            sub: `${hr(e.start)} → ${hr(e.end)} · ${count(a, b, "sale")} full sale days · ${e.uplift}× normal orders` });
+        }
+      } else {
+        for (const r of sales().slice(0, 8)) out.push({ id: "sale:" + r[0], kind: "sale", label: span2(r[0], r[r.length - 1]), from: r[0], to: r[r.length - 1], sub: `${r.length} sale days` });
+      }
+      // BAU: the stretches between sales that are long enough to read
+      for (const r of runsOf("bau").filter((r) => r.length >= 3).slice(-6).reverse()) {
+        out.push({ id: "bau:" + r[0], kind: "bau", label: span2(r[0], r[r.length - 1]), from: r[0], to: r[r.length - 1], sub: `${r.length} BAU days` });
       }
       return out.map((p) => ({ ...p, from: p.from < first ? first : p.from }));
     }
