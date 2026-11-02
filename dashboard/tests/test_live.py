@@ -191,9 +191,9 @@ def ad_rows(today_spend, y_spend):
 
     return [
         r("2026-10-31", "WOA_Sales_BOF", today_spend, today_spend * 3),
-        r("2026-10-31", "WOA_Awareness_Reach", 500, 0),
+        r("2026-10-31", "WOA_Awareness_TOF_Sales_Skincare_ATC_UAS", 500, 0),
         r("2026-10-30", "WOA_Sales_BOF", y_spend, y_spend * 2),
-        r("2026-10-30", "WOA_Awareness_Reach", 800, 0),
+        r("2026-10-30", "WOA_Awareness_TOF_Sales_Skincare_ATC_UAS", 800, 0),
     ]
 
 
@@ -206,6 +206,24 @@ def test_awareness_is_left_out_of_roas_but_counted_in_spend():
     assert m["spend_pct_of_yesterday"] == pytest.approx(1500 / 3800)
     aw = next(c for c in m["campaigns"] if "Awareness" in c["campaign"])
     assert aw["awareness"] is True and aw["roas"] is None
+
+
+def test_reach_is_social_spend_in_neither_view():
+    rows = ad_rows(1000, 3000) + [
+        {
+            "date": "2026-10-31",
+            "campaign_name": "WOA_Awareness_TOF_Reach",
+            "spend": 200,
+            "purchase_value": 0,
+            "purchases": 0,
+            "clicks": 10,
+        }
+    ]
+    m = live.build(inputs(meta_rows=rows), CFG, NOW)["meta"]
+    assert m["today"]["spend"] == 1700 and m["today"]["perf_spend"] == 1000
+    reach = next(c for c in m["campaigns"] if "Reach" in c["campaign"])
+    assert reach["kind"] == "social" and reach["awareness"] is False
+    assert reach["roas"] is None
 
 
 def test_returns_cards_say_what_is_missing_instead_of_zero():

@@ -77,7 +77,7 @@ def session_kind(
     known_google_ids: set[str],
     cfg: dict,
 ) -> tuple[str, str | None]:
-    """Classify a session as "awareness" or "perf".
+    """Classify a session as "awareness", "social" or "perf".
 
     Awareness: the UTM campaign name contains "awareness" (any case, any
     source), or a Google campaign ID whose campaign name contains it.
@@ -87,6 +87,8 @@ def session_kind(
     """
     source = (utm_source or "").strip().lower()
     campaign = (utm_campaign or "").strip()
+    if is_social_name(campaign, cfg):
+        return "social", None
     if is_awareness_name(campaign, cfg):
         return "awareness", None
     if source in cfg["google_sources"] and _NUMERIC_ID.match(campaign):
@@ -110,9 +112,28 @@ def google_awareness_ids(
     return aware, known
 
 
+def is_social_name(campaign_name: str, cfg: dict) -> bool:
+    """True for the Reach campaigns, which are the social-media team's spend:
+    neither Performance nor Awareness. They count in total spend only."""
+    rx = cfg.get("social_name_regex")
+    return bool(rx and _rx(rx).search(campaign_name or ""))
+
+
 def is_awareness_name(campaign_name: str, cfg: dict) -> bool:
-    """True when a campaign name marks it as Awareness (Meta or Google)."""
+    """True when a campaign name marks it as Awareness (Meta or Google). The
+    Reach campaigns are named Awareness too but are social spend, not it."""
+    if is_social_name(campaign_name, cfg):
+        return False
     return bool(_rx(cfg["awareness_name_regex"]).search(campaign_name or ""))
+
+
+def campaign_kind(campaign_name: str, cfg: dict) -> str:
+    """ "perf", "awareness" or "social" for a campaign name."""
+    if is_social_name(campaign_name, cfg):
+        return "social"
+    if is_awareness_name(campaign_name, cfg):
+        return "awareness"
+    return "perf"
 
 
 # ---------------------------------------------------------------- phases

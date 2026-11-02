@@ -150,6 +150,9 @@ A toggle at the top of Overview, Daily, Marketing, D-1 and Today switches
 between **Performance**, **Awareness** and **All campaigns** (default
 Performance). Awareness is a campaign whose name contains "awareness" (Meta,
 or Google by campaign id, as everywhere else); Performance is everything else.
+The Reach campaigns (`sessions.social_name_regex`, e.g.
+`WOA_Awareness_TOF_Reach`) are the social team's spend: they count in total
+spend and the All view, and are kept out of both Performance and Awareness.
 Each view reads only its own data: spend, sessions, add-to-carts, GoKwik
 checkouts and the orders and GMV credited to it by UTM. Fields that cannot be
 split (new vs repeat; affiliate and CRM for Awareness) say so instead of
@@ -158,13 +161,46 @@ so in the Awareness view it shows spend and delivery only. Awareness is judged
 on impressions, CPM, CTR and cost of reach, so the Awareness tables lead with
 those and not ROAS.
 
-On Marketing, every Meta and Google campaign opens: Meta campaign > ad set > ad;
-Google campaign > ad group > ad (Performance Max has asset groups and nothing
-below them, because Google reports no spend per asset). Campaign rows come from
-every day we have; what is below comes from `meta_tree` and `google_tree`,
-which cover the last 90 days (`meta.ad_history_days`, `google_ads.tree_days`).
-Meta's older ad-level days are filled in 21 days per refresh, newest first.
-A range that reaches before the detail says how many days it covers.
+## Every tab, top down: overview › channel › stage › product › campaign
+
+Overview and Marketing read the same way: the headline tiles for the picked
+dates against the comparison, then **Sales by channel** (Shopify orders and GMV
+by the UTM of the converting visit, organic and direct included), then
+**Spend and return** as one table where every row opens the level below:
+
+- **Meta** › **TOF / MOF / BOF / Catalog** › **product** › campaign › ad set › ad
+- **Google Ads** › **Brand Search / Brand PMax / Non-brand PMax** (› product) /
+  Demand Gen / YouTube › campaign › ad group or asset group › ad
+- **Affiliate** and **CRM** (› flows / broadcasts), from the spend sheets
+- a last row with Shopify GMV over all spend
+
+In the Awareness view Meta opens by goal (ATC, LPV, Amazon) instead of stage.
+A "Campaigns" switch drops the stage and product levels. Marketing adds a
+**product × stage** grid for Meta; a click on a cell opens those campaigns,
+ad sets and ads in the table.
+
+How names are read (`app/taxonomy.py`, codes and words in `config.json`
+`taxonomy`):
+
+- **Stage** comes from the ad name first, the same as the daily Meta report:
+  `MOF_…` and `BOF_…` ads are MOF and BOF even inside a TOF-named offer
+  campaign (they run during a sale). "Catalog", "Catalogue" or "AllFunnels"
+  anywhere wins. Otherwise TOF / MOF / BOF in the campaign name, else TOF.
+- **Product** comes from the ad name, then the ad set, then the campaign: UAS,
+  ITB, ASS, HOT, EEC, KNE, SLSS, Spot Gel, Peel, GFS, Scrub, and the sets as
+  their own rows (Target & Fade Duo, Even Skin Duo, Even-tone Body Trio, Head
+  to Toe Set). An ad naming two products (`UAS+ITB`) counts half to each. An
+  ad with no product is a site-wide offer ad (B2@749, Buy2@849, "Offer"), the
+  catalog, or "Unmapped", so the rows always add up. On the last 90 days of
+  real ad names nothing was Unmapped.
+- A new product code is a line in `taxonomy.products`, not a code change.
+
+Campaign rows come from every day we have. Stage and product by ad name, and
+what is below a campaign, come from `meta_tree` and `google_tree`, which cover
+the last 90 days (`meta.ad_history_days`, `google_ads.tree_days`); on older
+days the campaign name decides, and the table says so. Meta's older ad-level
+days are filled in 21 days per refresh, newest first. Performance Max has asset
+groups and nothing below them, because Google reports no spend per asset.
 
 ## Affiliate and CRM spends
 

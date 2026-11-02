@@ -62,6 +62,7 @@ COUNT_FIELDS = [
     "perf_gk_payment",
     "awareness_gk_payment",
     "meta_aw_spend",
+    "meta_social_spend",
     "meta_aw_value",
     "google_aw_spend",
     "google_aw_value",
@@ -271,12 +272,23 @@ class Context:
                     for r in self.session_rows[day]
                     if r["kind"] == "awareness"
                 )
+                # the social team's Reach campaigns: in neither view
+                so_s = sum(
+                    r["sessions"]
+                    for r in self.session_rows[day]
+                    if r["kind"] == "social"
+                )
+                so_a = sum(
+                    r["atc"]
+                    for r in self.session_rows[day]
+                    if r["kind"] == "social"
+                )
                 f.update(
                     sessions=s["totals"]["sessions"],
                     atc=s["totals"]["atc"],
                     awareness_sessions=aw_s,
-                    perf_sessions=s["totals"]["sessions"] - aw_s,
-                    perf_atc=s["totals"]["atc"] - aw_a,
+                    perf_sessions=s["totals"]["sessions"] - aw_s - so_s,
+                    perf_atc=s["totals"]["atc"] - aw_a - so_a,
                 )
             else:
                 for k in (
@@ -367,13 +379,16 @@ class Context:
                         why
                     )
                 else:
-                    sales = [
-                        r
-                        for r in rows
-                        if not rules.is_awareness_name(
+                    kinds = [
+                        rules.campaign_kind(
                             r["campaign_name"], self.cfg["sessions"]
                         )
+                        for r in rows
                     ]
+                    sales = [r for r, k in zip(rows, kinds) if k == "perf"]
+                    f["meta_social_spend"] = sum(
+                        r["spend"] for r, k in zip(rows, kinds) if k == "social"
+                    )
                     f["meta_perf_spend"] = sum(r["spend"] for r in sales)
                     f["meta_perf_value"] = sum(
                         r["purchase_value"] for r in sales
@@ -411,12 +426,16 @@ class Context:
 
         orders = dd(lambda: {"perf": [0, 0.0], "awareness": [0, 0.0]})
         for r in self.order_rows:
+            if r["kind"] == "social":
+                continue
             k = "awareness" if r["kind"] == "awareness" else "perf"
             o = orders[r["date"]][k]
             o[0] += r.get("orders") or 0
             o[1] += r.get("gmv") or 0.0
         gk = dd(lambda: {"perf": [0, 0, 0, 0], "awareness": [0, 0, 0, 0]})
         for r in self.funnel_rows:
+            if r["kind"] == "social":
+                continue
             k = "awareness" if r["kind"] == "awareness" else "perf"
             g = gk[r["date"]][k]
             g[0] += r.get("checkout_started") or 0
@@ -498,7 +517,8 @@ class Context:
                 )
             )
             if tot is not None and perf is not None and aw_val is not None:
-                f[f"{plat}_aw_spend"] = tot - perf
+                social = f.get(f"{plat}_social_spend") or 0.0
+                f[f"{plat}_aw_spend"] = tot - perf - social
                 f[f"{plat}_aw_value"] = aw_val
             else:
                 f[f"{plat}_aw_spend"] = f[f"{plat}_aw_value"] = None

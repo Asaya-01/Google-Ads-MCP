@@ -271,6 +271,7 @@ def test_every_phase1_tab_builds_and_serialises(built_without_meta):
         "product_days",
         "meta_tree",
         "google_tree",
+        "channel_days",
     }
     for page in pages.values():
         json.dumps(page, default=str)
@@ -587,7 +588,14 @@ def _tree_ctx(built):
             ad("s1", "a1", "Video A", 100.0),
             ad("s1", "a2", "Video B", 50.0),
             ad("s2", "a3", "Static", 70.0),
-            ad("s9", "a9", "Reach", 30.0, camp="WOA_Awareness_Reach", cid="c2"),
+            ad(
+                "s9",
+                "a9",
+                "ATC_UAS",
+                30.0,
+                camp="WOA_Awareness_ATC_UAS",
+                cid="c2",
+            ),
         ]
     }
     data["google_tree"] = [
@@ -658,3 +666,31 @@ def test_google_tree_has_asset_groups_without_ads_below_them(
     assert kinds == {"Brand": "ad_group", "All_Products": "asset_group"}
     assert len(t["ads"]) == 1 and t["ads"][0]["name"].startswith("Responsive")
     assert len(t["group_rows"]) == 2 and len(t["ad_rows"]) == 1
+
+
+def test_tree_pages_carry_stage_product_and_kind(built_without_meta):
+    from app.pages import range_data
+
+    ctx = _tree_ctx(built_without_meta)
+    t = range_data.meta_tree(ctx)
+    for a in t["ads"]:
+        assert a["stage"] in ("TOF", "MOF", "BOF", "Catalog")
+        assert a["prod"]
+    aw = next(c for c in t["campaigns"] if c["id"] == "c2")
+    assert aw["kind"] == "awareness" and aw["goal"] == "Add to cart (ATC)"
+    g = range_data.google_tree(ctx)
+    assert all(c["group"] for c in g["campaigns"])
+    cd = range_data.campaigns(ctx)
+    assert cd["labels"]["UAS"].startswith("UAS")
+    assert all("kind" in n and "stage" in n for n in cd["meta"]["names"])
+
+
+def test_channel_days_add_up_to_the_sessions(built_without_meta):
+    from app.pages import range_data
+
+    _, ctx = built_without_meta
+    p = range_data.channels(ctx)
+    day = p["session_days"][-1]
+    got = sum(r[3] for r in p["rows"] if r[0] == day)
+    assert got == ctx.data["sessions"][day]["totals"]["sessions"]
+    assert set(p["kinds"]) == {"perf", "awareness", "social"}

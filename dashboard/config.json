@@ -115,6 +115,7 @@
 
   "sessions": {
     "awareness_name_regex": "awareness",
+    "social_name_regex": "(^|_)reach(_|$)",
     "google_sources": ["google", "youtube"],
     "breakdown_limit": 10000,
     "landing_page_limit": 300
@@ -201,5 +202,215 @@
     "model": "claude-opus-5-5",
     "effort": "high",
     "api_key_secret": "anthropic-api-key"
+  },
+  "taxonomy": {
+    "_note": "How campaign and ad names map to funnel stage, product and Google campaign group. See app/taxonomy.py.",
+    "products": [
+      {
+        "code": "UAS",
+        "label": "UAS · Even Tone Underarm Mist",
+        "match": [
+          "UAS"
+        ]
+      },
+      {
+        "code": "ITB",
+        "label": "ITB · Fade Forward Inner Thigh & Bum Roll-On",
+        "match": [
+          "ITB"
+        ]
+      },
+      {
+        "code": "ASS",
+        "label": "ASS · Advanced Spot Targeting Serum",
+        "match": [
+          "ASS"
+        ]
+      },
+      {
+        "code": "HOT",
+        "label": "HOT · Hint of Tint SPF 50",
+        "match": [
+          "HOT"
+        ]
+      },
+      {
+        "code": "EEC",
+        "label": "EEC · Even Evermore Crème",
+        "match": [
+          "EEC"
+        ]
+      },
+      {
+        "code": "KNE",
+        "label": "KNE · Tone Restore Knee-Neck-Elbow Cream",
+        "match": [
+          "KNE"
+        ]
+      },
+      {
+        "code": "SLSS",
+        "label": "SLSS · Spot Light Sunscreen SPF 50",
+        "match": [
+          "SLSS"
+        ]
+      },
+      {
+        "code": "SPOTGEL",
+        "label": "Spot Gel · Advanced Spot Targeting Gel",
+        "match": [
+          "SPOTGEL"
+        ]
+      },
+      {
+        "code": "PEEL",
+        "label": "Peel · Super Fade Regenerative Peel",
+        "match": [
+          "PEEL"
+        ]
+      },
+      {
+        "code": "GFS",
+        "label": "GFS · Glow Forward Radiance Serum",
+        "match": [
+          "GFS"
+        ]
+      },
+      {
+        "code": "SCRUB",
+        "label": "Scrub · Fresh Start Smoothening Scrub",
+        "match": [
+          "SCRUB"
+        ]
+      }
+    ],
+    "sets": [
+      {
+        "code": "TFDUO",
+        "label": "Target & Fade Duo",
+        "contains": [
+          "TARGETANDFADE",
+          "TARGET&FADE",
+          "TARGETFADE",
+          "TFDUO"
+        ]
+      },
+      {
+        "code": "ESDUO",
+        "label": "Even Skin Duo",
+        "contains": [
+          "EVENSKINDUO",
+          "ESDUO"
+        ]
+      },
+      {
+        "code": "TRIO",
+        "label": "Even-tone Body Trio",
+        "contains": [
+          "BODYTRIO",
+          "EVENTONETRIO",
+          "TONETRIO"
+        ]
+      },
+      {
+        "code": "H2T",
+        "label": "Head to Toe Set",
+        "contains": [
+          "HEADTOTOE"
+        ]
+      },
+      {
+        "code": "HPRANGE",
+        "label": "Pigmentation range (several products)",
+        "contains": [
+          "HPRANGE"
+        ]
+      }
+    ],
+    "generic_sets": ["SETS", "ADVSETS", "DUOS", "TRIOS"],
+    "special_labels": {
+      "SETS": "Sets & duos (not named)",
+      "OFFER": "Site-wide offer (no product named)",
+      "CATALOG": "Catalog (all products)",
+      "UNMAPPED": "Unmapped (no product in the name)"
+    },
+    "catalog_contains": [
+      "CATALOG",
+      "CATALOGUE",
+      "ALLFUNNELS"
+    ],
+    "offer_regex": "(?<![A-Z])(?<!NON-)(?<!NON_)OFFER|B\\d@\\d|BUY\\d@|BIRTHDAYSALE",
+    "awareness_goals": [
+      {
+        "label": "Add to cart (ATC)",
+        "tokens": [
+          "ATC"
+        ]
+      },
+      {
+        "label": "Landing page views (LPV)",
+        "tokens": [
+          "LPV"
+        ]
+      },
+      {
+        "label": "Video views",
+        "tokens": [
+          "VV",
+          "THRUPLAY"
+        ]
+      },
+      {
+        "label": "Amazon",
+        "tokens": [
+          "AMAZON"
+        ]
+      }
+    ],
+    "google_groups": [
+      {
+        "label": "Brand Search",
+        "all": [
+          "SEARCH",
+          "BRAND"
+        ]
+      },
+      {
+        "label": "Brand PMax",
+        "all": [
+          "PMAX",
+          "BRAND"
+        ]
+      },
+      {
+        "label": "Non-brand PMax",
+        "all": [
+          "PMAX"
+        ]
+      },
+      {
+        "label": "Demand Gen",
+        "all": [
+          "DEMANDGEN"
+        ]
+      },
+      {
+        "label": "YouTube",
+        "any": [
+          "YT",
+          "YOUTUBE",
+          "VV"
+        ]
+      },
+      {
+        "label": "Non-brand Search",
+        "all": [
+          "SEARCH"
+        ]
+      }
+    ],
+    "google_sku_groups": [
+      "Non-brand PMax"
+    ]
   }
 }

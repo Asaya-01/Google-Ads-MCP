@@ -8,8 +8,44 @@ browser sums whatever days the picker selects.
 
 from __future__ import annotations
 
-from .. import rules
+from .. import rules, taxonomy
 from .common import Context
+
+
+def _meta_campaign(name: str, cfg: dict) -> dict:
+    """Kind, and the stage, goal and products the campaign name alone gives
+    (used for days with no ad-level detail)."""
+    tcfg = cfg["taxonomy"]
+    kind = rules.campaign_kind(name, cfg["sessions"])
+    out = {
+        "kind": kind,
+        "awareness": kind == "awareness",
+        "stage": taxonomy.meta_stage(name, None, tcfg),
+    }
+    out["prod"] = taxonomy.product_of(
+        [name], tcfg, catalog=out["stage"] == "Catalog"
+    )
+    if kind == "awareness":
+        out["goal"] = taxonomy.awareness_goal(name, tcfg)
+    return out
+
+
+def _google_campaign(name: str, aware: bool, cfg: dict) -> dict:
+    tcfg = cfg["taxonomy"]
+    kind = "awareness" if aware else rules.campaign_kind(name, cfg["sessions"])
+    group = taxonomy.google_group(name, tcfg)
+    return {
+        "kind": kind,
+        "awareness": kind == "awareness",
+        "group": group,
+        "prod": (
+            taxonomy.product_of([name], tcfg)
+            if group in tcfg["google_sku_groups"]
+            else []
+        ),
+    }
+
+
 from .products import _mrp
 
 
@@ -37,10 +73,7 @@ def campaigns(ctx: Context) -> dict:
             if key not in index:
                 index[key] = len(names)
                 names.append({"account": key[0], "id": key[1]})
-            names[index[key]].update(
-                name=a[0],
-                awareness=rules.is_awareness_name(a[0], scfg),
-            )
+            names[index[key]].update(name=a[0], **_meta_campaign(a[0], ctx.cfg))
             rows.append(
                 [
                     day,
@@ -76,8 +109,11 @@ def campaigns(ctx: Context) -> dict:
         name = a[0] or ctx.google_names.get(cid) or cid
         g_names[g_index[cid]].update(
             name=name,
-            awareness=(cid in ctx.aware_ids)
-            or rules.is_awareness_name(name, scfg),
+            **_google_campaign(
+                name,
+                cid in ctx.aware_ids or rules.is_awareness_name(name, scfg),
+                ctx.cfg,
+            ),
         )
         g_rows.append(
             [
@@ -95,6 +131,8 @@ def campaigns(ctx: Context) -> dict:
         "as_of": ctx.d1,
         "meta": meta,
         "google": {"names": g_names, "rows": g_rows},
+        "labels": taxonomy.labels(ctx.cfg["taxonomy"]),
+        "google_sku_groups": ctx.cfg["taxonomy"]["google_sku_groups"],
     }
 
 
@@ -156,8 +194,9 @@ def products(ctx: Context) -> dict:
 
 def meta_tree(ctx: Context) -> dict:
     """Campaign > ad set > ad, per day, for the days that have ad-level data
-    (the recent ones, plus the history filled in a few weeks per run)."""
-    scfg = ctx.cfg["sessions"]
+    (the recent ones, plus the history filled in a few weeks per run). Each
+    ad carries its funnel stage and products, read from its own name."""
+    tcfg = ctx.cfg["taxonomy"]
     camps: list[dict] = []
     c_idx: dict[tuple, int] = {}
     sets: list[dict] = []
@@ -182,7 +221,7 @@ def meta_tree(ctx: Context) -> dict:
                 camps.append({"account": ckey[0], "id": ckey[1]})
             camps[c_idx[ckey]].update(
                 name=r["campaign_name"],
-                awareness=rules.is_awareness_name(r["campaign_name"], scfg),
+                **_meta_campaign(r["campaign_name"], ctx.cfg),
             )
             # older caches carry no ad set id: fall back to its name
             skey = (ckey, str(r.get("adset_id") or r.get("adset_name") or ""))
@@ -194,7 +233,18 @@ def meta_tree(ctx: Context) -> dict:
             if akey not in a_idx:
                 a_idx[akey] = len(ads)
                 ads.append({"s": s_idx[skey]})
-            ads[a_idx[akey]]["name"] = r.get("ad_name") or str(r.get("ad_id"))
+            ad = ads[a_idx[akey]]
+            ad["name"] = r.get("ad_name") or str(r.get("ad_id"))
+            if "stage" not in ad:
+                # the ad's own name decides its stage and product
+                ad["stage"] = taxonomy.meta_stage(
+                    r["campaign_name"], r.get("ad_name"), tcfg
+                )
+                ad["prod"] = taxonomy.product_of(
+                    [r.get("ad_name"), r.get("adset_name"), r["campaign_name"]],
+                    tcfg,
+                    catalog=ad["stage"] == "Catalog",
+                )
             rows.append(
                 [
                     day,
@@ -249,8 +299,12 @@ def google_tree(ctx: Context) -> dict:
                 {
                     "id": cid,
                     "name": name,
-                    "awareness": cid in ctx.aware_ids
-                    or rules.is_awareness_name(name, scfg),
+                    **_google_campaign(
+                        name,
+                        cid in ctx.aware_ids
+                        or rules.is_awareness_name(name, scfg),
+                        ctx.cfg,
+                    ),
                 }
             )
         return c_idx[cid]
@@ -304,4 +358,49 @@ def google_tree(ctx: Context) -> dict:
         "ads": ads,
         "group_rows": group_rows,
         "ad_rows": ad_rows,
+    }
+
+
+def channels(ctx: Context) -> dict:
+    """Sessions, add-to-carts, orders and GMV per day by the channel the UTM
+    says they came from (last click, as Shopify records it), split by
+    campaign type so each view can keep its own. Rows are
+    [date, channel, kind, sessions, atc, orders, gmv]."""
+    names: list[str] = []
+    index: dict[str, int] = {}
+    kinds = ["perf", "awareness", "social"]
+    agg: dict[tuple, list] = {}
+
+    def slot(day: str, channel: str, kind: str) -> list:
+        if channel not in index:
+            index[channel] = len(names)
+            names.append(channel)
+        key = (day, index[channel], kinds.index(kind))
+        return agg.setdefault(key, [0, 0, 0, 0.0])
+
+    sessions_days = set()
+    for day, rows in ctx.session_rows.items():
+        sessions_days.add(day)
+        for r in rows:
+            a = slot(day, r["channel"], r["kind"])
+            a[0] += r["sessions"] or 0
+            a[1] += r["atc"] or 0
+    order_days = set()
+    for r in ctx.order_rows:
+        order_days.add(r["date"])
+        a = slot(r["date"], r["channel"], r["kind"])
+        a[2] += r.get("orders") or 0
+        a[3] += r.get("gmv") or 0.0
+    return {
+        "title": "Channel days",
+        "as_of": ctx.d1,
+        "channels": names,
+        "kinds": kinds,
+        "rows": [
+            [d, c, k, a[0], a[1], a[2], round(a[3], 2)]
+            for (d, c, k), a in sorted(agg.items())
+        ],
+        # a day missing from either list has no data for it, not zero
+        "session_days": sorted(sessions_days),
+        "order_days": sorted(order_days),
     }

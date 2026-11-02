@@ -150,13 +150,11 @@ def _meta_campaigns(ctx: Context, dates: list[str]) -> list[dict]:
                     "type": (
                         "Unknown"
                         if name is None
-                        else (
-                            "Awareness"
-                            if rules.is_awareness_name(
-                                name, ctx.cfg["sessions"]
-                            )
-                            else "Performance"
-                        )
+                        else {
+                            "perf": "Performance",
+                            "awareness": "Awareness",
+                            "social": "Social (Reach)",
+                        }[rules.campaign_kind(name, ctx.cfg["sessions"])]
                     ),
                     "spend": 0.0,
                     "impressions": 0,

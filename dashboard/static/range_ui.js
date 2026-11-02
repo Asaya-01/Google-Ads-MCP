@@ -417,10 +417,31 @@ function rgBody() {
       const whole = { w: c.w, pw: null, prev: null, change: () => null };
       html += `<details class="card rg-all"><summary>The whole range, for reference</summary><p class="legend-note">Sale and BAU days together are not a like-for-like comparison, so there is no change shown here.</p><div class="tiles">${rgAdapt(RG_TILES).map(([k, l, u]) => rgTile(k, l, u, whole)).join("")}</div></details>`;
     }
+    html += `<div id="ov-break"><section class="card"><p class="empty">Loading the channel breakdown…</p></section></div>`;
     html += rgCharts(c);
   }
   host.innerHTML = html;
   rgDrawCharts();
+  if (c.groups.length) rgOverviewBreakdown(c);
+}
+// Overview, level 2 and below: sales by channel, then spend and return by
+// channel › stage › product. Loaded after the tiles so they show at once.
+const OV = { phase: null };
+async function rgOverviewBreakdown(c) {
+  const slot = document.getElementById("ov-break");
+  try { for (const pg of ["channel_days", "campaign_days", "meta_tree", "google_tree"]) await loadPage(pg); }
+  catch (err) { if (slot) slot.innerHTML = `<section class="card"><p class="na">Data unavailable: ${esc(err.message)}</p></section>`; return; }
+  if (state.tab !== "overview" || !document.getElementById("ov-break")) return;
+  const have = c.groups.map((g) => g.phase);
+  if (!have.includes(OV.phase)) OV.phase = have[0];
+  const g = c.groups.find((x) => x.phase === OV.phase);
+  const ctl = c.groups.length > 1 ? `<div class="seg" id="ov-phase" role="group" aria-label="Which days">${c.groups.map((x) => `<button type="button" data-ph="${x.phase}" aria-pressed="${x.phase === OV.phase}">${x.phase === "sale" ? "Sale days" : "BAU days"}</button>`).join("")}</div>` : "";
+  const vs = `${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}`;
+  document.getElementById("ov-break").innerHTML = `
+    <section class="card"><div class="section-head"><h2>${phaseChip(g.phase)} Where the sales came from</h2>${ctl}<span class="sub">Shopify, by channel · ${vs}</span></div>${trChannelHtml(g)}</section>
+    <section class="card"><div class="section-head"><h2>${phaseChip(g.phase)} Spend and return: channel › stage › product</h2><span class="sub">${vs}</span></div>${trBarHtml("ov-tree")}<div id="ov-tree"></div></section>`;
+  trBind("ov-tree", g);
+  document.getElementById("ov-phase")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-ph]"); if (b) { OV.phase = b.dataset.ph; rgOverviewBreakdown(c); } });
 }
 
 async function rgShell(render) {

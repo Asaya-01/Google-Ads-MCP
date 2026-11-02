@@ -365,6 +365,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
 
   /*__RANGE_UI__*/
   /*__RANGE_TABS__*/
+  /*__RANGE_TREE__*/
 
   R.health = (p) => {
     const hhmm = (iso) => iso ? new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" }) : null;
@@ -463,7 +464,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
         <div class="seg" id="live-metric">${[["gmv", "GMV"], ["orders", "Orders"], ["sessions", "Sessions"]].map(([k, l]) => `<button type="button" data-m="${k}" aria-pressed="${LIVE.metric === k}">${l}</button>`).join("")}</div></div>
       ${legend([["--accent", "Today"], ["--muted", baseLabel]])}
       <div class="chart-box"><canvas id="c-live" aria-label="Running total through the day, today against the comparison"></canvas></div></section>` : "";
-    const awKeep = (blk) => (blk.campaigns || []).filter((c) => c.awareness);
+    const awKeep = (blk) => (blk.campaigns || []).filter((c) => (c.kind ? c.kind === "awareness" : c.awareness));
     const awSum = (blk) => awKeep(blk).reduce((a, c) => ({ spend: a.spend + c.spend, impr: a.impr + (c.impressions || 0), clicks: a.clicks + c.clicks }), { spend: 0, impr: 0, clicks: 0 });
     const awCards = () => {
       const m = awSum(p.meta), g = awSum(p.google), t = { spend: m.spend + g.spend, impr: m.impr + g.impr, clicks: m.clicks + g.clicks };
@@ -506,11 +507,11 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     const adTable = (title, blk) => {
       if (blk.na && !blk.today) return `<section class="card"><div class="section-head"><h2>${esc(title)}</h2></div><p class="na">Data unavailable: ${esc(blk.na)}</p></section>`;
       const t = blk.today || {};
-      const rows = blk.campaigns.filter((c) => rgKeep(c.awareness)).map((c) => ({ ...c }));
+      const rows = blk.campaigns.filter((c) => rgKeep(c.kind || c.awareness)).map((c) => ({ ...c }));
       return `<section class="card"><div class="section-head"><h2>${esc(title)}</h2>
         <span class="sub">spend ${esc(fmt(t.spend, "inr", true) ?? "n/a")}${blk.spend_pct_of_yesterday === null || blk.spend_pct_of_yesterday === undefined ? "" : ` · ${(blk.spend_pct_of_yesterday * 100).toFixed(0)}% of yesterday's`}${RG.mode === "aw" ? "" : ` · sales-campaign ROAS ${esc(fmt(t.roas, "x") ?? "n/a")}`}</span></div>
         ${table([
-          { label: "Campaign", text: true, render: (r) => `${esc(r.campaign)}${r.awareness ? ' <span class="sub">Awareness, not in ROAS</span>' : ""}` },
+          { label: "Campaign", text: true, render: (r) => `${esc(r.campaign)}${r.awareness ? ' <span class="sub">Awareness, not in ROAS</span>' : r.kind === "social" ? ' <span class="sub">Social (Reach), not in ROAS</span>' : ""}` },
           { label: "Spend", render: (r) => esc(fmt(r.spend, "inr") ?? "n/a") },
           { label: "Value", render: (r) => esc(fmt(r.value, "inr") ?? "n/a") },
           { label: "ROAS", render: (r) => r.roas === null ? '<span class="na">–</span>' : esc(fmt(r.roas, "x")) },

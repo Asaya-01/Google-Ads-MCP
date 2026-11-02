@@ -1,0 +1,375 @@
+/* Where the money went and what came back, one level at a time:
+   channel › funnel stage › product › campaign › ad set › ad.
+   Meta: TOF / MOF / BOF / Catalog, then the product (UAS, ITB, ...), both read
+   from the ad name where ad-level detail exists, else the campaign name.
+   Google: Brand Search / Brand PMax / Non-brand PMax (› product) / Demand Gen.
+   Affiliate and CRM come from the spend sheets. Every row opens what is under it.
+   Inlined after range_tabs.js's helpers, inside the dashboard closure. */
+
+const TR = { open: new Set(), group: "funnel", flash: null };
+const TR_STAGES = ["TOF", "MOF", "BOF", "Catalog"];
+const TR_LAST = new Set(["p:OFFER", "p:CATALOG", "p:SETS", "p:UNMAPPED", "gap"]);
+try { const s = sessionStorage.getItem("asaya-tree-group"); if (s === "funnel" || s === "campaign") TR.group = s; } catch (e) { /* storage blocked */ }
+
+const trZero = () => ({ spend: 0, value: 0, results: 0, clicks: 0, impr: 0, pspend: 0, pvalue: 0 });
+function trInto(a, m, kind, f) {
+  a.spend += m[0] * f; a.value += m[1] * f; a.results += m[2] * f; a.clicks += m[3] * f; a.impr += (m[4] || 0) * f;
+  if (kind === "perf") { a.pspend += m[0] * f; a.pvalue += m[1] * f; }
+}
+// rows by date, built once per page
+function trByDate(rows, page, slot) {
+  if (page[slot]) return page[slot];
+  const m = new Map();
+  for (const r of rows) (m.get(r[0]) || m.set(r[0], []).get(r[0])).push(r);
+  Object.defineProperty(page, slot, { value: m, enumerable: false });
+  return m;
+}
+// add one row's numbers along a path; levels above `from` are left alone
+function trAdd(map, path, m, which, kind, f = 1, from = 0) {
+  let parent = null;
+  path.forEach((seg, i) => {
+    let n = map.get(seg.k);
+    if (!n) {
+      n = { key: (parent ? parent.key + "|" : "") + seg.k, k: seg.k, label: seg.label, sub: seg.sub || null, chip: seg.chip || null, note: seg.note || null, order: seg.order ?? 50, level: i, kinds: new Set(), kids: new Map(), a: trZero(), p: trZero(), splits: new Set() };
+      map.set(seg.k, n);
+    }
+    if (i >= from) { n.kinds.add(kind); trInto(which === "cur" ? n.a : n.p, m, kind, f); if (which === "prev") n.hasPrev = true; }
+    if (seg.split) n.splits.add(seg.split);
+    parent = n; map = n.kids;
+  });
+}
+const trLab = (cd, code) => (cd.labels && cd.labels[code]) || code;
+function trMid(cd, c, stage, prod) { // the levels between the channel and the campaign, one list per product
+  const lab = (code) => ({ k: "p:" + code, label: trLab(cd, code), order: TR_LAST.has("p:" + code) ? 90 : 50 });
+  if (c.kind === "social") return [[{ k: "social", label: "Social (Reach)", order: 80, note: "The social team's Reach campaigns. Counted in total spend, kept out of Performance and Awareness." }]];
+  if (c.kind === "awareness") {
+    const goal = { k: "aw:" + (c.goal || c.group || "Other"), label: "Awareness · " + (c.goal || c.group || "Other"), order: 70 };
+    return (prod && prod.length ? prod : ["UNMAPPED"]).map((p) => [goal, lab(p)]);
+  }
+  const st = { k: "st:" + stage, label: stage, order: TR_STAGES.indexOf(stage) };
+  return (prod && prod.length ? prod : ["UNMAPPED"]).map((p) => [st, lab(p)]);
+}
+
+function trBuild(g) {
+  const P = state.pages, cd = P.campaign_days, mt = P.meta_tree, gt = P.google_tree;
+  const roots = new Map(), funnel = TR.group === "funnel";
+  const sets = [["cur", g.cur || []], ["prev", g.prev || []]];
+  const info = { metaAd: { cur: 0, prev: 0 }, gTree: { cur: 0, prev: 0 } };
+  // ---------------------------------------------------------------- Meta
+  const META = { k: "meta", label: "Meta", chip: null, order: 0 };
+  if (cd && cd.meta) {
+    const cdBy = trByDate(cd.meta.rows, cd, "_metaBy");
+    const adBy = mt && mt.rows ? trByDate(mt.rows, mt, "_by") : new Map();
+    for (const [which, days] of sets) {
+      for (const d of days) {
+        const seen = new Set(), rows = adBy.get(d) || []; // campaigns this day has ad-level rows for
+        if (rows.length) info.metaAd[which]++;
+        for (const r of rows) {
+          const ad = mt.ads[r[1]], set = mt.adsets[ad.s], c = mt.campaigns[set.c];
+          seen.add(`${c.account}|${c.id}`);
+          if (!rgKeep(c.kind || c.awareness)) continue;
+          const camp = { k: `c:${c.account}|${c.id}`, label: c.name, sub: c.account, order: 50 };
+          const prods = c.kind === "social" ? [null] : ad.prod || ["UNMAPPED"];
+          const split = prods.length > 1 ? prods.map((x) => trLab(cd, x).split(" · ")[0]).join(" + ") : null;
+          const tail = [camp, { k: `s:${ad.s}`, label: set.name, chip: "Ad set" }, { k: `a:${r[1]}`, label: ad.name, chip: "Ad", split }];
+          if (!funnel) { trAdd(roots, [META, ...tail], r.slice(2), which, c.kind || "perf"); continue; }
+          const mids = trMid(cd, c, ad.stage, ad.prod);
+          for (const mid of mids) trAdd(roots, [META, ...mid, ...tail], r.slice(2), which, c.kind || "perf", 1 / mids.length);
+        }
+        // campaigns with no ad-level detail that day: the campaign name decides
+        for (const r of cdBy.get(d) || []) {
+          const c = cd.meta.names[r[1]];
+          if (seen.has(`${c.account}|${c.id}`) || !rgKeep(c.kind || c.awareness)) continue;
+          const camp = { k: `c:${c.account}|${c.id}`, label: c.name, sub: c.account, order: 50 };
+          if (!funnel) { trAdd(roots, [META, camp], r.slice(2), which, c.kind || "perf"); continue; }
+          const mids = trMid(cd, c, c.stage || "TOF", c.prod);
+          for (const mid of mids) trAdd(roots, [META, ...mid, camp], r.slice(2), which, c.kind || "perf", 1 / mids.length);
+        }
+      }
+    }
+  }
+  // ---------------------------------------------------------------- Google
+  const GOOGLE = { k: "google", label: "Google Ads", order: 1 };
+  if (cd && cd.google) {
+    const by = trByDate(cd.google.rows, cd, "_gBy");
+    const skuGroups = new Set(cd.google_sku_groups || []);
+    const midOf = (c) => {
+      if (!funnel) return [[]];
+      if (c.kind === "awareness") return [[{ k: "aw:" + c.group, label: "Awareness · " + c.group, order: 70 }]];
+      const grp = { k: "gg:" + c.group, label: c.group, order: ["Brand Search", "Brand PMax", "Non-brand PMax", "Demand Gen", "YouTube", "Non-brand Search"].indexOf(c.group) + 1 || 60 };
+      if (!skuGroups.has(c.group)) return [[grp]];
+      return (c.prod && c.prod.length ? c.prod : ["UNMAPPED"]).map((p) => [grp, { k: "p:" + p, label: trLab(cd, p), order: TR_LAST.has("p:" + p) ? 90 : 50 }]);
+    };
+    const campPaths = new Map(); // google id -> [paths]
+    for (const [which, days] of sets) {
+      for (const d of days) {
+        for (const r of by.get(d) || []) {
+          const c = cd.google.names[r[1]];
+          if (!rgKeep(c.kind || c.awareness)) continue;
+          const mids = midOf(c);
+          const camp = { k: `g:${c.id}`, label: c.name, sub: "ID " + c.id, order: 50 };
+          campPaths.set(c.id, mids.map((mid) => [GOOGLE, ...mid, camp]));
+          for (const mid of mids) trAdd(roots, [GOOGLE, ...mid, camp], r.slice(2), which, c.kind || "perf", 1 / mids.length);
+        }
+      }
+    }
+    // ad groups / asset groups and ads hang under their campaign; they do not
+    // change the campaign's own numbers (Google reports those separately)
+    if (gt && gt.group_rows) {
+      const gBy = trByDate(gt.group_rows, gt, "_by"), aBy = trByDate(gt.ad_rows || [], gt, "_aBy");
+      for (const [which, days] of sets) {
+        for (const d of days) {
+          const grows = gBy.get(d) || [];
+          if (grows.length) info.gTree[which]++;
+          for (const r of grows) {
+            const grp = gt.groups[r[1]], c = gt.campaigns[grp.c], paths = campPaths.get(String(c.id));
+            if (!paths) continue;
+            const seg = { k: `gg${r[1]}`, label: grp.name, chip: grp.kind === "asset_group" ? "Asset group" : "Ad group", note: grp.kind === "asset_group" ? "Performance Max reports spend per asset group, not per ad, so there is nothing below this." : null };
+            for (const p of paths) trAdd(roots, [...p, seg], r.slice(2), which, c.kind || "perf", 1 / paths.length, p.length);
+          }
+          for (const r of aBy.get(d) || []) {
+            const ad = gt.ads[r[1]], grp = gt.groups[ad.g], c = gt.campaigns[grp.c], paths = campPaths.get(String(c.id));
+            if (!paths) continue;
+            const gseg = { k: `gg${ad.g}`, label: grp.name, chip: "Ad group" };
+            for (const p of paths) trAdd(roots, [...p, gseg, { k: `ga${r[1]}`, label: ad.name, chip: ad.type || "Ad" }], r.slice(2), which, c.kind || "perf", 1 / paths.length, p.length + 1);
+          }
+        }
+      }
+    }
+  }
+  // ----------------------------------------------- what the platforms' rows miss
+  const w = g.w, pw = g.pw;
+  for (const [node, key] of [[roots.get("meta"), "meta_spend"], [roots.get("google"), "google_spend"]]) {
+    if (!node || w[key] == null) continue;
+    const gap = w[key] - node.a.spend;
+    if (gap > Math.max(1, Math.abs(w[key]) * 0.002)) {
+      node.kids.set("gap", { key: node.key + "|gap", k: "gap", label: "Not broken down by campaign", sub: "days with account-level data only", level: 1, order: 99, kinds: new Set(["mixed"]), kids: new Map(), a: { ...trZero(), spend: gap, value: null, results: null, clicks: null, impr: null, pspend: null }, p: trZero(), splits: new Set() });
+      node.a.spend += gap;
+    }
+  }
+  // ---------------------------------------------------------------- sheets
+  if (RG.mode !== "aw") {
+    const sheet = (k, label, sk, rk, order, note) => {
+      const v = (win, f) => (win ? win[f] : null);
+      const n = { key: k, k, label, level: 0, order, note, sheet: true, kinds: new Set(["perf"]), kids: new Map(), splits: new Set(),
+        a: { spend: v(w, sk), value: v(w, rk), pspend: v(w, sk), pvalue: v(w, rk), results: null, clicks: null, impr: null },
+        p: pw ? { spend: v(pw, sk), value: v(pw, rk), pspend: v(pw, sk), pvalue: v(pw, rk) } : trZero(), hasPrev: !!pw,
+        na: w.na[sk] || w.na[rk] || null };
+      return n;
+    };
+    roots.set("affiliate", sheet("affiliate", "Affiliate", "affiliate_spend", "affiliate_revenue", 2, "From the affiliate sheet: spend and the sales the affiliates are credited with."));
+    const crm = sheet("crm", "CRM", "crm_spend", "crm_revenue", 3, "Flow + broadcast, from the CRM sheets.");
+    const f = sheet("crm|flow", "Flows", "crm_flow_spend", "crm_flow_revenue", 0), b = sheet("crm|broadcast", "Broadcasts", "crm_broadcast_spend", "crm_broadcast_revenue", 1);
+    f.level = b.level = 1; f.chip = b.chip = "CRM";
+    crm.kids.set("flow", f); crm.kids.set("broadcast", b);
+    roots.set("crm", crm);
+  }
+  return { roots, info };
+}
+
+// ---------------------------------------------------------------- columns
+function trCols() {
+  const n0 = (v, u) => (v == null ? null : fmt(v, u));
+  const spend = ["Spend", (n) => n0(n.a.spend, "inr")];
+  const dsp = ["Δ spend", null, "dspend"];
+  const share = ["Share", null, "share"];
+  const val = ["Revenue (platform)", (n) => n0(n.a.value, "inr")];
+  const roas = ["ROAS", null, "roas"];
+  const dr = ["Δ ROAS", null, "droas"];
+  const res = ["Purchases", (n) => (n.a.results == null ? null : fmt(Math.round(n.a.results), "int"))];
+  const cpa = ["Cost / purchase", (n) => (n.a.results ? fmt(n.a.spend / n.a.results, "inr") : null)];
+  const impr = ["Impr.", (n) => (n.a.impr ? fmt(Math.round(n.a.impr), "int") : null)];
+  const cpm = ["CPM", (n) => (n.a.impr ? fmt((n.a.spend / n.a.impr) * 1000, "inr") : null)];
+  const clicks = ["Clicks", (n) => (n.a.clicks ? fmt(Math.round(n.a.clicks), "int") : null)];
+  const ctr = ["CTR", (n) => (n.a.impr ? fmt(n.a.clicks / n.a.impr, "pct") : null)];
+  const cpc = ["CPC", (n) => (n.a.clicks ? fmt(n.a.spend / n.a.clicks, "inr") : null)];
+  if (RG.mode === "aw") return [spend, dsp, share, impr, cpm, clicks, ctr, cpc];
+  if (RG.mode === "perf") return [spend, dsp, share, val, roas, dr, res, cpa, ctr];
+  return [spend, dsp, share, val, roas, dr, impr, ctr];
+}
+const trRoas = (a) => (a && a.pspend ? a.pvalue / a.pspend : null);
+function trCell(n, col, parent, g, total) {
+  const [, f, special] = col;
+  if (special === "dspend") return g.pw && n.hasPrev && n.a.spend != null && n.p.spend ? deltaHtml(rgAvgChange(n.a.spend, g.w.days, n.p.spend, g.pw.days), "spend") : '<span class="flat">–</span>';
+  if (special === "share") {
+    const base = parent ? parent.a.spend : total;
+    return n.a.spend != null && base ? `${((n.a.spend / base) * 100).toFixed(1)}%${parent ? "" : ""}` : '<span class="na">–</span>';
+  }
+  if (special === "roas") {
+    const r = trRoas(n.a);
+    if (r == null) return n.na ? `<span class="cell-na" title="Data unavailable: ${esc(n.na)}">n/a</span>` : '<span class="na">–</span>';
+    const mixed = n.kinds.size > 1 && n.kinds.has("perf");
+    const pr = n.hasPrev ? trRoas(n.p) : null;
+    return esc(fmt(r, "x")) + (pr != null ? `<br><span class="sub">vs ${esc(fmt(pr, "x"))}</span>` : "") + (mixed ? `<br><span class="sub">sales campaigns only</span>` : "");
+  }
+  if (special === "droas") {
+    const r = trRoas(n.a), pr = n.hasPrev ? trRoas(n.p) : null;
+    return g.pw && r != null && pr ? deltaHtml(r / pr - 1, "roas") : '<span class="flat">–</span>';
+  }
+  const v = f(n);
+  if (v == null) return n.na ? `<span class="cell-na" title="Data unavailable: ${esc(n.na)}">n/a</span>` : '<span class="na">–</span>';
+  return esc(v);
+}
+const trSorted = (m) => [...m.values()].sort((x, y) => (x.order - y.order) || ((y.a.spend || 0) - (x.a.spend || 0)));
+
+// ---------------------------------------------------------------- the table
+function trHtml(g, opts = {}) {
+  const { roots, info } = trBuild(g);
+  TR.last = { roots, g };
+  const list = trSorted(roots).filter((n) => n.a.spend > 0.5 || n.sheet);
+  if (!list.length) return `<p class="na">No ${RG.mode === "aw" ? "awareness" : RG.mode === "perf" ? "performance" : ""} spend on these days.</p>`;
+  const total = list.reduce((t, n) => t + (n.a.spend || 0), 0);
+  const cols = trCols();
+  const out = [];
+  const nDays = (g.cur || []).length;
+  const emit = (n, parent) => {
+    const kids = trSorted(n.kids).filter((k) => k.a.spend > 0.5 || k.sheet);
+    const can = kids.length > 0 || !!n.note, open = TR.open.has(n.key);
+    const name = `<span class="tw" aria-hidden="true">${can ? (open ? "▾" : "▸") : "·"}</span>${n.chip ? `<span class="chip">${esc(n.chip)}</span> ` : ""}${esc(n.label)}${n.splits && n.splits.size ? ` <span class="sub">split across ${esc([...n.splits].join(", "))}</span>` : ""}${n.sub ? `<br><span class="sub tsub">${esc(n.sub)}</span>` : ""}`;
+    out.push(`<tr class="tr-l${Math.min(n.level, 5)} ${open ? "open" : ""} ${TR.flash === n.key ? "flash" : ""}" ${can ? `data-k="${esc(n.key)}" tabindex="0" role="button" aria-expanded="${open}"` : ""}><td class="text">${name}</td>${cols.map((c) => `<td>${trCell(n, c, parent, g, total)}</td>`).join("")}</tr>`);
+    if (!open) return;
+    if (n.note) out.push(`<tr class="tr-note tr-l${Math.min(n.level + 1, 5)}"><td class="text" colspan="${cols.length + 1}">${esc(n.note)}</td></tr>`);
+    if (n.k === "meta" && TR.group === "funnel") {
+      const c = info.metaAd.cur;
+      const why = !c ? "Stage and product come from the campaign names for these days (ad-level detail does not reach back this far)." : c < nDays ? `Stage and product come from the ad names on ${c} of the ${nDays} days, and from the campaign names on the rest (ad-level detail runs from ${rgFmtDay(state.pages.meta_tree.from, true)}).` : "Stage and product come from each ad's name: MOF_ and BOF_ ads count as MOF and BOF even inside a TOF-named offer campaign. An ad naming two products counts half to each.";
+      out.push(`<tr class="tr-note tr-l1"><td class="text" colspan="${cols.length + 1}">${esc(why)}</td></tr>`);
+    }
+    kids.forEach((k) => emit(k, n));
+  };
+  list.forEach((n) => emit(n, null));
+  // the whole store: Shopify GMV over all spend
+  if (RG.mode !== "aw" && opts.totalRow !== false) {
+    const w = g.w, pw = g.pw, orv = w.overall_roas, opv = pw ? pw.overall_roas : null;
+    out.push(`<tr class="total"><td class="text">All channels<br><span class="sub">Shopify GMV ÷ all spend</span></td>${cols.map(([l]) => {
+      if (l === "Spend") return `<td>${cell(w.all_spend, "inr", w.na.all_spend)}</td>`;
+      if (l === "Δ spend") return `<td>${pw && w.all_spend != null && pw.all_spend != null ? deltaHtml(rgAvgChange(w.all_spend, w.days, pw.all_spend, pw.days), "spend") : '<span class="flat">–</span>'}</td>`;
+      if (l === "Revenue (platform)") return `<td>${cell(w.gmv, "inr", w.na.gmv)}<br><span class="sub">Shopify GMV</span></td>`;
+      if (l === "ROAS") return `<td>${cell(orv, "x", rgNa(w, "overall_roas"))}${opv != null ? `<br><span class="sub">vs ${esc(fmt(opv, "x"))}</span>` : ""}</td>`;
+      if (l === "Δ ROAS") return `<td>${orv != null && opv ? deltaHtml(orv / opv - 1, "roas") : '<span class="flat">–</span>'}</td>`;
+      return "<td></td>";
+    }).join("")}</tr>`);
+  }
+  const head = `<tr><th class="text" scope="col">${TR.group === "funnel" ? "Channel · stage · product · campaign · ad set · ad" : "Channel · campaign · ad set · ad"}</th>${cols.map((c) => `<th scope="col">${c[0]}</th>`).join("")}</tr>`;
+  return `<div class="table-wrap" style="max-height:${opts.maxHeight || "75vh"}"><table class="tree"><thead>${head}</thead><tbody>${out.join("")}</tbody></table></div>
+    <p class="legend-note">Click a row to open what is under it. Share is of the row above. Δ compares per-day averages${RG.mode === "aw" ? "" : "; ROAS counts sales campaigns only"}.</p>`;
+}
+
+// the controls above the table
+function trBarHtml(id) {
+  return `<div class="tr-bar"><div class="seg" id="${id}-group" role="group" aria-label="Group by">
+      <button type="button" data-g="funnel" aria-pressed="${TR.group === "funnel"}">Stage › product</button>
+      <button type="button" data-g="campaign" aria-pressed="${TR.group === "campaign"}">Campaigns</button></div>
+    <button type="button" class="rg-btn" data-tr="products">Open to products</button>
+    <button type="button" class="rg-btn" data-tr="collapse">Collapse all</button></div>`;
+}
+function trOpenTo(depth) {
+  TR.open = new Set();
+  const walk = (m, d) => { for (const n of m.values()) { if (d < depth && n.kids.size) { TR.open.add(n.key); walk(n.kids, d + 1); } } };
+  if (TR.last) walk(TR.last.roots, 0);
+}
+// wire a host element holding trBarHtml(id) and a div#id with trHtml(g)
+function trBind(id, g, opts = {}) {
+  const host = document.getElementById(id), bar = document.getElementById(id + "-group")?.parentElement;
+  if (!host) return;
+  const repaint = (focusKey) => {
+    host.innerHTML = trHtml(g, opts);
+    if (focusKey) { const r = host.querySelector(`tr[data-k="${CSS.escape(focusKey)}"]`); if (r) { r.focus({ preventScroll: true }); r.scrollIntoView({ block: "nearest" }); } }
+    if (opts.after) opts.after();
+  };
+  const toggle = (row) => { const k = row.dataset.k; if (TR.open.has(k)) TR.open.delete(k); else TR.open.add(k); TR.flash = null; repaint(k); };
+  host.addEventListener("click", (ev) => { const r = ev.target.closest("tr[data-k]"); if (r) toggle(r); });
+  host.addEventListener("keydown", (ev) => { if ((ev.key === "Enter" || ev.key === " ") && ev.target.matches("tr[data-k]")) { ev.preventDefault(); toggle(ev.target); } });
+  bar?.addEventListener("click", (ev) => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    if (b.dataset.g) { TR.group = b.dataset.g; TR.open = new Set(); try { sessionStorage.setItem("asaya-tree-group", TR.group); } catch (e) { /* blocked */ } bar.querySelectorAll("[data-g]").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); }
+    else if (b.dataset.tr === "collapse") TR.open = new Set();
+    else if (b.dataset.tr === "products") trOpenTo(TR.group === "funnel" ? 2 : 1);
+    repaint();
+  });
+  TR.repaint = repaint;
+  repaint();
+}
+
+// ---------------------------------------------------- Meta: product × stage
+function trMatrixHtml() {
+  if (!TR.last || RG.mode === "aw") return "";
+  const meta = TR.last.roots.get("meta");
+  if (!meta || TR.group !== "funnel") return "";
+  const prods = new Map(); // code -> {label, cells: {stage: node}}
+  for (const st of TR_STAGES) {
+    const sn = meta.kids.get("st:" + st);
+    if (!sn) continue;
+    for (const pn of sn.kids.values()) {
+      const e = prods.get(pn.k) || prods.set(pn.k, { label: pn.label, order: pn.order, cells: {}, spend: 0 }).get(pn.k);
+      e.cells[st] = pn; e.spend += pn.a.spend;
+    }
+  }
+  if (!prods.size) return "";
+  const stTot = Object.fromEntries(TR_STAGES.map((s) => [s, meta.kids.get("st:" + s)]));
+  const rows = [...prods.entries()].sort((x, y) => (x[1].order - y[1].order) || (y[1].spend - x[1].spend));
+  const cellOf = (n, key) => {
+    if (!n || !n.a.spend) return '<td class="mx-empty">–</td>';
+    const r = trRoas(n.a), pr = n.hasPrev ? trRoas(n.p) : null;
+    return `<td><button type="button" class="mx" data-open="${esc(key)}"><b>${esc(fmt(n.a.spend, "inr", true))}</b><span>${r == null ? "–" : esc(fmt(r, "x"))}${pr != null && r != null ? ` ${deltaHtml(r / pr - 1, "roas")}` : ""}</span></button></td>`;
+  };
+  const head = `<tr><th class="text" scope="col">Product</th>${TR_STAGES.map((s) => `<th scope="col">${s}</th>`).join("")}<th scope="col">All stages</th></tr>`;
+  const body = rows.map(([k, e]) => `<tr><td class="text">${esc(e.label)}</td>${TR_STAGES.map((s) => cellOf(e.cells[s], `meta|st:${s}|${k}`)).join("")}<td><b>${esc(fmt(e.spend, "inr", true))}</b></td></tr>`).join("");
+  const foot = `<tr class="total"><td class="text">All products</td>${TR_STAGES.map((s) => cellOf(stTot[s], `meta|st:${s}`)).join("")}<td><b>${esc(fmt(TR_STAGES.reduce((t, s) => t + (stTot[s] ? stTot[s].a.spend : 0), 0), "inr", true))}</b></td></tr>`;
+  return `<div class="table-wrap"><table class="matrix"><thead>${head}</thead><tbody>${body}${foot}</tbody></table></div>
+    <p class="legend-note">Each cell: spend, then Meta ROAS and its change. Click a cell to open those campaigns, ad sets and ads in the table above.</p>`;
+}
+function trMatrixBind(hostId, treeId) {
+  const host = document.getElementById(hostId);
+  if (!host) return;
+  host.addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-open]");
+    if (!b) return;
+    const parts = b.dataset.open.split("|");
+    for (let i = 1; i <= parts.length; i++) TR.open.add(parts.slice(0, i).join("|"));
+    TR.flash = b.dataset.open;
+    if (TR.repaint) TR.repaint(b.dataset.open);
+    document.getElementById(treeId)?.querySelector(`tr[data-k="${CSS.escape(b.dataset.open)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  });
+}
+
+// ------------------------------------------ Shopify: where the orders came from
+function trChannelHtml(g) {
+  const p = state.pages.channel_days;
+  if (!p || !p.rows) return `<p class="na">Data unavailable: the channel breakdown has not been built yet.</p>`;
+  const want = RG.mode === "all" ? null : RG.mode === "aw" ? p.kinds.indexOf("awareness") : p.kinds.indexOf("perf");
+  const sum = (days) => {
+    const set = new Set(days || []), m = new Map();
+    for (const r of p.rows) {
+      if (!set.has(r[0]) || (want !== null && r[2] !== want)) continue;
+      const a = m.get(r[1]) || m.set(r[1], [0, 0, 0, 0]).get(r[1]);
+      a[0] += r[3]; a[1] += r[4]; a[2] += r[5]; a[3] += r[6];
+    }
+    return m;
+  };
+  const C = sum(g.cur), Pm = g.prev && g.prev.length ? sum(g.prev) : null;
+  const sDays = new Set(p.session_days), oDays = new Set(p.order_days);
+  const missS = (g.cur || []).filter((d) => !sDays.has(d)), missO = (g.cur || []).filter((d) => !oDays.has(d));
+  const totG = [...C.values()].reduce((t, a) => t + a[3], 0), totS = [...C.values()].reduce((t, a) => t + a[0], 0);
+  const cd = g.w.days, pd = g.pw ? g.pw.days : 0;
+  const rows = [...C.entries()].map(([i, a]) => {
+    const b = Pm ? Pm.get(i) : null;
+    return { label: p.channels[i], s: a[0], atc: a[1], o: a[2], gmv: a[3], share: totG ? a[3] / totG : null, cvr: a[0] && a[2] <= a[0] ? a[2] / a[0] : null, // more orders than visits: the two are tagged differently, so no rate
+
+      dS: b ? rgAvgChange(a[0], cd, b[0], pd) : null, dG: b ? rgAvgChange(a[3], cd, b[3], pd) : null, pcvr: b && b[0] && b[2] <= b[0] ? b[2] / b[0] : null };
+  }).filter((r) => r.s || r.o).sort((x, y) => y.gmv - x.gmv || y.s - x.s);
+  const pc = (v) => (v == null ? '<span class="na">–</span>' : esc(fmt(v, "pct")));
+  const cols = [
+    { label: "Channel (UTM, last click)", text: true, render: (r) => esc(r.label) },
+    { label: "Sessions", render: (r) => esc(fmt(r.s, "int")) }, { label: "Δ sessions", render: (r) => (g.pw ? deltaHtml(r.dS, "sessions") : '<span class="flat">–</span>') },
+    { label: "Orders", render: (r) => esc(fmt(Math.round(r.o), "int")) },
+    { label: "GMV", render: (r) => esc(fmt(r.gmv, "inr")) }, { label: "Δ GMV", render: (r) => (g.pw ? deltaHtml(r.dG, "gmv") : '<span class="flat">–</span>') },
+    { label: "Share of GMV", render: (r) => pc(r.share) },
+    { label: "Conversion", render: (r) => pc(r.cvr) + (r.pcvr != null ? `<br><span class="sub">vs ${esc(fmt(r.pcvr, "pct"))}</span>` : "") },
+  ];
+  const tot = { label: "All channels", s: totS, o: [...C.values()].reduce((t, a) => t + a[2], 0), gmv: totG, share: totG ? 1 : null, _class: "total" };
+  tot.cvr = tot.s ? tot.o / tot.s : null;
+  const note = [missS.length ? `Sessions are missing for ${rgListDays(missS)}.` : "", missO.length ? `Orders by channel are missing for ${rgListDays(missO)}.` : ""].filter(Boolean).join(" ");
+  return (note ? `<div class="banner">Data unavailable: ${esc(note)}</div>` : "") + table(cols, [...rows, tot], { maxHeight: "60vh" }) +
+    `<p class="legend-note">Orders and GMV as Shopify credits them, by the UTM of the visit that converted, so organic and direct are here too. This will not match what Meta and Google report for themselves (the next table).</p>`;
+}

@@ -46,7 +46,10 @@ def test_session_kind_follows_the_brief():
         "awareness",
         None,
     )
-    assert kind("facebook", "MG_TOF_awareness_reach") == ("awareness", None)
+    # Reach campaigns are the social team's spend: neither view
+    assert kind("facebook", "MG_TOF_awareness_reach") == ("social", None)
+    assert kind("facebook", "WOA_Awareness_TOF_Reach") == ("social", None)
+    assert kind("facebook", "WOA_Reachout_Sales") == ("perf", None)
     assert kind("google", "Conv_Awareness_Asaya_Traffic") == ("awareness", None)
     assert kind("facebook", "WOA_TOF_Sales_AdvantageSales_Non-offer_ITB") == (
         "perf",

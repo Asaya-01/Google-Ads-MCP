@@ -117,3 +117,31 @@ table.tree td.text { max-width: 460px; white-space: normal; }
 .rg-chipcount.sale { background: color-mix(in srgb, var(--series-2) 16%, var(--surface)); border-color: transparent; }
 .rg-chipcount.bau { background: color-mix(in srgb, var(--series-1) 12%, var(--surface)); border-color: transparent; }
 .rg-chipcount.mixed { background: linear-gradient(90deg, color-mix(in srgb, var(--series-1) 12%, var(--surface)) 45%, color-mix(in srgb, var(--series-2) 16%, var(--surface)) 55%); border-color: transparent; }
+
+/* channel › stage › product tree */
+table.tree tr.tr-l3 td.text { padding-left: 78px; }
+table.tree tr.tr-l4 td.text { padding-left: 102px; }
+table.tree tr.tr-l5 td.text { padding-left: 126px; }
+table.tree tr.tr-l3 td, table.tree tr.tr-l4 td, table.tree tr.tr-l5 td { font-size: 12.5px; background: color-mix(in srgb, var(--accent-wash) 25%, transparent); }
+table.tree tr.tr-l0 td.text { font-weight: 600; }
+table.tree tr.tr-note.tr-l2 td { padding-left: 54px; }
+table.tree tr.tr-note.tr-l3 td, table.tree tr.tr-note.tr-l4 td, table.tree tr.tr-note.tr-l5 td { padding-left: 78px; }
+table.tree tr.flash td { animation: tr-flash 1.6s ease-out; }
+@keyframes tr-flash { from { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); } }
+.tr-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 10px; }
+table.matrix td, table.matrix th { text-align: center; }
+table.matrix td.text, table.matrix th.text { text-align: left; }
+table.matrix .mx { font: inherit; display: grid; gap: 2px; width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); cursor: pointer; }
+table.matrix .mx:hover { border-color: var(--accent); background: var(--accent-wash); }
+table.matrix .mx span { font-size: 12px; color: var(--muted); }
+table.matrix .mx-empty { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { table.tree tr.flash td { animation: none; background: var(--accent-wash); } }
+@media (max-width: 600px) {
+  table.tree td.text, table.tree th.text { position: sticky; left: 0; z-index: 1; min-width: 170px; max-width: 200px; white-space: normal; background: var(--surface); box-shadow: 1px 0 0 var(--line); }
+  table.tree tr.tr-note td.text { position: static; max-width: none; }
+  table.tree tr.tr-l1 td.text { padding-left: 18px; }
+  table.tree tr.tr-l2 td.text { padding-left: 28px; }
+  table.tree tr.tr-l3 td.text { padding-left: 38px; }
+  table.tree tr.tr-l4 td.text { padding-left: 48px; }
+  table.tree tr.tr-l5 td.text { padding-left: 58px; }
+}

@@ -259,6 +259,7 @@ def _ad_totals(rows: list[dict], cfg: dict, value_key: str, count_key: str):
             name,
             {
                 "campaign": name,
+                "kind": rules.campaign_kind(name, scfg),
                 "awareness": rules.is_awareness_name(name, scfg),
                 "spend": 0.0,
                 "value": 0.0,
@@ -273,7 +274,7 @@ def _ad_totals(rows: list[dict], cfg: dict, value_key: str, count_key: str):
         c["clicks"] += r.get("clicks") or 0
         c["impressions"] += r.get("impressions") or 0
     table = sorted(camps.values(), key=lambda c: -c["spend"])
-    perf = [c for c in table if not c["awareness"]]
+    perf = [c for c in table if c["kind"] == "perf"]
     out = {
         "spend": sum(c["spend"] for c in table),
         "perf_spend": sum(c["spend"] for c in perf),
@@ -282,7 +283,9 @@ def _ad_totals(rows: list[dict], cfg: dict, value_key: str, count_key: str):
     }
     out["roas"] = ratio(out["perf_value"], out["perf_spend"])
     for c in table:
-        c["roas"] = None if c["awareness"] else ratio(c["value"], c["spend"])
+        c["roas"] = (
+            ratio(c["value"], c["spend"]) if c["kind"] == "perf" else None
+        )
     return out, table
 
 
