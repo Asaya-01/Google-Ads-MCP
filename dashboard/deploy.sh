@@ -96,23 +96,26 @@ gcloud artifacts repositories describe "$AR_REPO" --location "$REGION" "${P[@]}"
   || gcloud artifacts repositories create "$AR_REPO" --repository-format docker --location "$REGION" "${P[@]}"
 gcloud builds submit "$DIR" --tag "$IMAGE" "${P[@]}"
 
-ENV_VARS="SNAPSHOT_BUCKET=${BUCKET},GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}"
-[[ -n "${ALERT_WEBHOOK_URL:-}" ]] && ENV_VARS="${ENV_VARS},ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL}"
-ENV_VARS="${ENV_VARS},RUNTIME_SA_EMAIL=${SA}"
+# Settings are joined with "@@", not commas: a value may itself hold commas
+# (SPEND_SHEET_REDDIT lists one workbook per month). gcloud reads the "^@@^"
+# prefix as "split on @@".
+ENV_VARS="SNAPSHOT_BUCKET=${BUCKET}@@GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}"
+[[ -n "${ALERT_WEBHOOK_URL:-}" ]] && ENV_VARS="${ENV_VARS}@@ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL}"
+ENV_VARS="${ENV_VARS}@@RUNTIME_SA_EMAIL=${SA}"
 # Spend sheets: share each with ${SA} as Viewer, then put its id in deploy.env
 for v in SPEND_SHEET_AFFILIATE SPEND_SHEET_CRM_FLOW SPEND_SHEET_CRM_BROADCAST SPEND_SHEET_REDDIT; do
-  [[ -n "${!v:-}" ]] && ENV_VARS="${ENV_VARS},${v}=${!v}"
+  [[ -n "${!v:-}" ]] && ENV_VARS="${ENV_VARS}@@${v}=${!v}"
 done
 
 echo "==> [7/9] Cloud Run service ${SERVICE}"
 # Public endpoint on purpose: the app itself enforces Google sign-in and the
 # Firestore allowlist on every page and API call.
 gcloud run deploy "$SERVICE" --image "$IMAGE" --region "$REGION" --service-account "$SA" \
-  --set-env-vars "$ENV_VARS" --allow-unauthenticated --memory 512Mi --max-instances 3 "${P[@]}"
+  --set-env-vars "^@@^$ENV_VARS" --allow-unauthenticated --memory 512Mi --max-instances 3 "${P[@]}"
 
 echo "==> [8/9] Refresh job ${JOB} and schedule"
 gcloud run jobs deploy "$JOB" --image "$IMAGE" --region "$REGION" --service-account "$SA" \
-  --set-env-vars "$ENV_VARS" --command python --args=-m,app.refresh \
+  --set-env-vars "^@@^$ENV_VARS" --command python --args=-m,app.refresh \
   --memory 4Gi --cpu 2 --task-timeout 3000 --max-retries 0 "${P[@]}"
 gcloud run jobs add-iam-policy-binding "$JOB" --region "$REGION" --member "serviceAccount:$SA" \
   --role roles/run.invoker "${P[@]}" >/dev/null
@@ -129,7 +132,7 @@ fi
 # yesterday's orders are in. Needs more memory and time than the refresh.
 RET_JOB="${RET_JOB:-asaya-d2c-retention}"
 gcloud run jobs deploy "$RET_JOB" --image "$IMAGE" --region "$REGION" --service-account "$SA" \
-  --set-env-vars "$ENV_VARS" --command python --args=-m,app.retention.job \
+  --set-env-vars "^@@^$ENV_VARS" --command python --args=-m,app.retention.job \
   --memory 4Gi --cpu 2 --task-timeout 3000 --max-retries 0 "${P[@]}"
 gcloud run jobs add-iam-policy-binding "$RET_JOB" --region "$REGION" --member "serviceAccount:$SA" \
   --role roles/run.invoker "${P[@]}" >/dev/null
@@ -147,7 +150,7 @@ fi
 # touches.
 LIVE_JOB="${LIVE_JOB:-asaya-d2c-live}"
 gcloud run jobs deploy "$LIVE_JOB" --image "$IMAGE" --region "$REGION" --service-account "$SA" \
-  --set-env-vars "$ENV_VARS" --command python --args=-m,app.live \
+  --set-env-vars "^@@^$ENV_VARS" --command python --args=-m,app.live \
   --memory 1Gi --task-timeout 600 --max-retries 0 "${P[@]}"
 gcloud run jobs add-iam-policy-binding "$LIVE_JOB" --region "$REGION" --member "serviceAccount:$SA" \
   --role roles/run.invoker "${P[@]}" >/dev/null
