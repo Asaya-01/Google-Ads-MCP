@@ -782,20 +782,27 @@ def test_basket_size_rows_and_missing_data(built_without_meta):
     assert sum(r[2] for r in p["rows"]) == 14
 
 
-def test_report_perf_sessions_are_tagged_non_awareness_non_crm(
+def test_report_perf_sessions_follow_the_teams_source_list(
     built_without_meta,
 ):
+    from app.pages.common import _report_source
+
     _, ctx = built_without_meta
+    allowed = {x.lower() for x in ctx.cfg["sessions"]["report_perf_sources"]}
+    # on the list: paid, affiliate and CRM; off it: organic, ig, wishlink
+    for s in ("facebook", "FB", "Google", "reddit", "KWE", "cashkaro", "YT"):
+        assert _report_source(s, allowed), s
+    assert _report_source("google&utm_medium=cpc&utm_campaign=1", allowed)
+    for s in ("ig", "IG", "wishlink", "chatgpt.com", "criteo", "", None):
+        assert not _report_source(s, allowed), s
     day = next(d for d in sorted(ctx.session_rows) if ctx.session_rows[d])
-    rows = ctx.session_rows[day]
     want = sum(
         r["sessions"]
-        for r in rows
+        for r in ctx.session_rows[day]
         if r["kind"] == "perf"
         and (r.get("utm_campaign") or "").strip()
-        and r["channel"] != "CRM"
+        and _report_source(r.get("utm_source"), allowed)
     )
     f = ctx.facts[day]
     assert f["report_perf_sessions"] == want
-    # never more than the broader performance count, never more than the whole
     assert f["report_perf_sessions"] <= f["perf_sessions"] <= f["sessions"]

@@ -213,11 +213,13 @@ groups and nothing below them, because Google reports no spend per asset.
   before that every Reddit campaign counted as performance. Reddit sales
   campaigns are always performance. Reach campaigns are social.
 - **Perf. sessions** (the D-1 column, `report_perf_sessions`) follow the team's
-  Shopify report: sessions that carry a UTM campaign, are not awareness or
-  social, and are not from CRM. Direct and organic visits (no UTM campaign) are
-  not in it, as in Shopify's "not one of" filters. CVR % (on perf) is orders
-  divided by it. It sits within about 1% of the team's sheet on 1 and 2 Oct;
-  the rest is probably a few affiliate sources the report leaves out.
+  Shopify report: the UTM source is on the team's list
+  (`sessions.report_perf_sources`: Meta, Google, Reddit, YouTube, the
+  affiliates and the CRM sources), the visit carries a UTM campaign, and it is
+  not awareness or social. Direct and organic visits, ig, wishlink, chatgpt,
+  criteo and any source not on the list are not in it. CVR % (on perf) is
+  orders divided by it. On 1 and 2 Nov it matches the report's add-to-carts
+  and is within 0.3% on sessions. A new source is one word in the list.
 
 ## Affiliate and CRM spends
 

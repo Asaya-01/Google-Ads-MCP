@@ -82,6 +82,14 @@ NA = {
 }
 
 
+def _report_source(source: str | None, allowed: set[str]) -> bool:
+    """A UTM source on the team's Perf. sessions list. A few links arrive
+    with the whole query string glued on ("google&utm_medium=..."), which
+    Shopify files under google."""
+    s = (source or "").strip().lower()
+    return s in allowed or s.split("&", 1)[0] in allowed and "&" in s
+
+
 def derive(f: dict) -> dict:
     """Rates recomputed from counts (never averaged across days)."""
     r = rules.ratio
@@ -289,15 +297,20 @@ class Context:
                     if r["kind"] == "social"
                 )
                 # "Perf. sessions" as the team's Shopify report counts them:
-                # tagged traffic only (a UTM campaign), not awareness or
-                # social, and not CRM. Sessions with no UTM campaign are
-                # direct / organic and are not in it.
+                # a UTM source on the team's list (paid, affiliate and CRM
+                # sources) with a UTM campaign, not awareness or social.
+                # Direct, organic and other sources (ig, wishlink, ...) are
+                # not in it.
+                allowed = {
+                    x.lower()
+                    for x in self.cfg["sessions"]["report_perf_sources"]
+                }
                 rp = sum(
                     r["sessions"]
                     for r in self.session_rows[day]
                     if r["kind"] == "perf"
                     and (r.get("utm_campaign") or "").strip()
-                    and r["channel"] != "CRM"
+                    and _report_source(r.get("utm_source"), allowed)
                 )
                 f.update(
                     report_perf_sessions=rp,
