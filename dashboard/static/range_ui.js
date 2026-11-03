@@ -180,14 +180,15 @@ function rgPopover() {
       const on = d.from === p.from && d.to === p.to;
       return `<button type="button" class="rg-pre ${p.kind} ${on ? "on" : ""}" data-pre="${esc(p.id)}"><span class="l">${esc(p.label)}</span>${p.sub ? `<small>${esc(p.sub)}</small>` : ""}</button>`;
     };
-    const sec = (title, kindName, note) => {
-      const items = ps.filter((p) => p.kind === kindName);
-      return items.length ? `<div class="rg-sec ${kindName}"><span>${title}</span>${note ? `<small>${note}</small>` : ""}</div>${items.map(btn).join("")}` : "";
-    };
-    left = sec("Quick ranges", "quick") +
-      sec("Sales", "sale", "found from hourly orders") +
-      sec("BAU stretches", "bau", "between sales") +
-      `<div class="rg-sec custom"><span>Custom range</span></div><button type="button" class="rg-pre custom ${d.custom ? "on" : ""}" data-pre="custom"><span class="l">Pick your own dates</span><small>type them, or click two days on the calendar</small></button>`;
+    const n = (k) => ps.filter((x) => x.kind === k).length;
+    const tabs = [["quick", "Quick", n("quick")], ["sale", "Sales", n("sale")], ["bau", "BAU", n("bau")], ["custom", "Custom", 0]];
+    const tab = d.tab || "quick";
+    const head = `<div class="rg-tabs" role="tablist" aria-label="Kind of range">${tabs.map(([k, l, c]) => `<button type="button" role="tab" class="rg-tab ${k}" data-tab="${k}" aria-selected="${tab === k}">${l}${c ? `<i>${c}</i>` : ""}</button>`).join("")}</div>`;
+    const note = { quick: "", sale: "Sales found from hourly orders, newest first.", bau: "The stretches between sales, newest first.", custom: "" }[tab];
+    const body = tab === "custom"
+      ? `<p class="rg-hint pad">Type two dates, or click a start day and an end day on the calendar.</p><button type="button" class="rg-pre custom ${d.custom ? "on" : ""}" data-pre="custom"><span class="l">Use my own dates</span><small>${d.from ? esc(rgSpan(d.from, d.to || d.from)) : "nothing picked yet"}</small></button>`
+      : `${note ? `<p class="rg-hint pad">${note}</p>` : ""}${ps.filter((x) => x.kind === tab).map(btn).join("") || '<p class="rg-hint pad">Nothing in the data for this yet.</p>'}`;
+    left = head + `<div class="rg-list">${body}</div>`;
   } else {
     left = RG_CMP.map(([k, l, hint]) => {
       let shown = hint;
@@ -219,7 +220,8 @@ function rgOpen(kind) {
   RG.pop = kind;
   const e = RG.eng;
   if (kind === "main") {
-    RG.draft = { from: RG.from, to: RG.to, custom: RG.preset === "custom" };
+    const cur = e.presets().find((x) => x.from === RG.from && x.to === RG.to);
+    RG.draft = { from: RG.from, to: RG.to, custom: RG.preset === "custom", tab: cur ? cur.kind : "custom" };
     const m = e.shiftMonths(RG.to, -1);
     RG.view = [+m.slice(0, 4), +m.slice(5, 7) - 1];
   } else {
@@ -268,7 +270,8 @@ function rgBind() {
   const e = RG.eng, d = RG.draft;
   pop.addEventListener("click", (ev) => {
     const t = ev.target;
-    const pre = t.closest("[data-pre]"), cm = t.closest("[data-cmp]"), day = t.closest("[data-day]");
+    const pre = t.closest("[data-pre]"), cm = t.closest("[data-cmp]"), day = t.closest("[data-day]"), tb = t.closest("[data-tab]");
+    if (tb) { d.tab = tb.dataset.tab; return rgPopRepaint(); }
     if (pre) {
       if (pre.dataset.pre === "custom") { d.custom = true; }
       else { const p = e.presets().find((x) => x.id === pre.dataset.pre); d.from = p.from; d.to = p.to; d.custom = false; const m = e.shiftMonths(p.to, -1); RG.view = [+m.slice(0, 4), +m.slice(5, 7) - 1]; }
@@ -278,7 +281,7 @@ function rgBind() {
     if (day) {
       const s = day.dataset.day;
       if (!d.from || d.to) { d.from = s; d.to = null; } else if (s < d.from) { d.to = d.from; d.from = s; } else d.to = s;
-      d.custom = true;
+      d.custom = true; d.tab = "custom";
       return rgPopRepaint();
     }
     if (t.closest("#rg-prev")) { RG.view = RG.view[1] === 0 ? [RG.view[0] - 1, 11] : [RG.view[0], RG.view[1] - 1]; return rgPopRepaint(); }
@@ -305,7 +308,7 @@ function rgBind() {
       const v = el.value;
       if (!v || v < e.first || v > e.last) return;
       if (id === "rg-in-from") { d.from = v; if (d.to && d.to < v) d.to = v; } else { d.to = v; if (!d.from || d.from > v) d.from = v; }
-      d.custom = true;
+      d.custom = true; d.tab = "custom";
       const m = e.shiftMonths(d.to || d.from, -1);
       RG.view = [+m.slice(0, 4), +m.slice(5, 7) - 1];
       rgPopRepaint();
