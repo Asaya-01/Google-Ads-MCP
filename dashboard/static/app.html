@@ -376,7 +376,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       <div class="psub">${esc(c.sub)}</div>
     </article>`).join("");
     return `<section class="card">
-      <div class="section-head"><h2>Right now</h2><span class="sub">D-1 ${esc(dayLabel(p.as_of))} · a ${esc(pl.kind)} day · ${esc(pl.baseline_note)}</span></div>
+      <div class="section-head"><h2>Yesterday at a glance</h2><span class="sub">always D-1 (${esc(dayLabel(p.as_of))}), not the dates picked below · a ${esc(pl.kind)} day · ${esc(pl.baseline_note)}</span></div>
       <div class="pulse">${checkout}${cards}</div>
       ${statusStrip()}
     </section>`;

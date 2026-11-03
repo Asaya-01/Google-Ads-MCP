@@ -443,3 +443,104 @@ def slabs(ctx: Context) -> dict:
         "days": sorted({r["date"] for r in rows}),
         "na": None,
     }
+
+
+def drills(ctx: Context) -> dict:
+    """The D-1 drill-downs per day, so the browser can rebuild them for any
+    dates picked: by channel, UTM source, campaign and landing page. Each
+    dimension has "names" (with the campaign type) and rows
+    [date, name, sessions, perf_sessions, atc, ic, orders, gmv, converted].
+    Perf sessions follow the D-1 rule (the team's source list, a UTM
+    campaign, not awareness or social). Products come from product_days."""
+    from .common import _report_source
+    from .d1 import _campaign_label
+
+    allowed = {
+        x.lower() for x in ctx.cfg["sessions"].get("report_perf_sources", [])
+    }
+    keep = ctx.cfg["d1"].get("drill_history_days", 400)
+    days = sorted(ctx.facts)[-keep:]
+    day_set = set(days)
+    keyfns = {
+        "channel": lambda r: r["channel"],
+        "source": lambda r: (r.get("utm_source") or "").strip().lower()
+        or "(no UTM)",
+        "campaign": lambda r: _campaign_label(ctx, r),
+    }
+    out: dict = {}
+    for dim, keyfn in keyfns.items():
+        names: list[dict] = []
+        index: dict[str, int] = {}
+        agg: dict[tuple, list] = {}
+
+        def slot(day, r):
+            k = keyfn(r)
+            if k not in index:
+                index[k] = len(names)
+                names.append({"key": k, "kind": r.get("kind")})
+            return agg.setdefault((day, index[k]), [0] * 7)
+
+        for day in days:
+            for r in ctx.session_rows.get(day, []):
+                a = slot(day, r)
+                a[0] += r["sessions"] or 0
+                if (
+                    r["kind"] == "perf"
+                    and (r.get("utm_campaign") or "").strip()
+                    and _report_source(r.get("utm_source"), allowed)
+                ):
+                    a[1] += r["sessions"] or 0
+                a[2] += r["atc"] or 0
+        for r in ctx.funnel_rows:
+            if r["date"] in day_set:
+                a = slot(r["date"], r)
+                a[3] += r.get("checkout_started") or 0
+                a[6] += r.get("converted") or 0
+        for r in ctx.order_rows:
+            if r["date"] in day_set:
+                a = slot(r["date"], r)
+                a[4] += r.get("orders") or 0
+                a[5] += r.get("gmv") or 0.0
+        out[dim] = {
+            "names": names,
+            "rows": [
+                [d, i, *[round(x, 2) for x in a]]
+                for (d, i), a in sorted(agg.items())
+                if any(a)
+            ],
+        }
+    # landing pages: Shopify sessions by landing page, GoKwik IC by the page
+    # GoKwik recorded (orders are not known per landing page)
+    names, index, agg = [], {}, {}
+
+    def lslot(day, page):
+        page = page or "(unknown)"
+        if page not in index:
+            index[page] = len(names)
+            names.append({"key": page, "kind": None})
+        return agg.setdefault((day, index[page]), [0] * 7)
+
+    for day in days:
+        for r in (ctx.data.get("landing") or {}).get(day, []):
+            a = lslot(day, r["landing_page"])
+            a[0] += r["sessions"] or 0
+            a[2] += r["atc"] or 0
+    for r in ctx.funnel_rows:
+        if r["date"] in day_set:
+            a = lslot(r["date"], r.get("landing_page"))
+            a[3] += r.get("checkout_started") or 0
+            a[6] += r.get("converted") or 0
+    out["landing_page"] = {
+        "names": names,
+        "rows": [[d, i, *a] for (d, i), a in sorted(agg.items()) if any(a)],
+    }
+    return {
+        "title": "Drill days",
+        "as_of": ctx.d1,
+        "from": days[0] if days else None,
+        "to": days[-1] if days else None,
+        "landing_days": sorted(
+            d for d in (ctx.data.get("landing") or {}) if d in day_set
+        ),
+        **out,
+    }

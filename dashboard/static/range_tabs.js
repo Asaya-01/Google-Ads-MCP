@@ -70,8 +70,8 @@ R.marketing = (p) => {
   const sheetNA = Object.entries(p.unavailable || {}).filter(([k]) => k.startsWith("sheet_")).map(([, v]) => v);
   const head = (metaNA ? `<div class="banner">Meta Ads: data unavailable. ${esc(metaNA)}. Meta spend, total spend, MER and Perf ROAS stay blank until it is in place.</div>` : "")
     + (sheetNA.length ? `<div class="banner">Spend sheets: ${sheetNA.map(esc).join("; ")}. Overall spend and ROAS stay blank for the days affected.</div>` : "");
-  const tail = `<section class="card">
-      <div class="section-head"><h2>Session classification check</h2><span class="sub">${dayLabel(m.start)}–${dayLabel(m.end)} · the last 7 days</span></div>
+  const tail = `<details class="card rg-all"><summary>Data check: are Google sessions matched to campaigns? (always the last 7 days, ${dayLabel(m.start)}–${dayLabel(m.end)}; not the dates picked above)</summary>
+      <div class="section-head"><h2>Session classification check</h2></div>
       <div class="tiles">
         <div class="tile"><div class="label">Google sessions with a campaign ID that matches GOOGLEADS_CONSOLIDATED</div><div class="value">${esc(fmt(m.match_rate, "pct") ?? "n/a")}</div><div class="foot">${inGroup.format(m.matched)} of ${inGroup.format(m.with_campaign_id)} sessions</div></div>
         <div class="tile"><div class="label">Google sessions with no campaign ID</div><div class="value">${esc(fmt(m.no_id_share, "pct") ?? "n/a")}</div><div class="foot">of ${inGroup.format(m.google_sessions)} Google sessions</div></div>
@@ -79,7 +79,7 @@ R.marketing = (p) => {
         <div class="tile"><div class="label">Unclassified Google IDs</div><div class="value">${chk.unclassified_google_ids.length}</div><div class="foot">${chk.unclassified_google_ids.length ? "Counted as Perf until they sync. Alerts fire for IDs seen yesterday." : "None in the history window"}</div></div>
       </div>
       ${chk.unclassified_google_ids.length ? table([{ label: "Campaign", text: true, render: (r) => `${r.name ? esc(r.name) : '<span class="na" title="Google Ads has no campaign with this ID in the World of Asaya account, so it is probably an old or removed campaign from another account">Name not found in Google Ads</span>'}<br><span class="sub">ID ${esc(r.campaign_id)}</span>` }, { key: "sessions", label: "Sessions", unit: "int" }, { label: "Last seen", render: (r) => esc(r.dates.at(-1)) }], chk.unclassified_google_ids) : ""}
-    </section>
+    </details>
     <section class="card">${notes(p)}${(p.zero_spend_days || []).length ? `<ul class="notes">${p.zero_spend_days.map((z) => `<li>Google spend on ${esc(dayLabel(z.date))} is zero: ${esc(z.reason)}.</li>`).join("")}</ul>` : ""}</section>`;
   rgTab("marketing", ["campaign_days", "meta_tree", "google_tree", "channel_days"], head, () => {
     const draw = () => {
@@ -176,22 +176,45 @@ function rgExcluded(pd, set) {
   return table([{ label: "Product type", text: true, render: (r) => esc(r.label) }, { label: "Lines", render: (r) => esc(fmt(r.lines, "int")) }, { label: "Units", render: (r) => esc(fmt(r.units, "int")) }, { label: "Revenue", render: (r) => esc(fmt(r.revenue, "inr")) }], rows);
 }
 R.products = (p) => {
-  const pt = p.product_types, mc = p.mrp_check;
-  const tail = `<div class="grid-2">
-      <section class="card"><div class="section-head"><h2>Product types</h2><span class="sub">${esc(pt.review_note)}</span></div>
-        ${table([{ label: "Type", text: true, render: (r) => `${esc(r.product_type)} ${r.excluded ? '<span class="chip">Excluded</span>' : ""}${r.needs_review ? '<span class="chip pending">Review</span>' : ""}` },
-                 { key: "catalog_products", label: "Products in catalog", unit: "int" }, { key: "lines_mtd", label: "Order lines MTD", unit: "int" }, { key: "dropped_lines_mtd", label: "Dropped MTD", unit: "int" }], pt.rows)}</section>
-      <section class="card"><div class="section-head"><h2>MRP coverage</h2><span class="sub">Kept units with a Shopify compare-at price, last 7 days</span></div>
-        <div class="tiles"><div class="tile"><div class="label">Units with MRP</div><div class="value">${esc(fmt(mc.coverage, "pct") ?? "n/a")}</div><div class="foot">${inGroup.format(mc.units_with_mrp)} of ${inGroup.format(mc.units)}</div></div></div>
-        ${mc.missing.length ? table([{ label: "Product", text: true, render: (r) => esc(r.product) }, { key: "units_without_mrp", label: "Units without MRP", unit: "int" }], mc.missing) : ""}</section>
+  const pt = p.product_types;
+  // product types and MRP coverage for the picked dates, from the per-day product page
+  const typeTable = (days) => {
+    const pd = state.pages.product_days, set = new Set(days), by = new Map();
+    for (const [d, ti, dropped, lines] of pd.type_rows) {
+      if (!set.has(d)) continue;
+      const t = pd.types[ti] || "";
+      const a = by.get(t) || by.set(t, { lines: 0, dropped: 0 }).get(t);
+      a.lines += lines; if (dropped) a.dropped += lines;
+    }
+    const rows = pt.rows.map((r) => ({ ...r, lines: (by.get(r.product_type) || {}).lines || 0, dropped: (by.get(r.product_type) || {}).dropped || 0 }));
+    return table([{ label: "Type", text: true, render: (r) => `${esc(r.product_type)} ${r.excluded ? '<span class="chip">Excluded</span>' : ""}${r.needs_review ? '<span class="chip pending">Review</span>' : ""}` },
+      { key: "catalog_products", label: "Products in catalog", unit: "int" }, { key: "lines", label: "Order lines", unit: "int" }, { key: "dropped", label: "Dropped", unit: "int" }], rows);
+  };
+  const mrpCard = (days) => {
+    const pd = state.pages.product_days, set = new Set(days), per = new Map();
+    let units = 0, withMrp = 0;
+    for (const [d, i, u, , , uwm] of pd.rows) {
+      if (!set.has(d)) continue;
+      units += u; withMrp += uwm;
+      if (u > uwm) per.set(i, (per.get(i) || 0) + (u - uwm));
+    }
+    if (!pd.mrp_available) return '<p class="na">Data unavailable: Shopify product MRPs were not pulled.</p>';
+    const missing = [...per.entries()].sort((x, y) => y[1] - x[1]).slice(0, 15).map(([i, n]) => ({ product: pd.names[i].label, units_without_mrp: n }));
+    return `<div class="tiles"><div class="tile"><div class="label">Units with MRP</div><div class="value">${esc(fmt(units ? withMrp / units : null, "pct") ?? "n/a")}</div><div class="foot">${inGroup.format(withMrp)} of ${inGroup.format(units)}</div></div></div>
+      ${missing.length ? table([{ label: "Product", text: true, render: (r) => esc(r.product) }, { key: "units_without_mrp", label: "Units without MRP", unit: "int" }], missing) : ""}`;
+  };
+  const tailFor = (days) => `<div class="grid-2">
+      <section class="card"><div class="section-head"><h2>Product types</h2><span class="sub">${esc(rgSpan(RG.from, RG.to))} · ${esc(pt.review_note)}</span></div>${typeTable(days)}</section>
+      <section class="card"><div class="section-head"><h2>MRP coverage</h2><span class="sub">kept units with a Shopify compare-at price · ${esc(rgSpan(RG.from, RG.to))}</span></div>${mrpCard(days)}</section>
     </div>
     <section class="card">${notes(p)}</section>`;
+  const tail = "";
   const head = p.mrp_check.na ? `<div class="banner">MRP: data unavailable. ${esc(p.mrp_check.na)}. Landed discount stays blank.</div>` : "";
   rgTab("products", ["product_days", "slab_days"], head, () => {
     const draw = () => {
       const e = RG.eng, c = e.compare(RG.from, RG.to, RG.cmp), pd = state.pages.product_days;
       const host = document.getElementById("rg-body");
-      if (!c.groups.length) { host.innerHTML = `<section class="card"><p class="na">Data unavailable: there are no days in the data for ${esc(rgSpan(RG.from, RG.to))}.</p></section>` + tail; return; }
+      if (!c.groups.length) { host.innerHTML = `<section class="card"><p class="na">Data unavailable: there are no days in the data for ${esc(rgSpan(RG.from, RG.to))}.</p></section>` + tailFor(RG.eng.rangeOf(RG.from, RG.to)); return; }
       const [g, ctl] = rgPhasePick(c, "pr-phase");
       const [prodTbl, catTbl, n] = rgProductTables(pd, g);
       const all = new Set(c.all);
@@ -200,7 +223,7 @@ R.products = (p) => {
           ${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}${prodTbl}</section>
         <section class="card"><div class="section-head"><h2>Categories</h2></div>${catTbl}</section>
         <section class="card"><div class="section-head"><h2>Basket size</h2><span class="sub">orders by number of items · ${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${bkHtml(g)}</section>
-        <section class="card"><div class="section-head"><h2>Excluded product types</h2><span class="sub">${esc(rgSpan(RG.from, RG.to))}, all days</span></div>${rgExcluded(pd, all)}</section>` + tail;
+        <section class="card"><div class="section-head"><h2>Excluded product types</h2><span class="sub">${esc(rgSpan(RG.from, RG.to))}, all days</span></div>${rgExcluded(pd, all)}</section>` + tailFor(RG.eng.rangeOf(RG.from, RG.to));
       rgPhaseBind("pr-phase", draw);
     };
     draw();
@@ -238,38 +261,104 @@ R.d1 = (p) => {
     landing_page: [["sessions", "Sessions", "num"], ["atc", "ATC", "num"], ["atc_rate", "Sessions → ATC", "pct"], ["ic", "IC (GoKwik)", "num"], ["converted", "Converted (GoKwik)", "num"]],
   };
   const defaultDrill = [["sessions", "Sessions", "num"], ["perf_sessions", "Perf sessions", "num"], ["atc", "ATC", "num"], ["atc_rate", "Sessions → ATC", "pct"], ["ic", "IC", "num"], ["orders", "Orders", "num"], ["gmv", "Revenue", "inr"]];
-  const drillTable = () => {
+  // the drill-downs follow the picked dates (and the sale / BAU block picked), built from the per-day pages
+  const d1Collect = (dim, days) => {
+    const m = new Map(), set = new Set(days || []);
+    if (dim === "product") {
+      const pd = state.pages.product_days;
+      for (const [d, i, units, rev] of pd ? pd.rows : []) {
+        if (!set.has(d)) continue;
+        const a = m.get(i) || m.set(i, { units: 0, revenue: 0 }).get(i);
+        a.units += units; a.revenue += rev;
+      }
+      return m;
+    }
+    const src = (state.pages.drill_days || {})[dim];
+    for (const r of src ? src.rows : []) {
+      if (!set.has(r[0])) continue;
+      const a = m.get(r[1]) || m.set(r[1], { sessions: 0, perf_sessions: 0, atc: 0, ic: 0, orders: 0, gmv: 0, converted: 0 }).get(r[1]);
+      a.sessions += r[2]; a.perf_sessions += r[3]; a.atc += r[4]; a.ic += r[5]; a.orders += r[6]; a.gmv += r[7]; a.converted += r[8];
+    }
+    return m;
+  };
+  const d1Drill = (g, dim) => {
+    const cur = g.cur || [], prev = g.prev && g.prev.length ? g.prev : [];
+    const perDay = prev.length && cur.length !== prev.length;
+    const C = d1Collect(dim, cur), P = prev.length ? d1Collect(dim, prev) : new Map();
+    const nameOf = (i) => (dim === "product" ? (state.pages.product_days.names[i] || {}).label : state.pages.drill_days[dim].names[i].key);
+    const kindOf = (i) => (dim === "product" ? null : state.pages.drill_days[dim].names[i].kind);
+    // totals are shown as they are; when the periods differ in length the change compares per-day averages
+    const scale = (a) => (a ? { ...a } : {});
+    const RATE = new Set(["atc_rate", "cvr"]);
+    const sortKey = dim === "product" ? "revenue" : "sessions";
+    return [...new Set([...C.keys(), ...P.keys()])].map((i) => {
+      const c = scale(C.get(i)), q = prev.length ? scale(P.get(i)) : {};
+      for (const side of [c, q]) { side.atc_rate = side.sessions ? side.atc / side.sessions : null; side.cvr = side.sessions ? side.orders / side.sessions : null; }
+      const delta = {};
+      for (const k of new Set([...Object.keys(c), ...Object.keys(q)])) {
+        if (!q[k]) { delta[k] = null; continue; }
+        delta[k] = perDay && !RATE.has(k) ? ((c[k] ?? 0) / cur.length) / (q[k] / prev.length) - 1 : (c[k] ?? 0) / q[k] - 1;
+      }
+      return { key: nameOf(i) || "(unknown)", kind: kindOf(i), current: c, prior: q, delta, _sort: Math.max(c[sortKey] || 0, q[sortKey] || 0) };
+    }).filter((r) => r._sort > 0).sort((x, y) => y._sort - x._sort).slice(0, 50);
+  };
+  const drillTable = (g) => {
+    const dd = state.pages.drill_days;
+    if (state.drill !== "product" && (!dd || !dd[state.drill])) return '<p class="na">Data unavailable: the drill-down data has not been built yet. It appears after the next refresh.</p>';
     const fields = drillCols[state.drill] || defaultDrill;
-    const rows = p.drilldowns[state.drill] || [];
+    const rows = d1Drill(g, state.drill);
+    const hasPrev = g.prev && g.prev.length;
     const cols = [{ label: DRILLS.find((d) => d[0] === state.drill)[1], text: true, render: (r) => `${esc(r.key)}${state.drill === "campaign" && r.kind === "awareness" ? ' <span class="phase sale">Awareness</span>' : ""}` },
-      ...fields.map(([k, l, u]) => ({ label: l, render: (r) => `${esc(fmt(r.current[k], u, true) ?? "–")}<br><span class="sub">${esc(fmt(r.prior[k], u, true) ?? "–")} · ${deltaHtml(r.delta[k], k)}</span>` }))];
-    return table(cols, rows, { maxHeight: "65vh" });
+      ...fields.map(([k, l, u]) => ({ label: l, render: (r) => `${esc(fmt(r.current[k], u, true) ?? "–")}${hasPrev ? `<br><span class="sub">${esc(fmt(r.prior[k], u, true) ?? "–")} · ${deltaHtml(r.delta[k], k)}</span>` : ""}` }))];
+    const gaps = [];
+    if (dd && dd.from && g.cur.some((d) => d < dd.from)) gaps.push(`Drill-down detail starts ${rgFmtDay(dd.from, true)}; earlier days are not in it.`);
+    if (state.drill === "landing_page" && dd) { const ld = new Set(dd.landing_days || []); const miss = g.cur.filter((d) => !ld.has(d)); if (miss.length) gaps.push(`Landing-page sessions are missing for ${rgListDays(miss)}.`); }
+    return (gaps.length ? `<div class="banner">${esc(gaps.join(" "))}</div>` : "") + table(cols, rows, { maxHeight: "65vh" });
   };
   const c = p.commentary;
-  const basisNote = p.basis === "per_day" ? "Windows differ in length: counts in the drill-downs are per-day averages." : "Equal windows: drill-downs compare totals.";
-  const stdWin = `${p.prior.start ? `${dayLabel(p.prior.start)}–${dayLabel(p.prior.end)}` : "no prior window"} vs ${dayLabel(p.current.start)}–${dayLabel(p.current.end)}`;
-  const tail = `
+  const stdFrom = p.current.start, stdTo = p.current.end;
+  const stdWin = `${p.prior.start ? `${rgFmtDay(p.prior.start)}–${rgFmtDay(p.prior.end, true)}` : "no prior window"} vs ${stdFrom ? `${rgFmtDay(stdFrom)}–${rgFmtDay(stdTo, true)}` : "–"}`;
+  // the written commentary is produced once per refresh for one window; it is shown only when those are the dates picked
+  const commentaryHtml = () => {
+    const onStd = RG.from === stdFrom && RG.to === stdTo;
+    if (!c?.text) return `<p class="na">Data unavailable: ${esc(c?.na || "commentary has not been generated yet")}</p>`;
+    if (onStd) return `<div class="commentary">${esc(c.text)}</div>`;
+    return `<p class="na">The written commentary covers ${esc(stdWin)}, not the dates picked above, so it is hidden here.</p><button type="button" class="rg-btn" id="d1-std">Show those dates</button>`;
+  };
+  const tailFor = (g, ctl) => `
     <section class="card">
       <div class="section-head"><h2>What moved, and why</h2>${c?.model ? `<span class="sub">Written by Claude (${esc(c.model)}) for ${esc(stdWin)}</span>` : ""}</div>
-      ${c?.text ? `<div class="commentary">${esc(c.text)}</div>` : `<p class="na">Data unavailable: ${esc(c?.na || "commentary has not been generated yet")}</p>`}
+      ${commentaryHtml()}
     </section>
     <section class="card">
-      <div class="section-head"><h2>Drill-down</h2><span class="sub">For the standard D-1 windows (${esc(stdWin)}), not the dates picked above. Current, then prior · Δ. ${basisNote}</span></div>
+      <div class="section-head"><h2>Drill-down ${phaseChip(g.phase)}</h2>${ctl}<span class="sub">${esc(rgVsText(g, "cur"))}${g.prev && g.prev.length ? ` · compared with ${esc(rgVsText(g, "prev"))} · current, then comparison · Δ${g.prev.length !== g.cur.length ? " (per day, the periods differ in length)" : ""}` : ""}</span></div>
       <div class="seg" role="group" aria-label="Drill-down dimension">${DRILLS.map(([k, l]) => `<button type="button" data-drill="${k}" aria-pressed="${k === state.drill}">${l}</button>`).join("")}</div>
-      <div id="drill">${drillTable()}</div>
+      <div id="drill">${drillTable(g)}</div>
     </section>
     <section class="card">${notes(p)}</section>`;
-  rgTab("d1", ["slab_days"], "", () => {
-    const e = e0(), c2 = e.compare(RG.from, RG.to, RG.cmp);
-    const host = document.getElementById("rg-body");
-    const funnels = c2.groups.length
-      ? c2.groups.map((g) => `<section class="card"><div class="section-head"><h2>Funnel ${phaseChip(g.phase)}</h2><span class="sub">${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${statusStrip()}${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}${funnel(g)}<p class="legend-note">Whole store, whatever the Performance / Awareness switch says. Perf. sessions are sessions from the team's UTM source list with a UTM campaign, not awareness or social (direct, organic and other sources are not in it); Spends are all channels on sales campaigns (Meta, Google, Reddit, affiliate and CRM; awareness and social left out); Orders and Revenue are Shopify's own Sales report (Orders, Total sales; cancelled orders still count as orders, returns come off Total sales; only influencer and sample orders left out); RoAS is revenue ÷ Spends; CPS is Spends ÷ overall sessions; IC → orders is orders ÷ GoKwik checkouts started.</p></section><section class="card"><div class="section-head"><h2>Basket size ${phaseChip(g.phase)}</h2><span class="sub">orders by number of items · ${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${bkHtml(g)}</section>`).join("")
-      : `<section class="card"><p class="na">Data unavailable: there are no days in the data for ${esc(rgSpan(RG.from, RG.to))}.</p></section>`;
-    host.innerHTML = funnels + tail;
-    host.querySelectorAll("[data-drill]").forEach((b) => b.addEventListener("click", () => {
-      state.drill = b.dataset.drill;
-      host.querySelectorAll("[data-drill]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-      document.getElementById("drill").innerHTML = drillTable();
-    }));
+  rgTab("d1", ["slab_days", "drill_days", "product_days"], "", () => {
+    const draw = () => {
+      const e = e0(), c2 = e.compare(RG.from, RG.to, RG.cmp);
+      const host = document.getElementById("rg-body");
+      const funnels = c2.groups.length
+        ? c2.groups.map((g) => `<section class="card"><div class="section-head"><h2>Funnel ${phaseChip(g.phase)}</h2><span class="sub">${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${statusStrip()}${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}${funnel(g)}<p class="legend-note">Whole store, whatever the Performance / Awareness switch says. Perf. sessions are sessions from the team's UTM source list with a UTM campaign, not awareness or social (direct, organic and other sources are not in it); Spends are all channels on sales campaigns (Meta, Google, Reddit, affiliate and CRM; awareness and social left out); Orders and Revenue are Shopify's own Sales report (Orders, Total sales; cancelled orders still count as orders, returns come off Total sales; only influencer and sample orders left out); RoAS is revenue ÷ Spends; CPS is Spends ÷ overall sessions; IC → orders is orders ÷ GoKwik checkouts started.</p></section><section class="card"><div class="section-head"><h2>Basket size ${phaseChip(g.phase)}</h2><span class="sub">orders by number of items · ${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${bkHtml(g)}</section>`).join("")
+        : `<section class="card"><p class="na">Data unavailable: there are no days in the data for ${esc(rgSpan(RG.from, RG.to))}.</p></section>`;
+      let tail = `<section class="card">${notes(p)}</section>`;
+      let g = null;
+      if (c2.groups.length) { const [pg, ctl] = rgPhasePick(c2, "d1-phase"); g = pg; tail = tailFor(g, ctl); }
+      host.innerHTML = funnels + tail;
+      host.querySelectorAll("[data-drill]").forEach((b) => b.addEventListener("click", () => {
+        state.drill = b.dataset.drill;
+        host.querySelectorAll("[data-drill]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+        document.getElementById("drill").innerHTML = drillTable(g);
+      }));
+      rgPhaseBind("d1-phase", draw);
+      document.getElementById("d1-std")?.addEventListener("click", () => {
+        RG.from = stdFrom; RG.to = stdTo; RG.preset = "custom";
+        RG.cmp = p.prior.start ? { mode: "custom", from: p.prior.start, to: p.prior.end } : { mode: "none" }; RG.cmpAuto = false;
+        rgChanged();
+      });
+    };
+    draw();
   });
 };

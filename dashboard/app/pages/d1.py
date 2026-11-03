@@ -86,8 +86,9 @@ def build(ctx: Context, commentary: dict | None = None) -> dict:
         "drilldowns": drill,
         "commentary": commentary,
         "notes": [
-            "Current = the run of same-phase days ending yesterday (up to 7). Prior = the phase-matched period "
-            "of the previous month: BAU vs BAU, sale vs sale.",
+            "Every table here follows the dates and comparison picked at the top: sale days are compared with "
+            "sale days and BAU with BAU. Only the written commentary is for one fixed window (the run of "
+            "same-phase days ending yesterday, against the matching period of the previous month).",
             "Sessions and ATC: Shopify. IC: GoKwik checkouts started. Orders and revenue: valid Shopify orders, "
             "attributed to source and campaign through the UTM GoKwik recorded at checkout.",
             "Landing page orders are not available per order; the landing-page drill shows GoKwik IC and "
