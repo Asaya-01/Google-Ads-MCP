@@ -133,6 +133,26 @@ def parse_daily(rows: list[list], spec: dict) -> dict:
     return {"days": days, "filled_through": last, "notes": notes}
 
 
+def merge_parsed(parts: list[dict]) -> dict:
+    """Several parsed workbooks of one source (one per month) as one. A day
+    in two of them keeps the larger spend."""
+    if len(parts) == 1:
+        return parts[0]
+    days: dict[str, dict] = {}
+    notes: list[str] = []
+    for p in parts:
+        notes += p["notes"]
+        for day, rec in p["days"].items():
+            if day not in days or rec["spend"] > days[day]["spend"]:
+                days[day] = rec
+    last = [p["filled_through"] for p in parts if p["filled_through"]]
+    return {
+        "days": dict(sorted(days.items())),
+        "filled_through": max(last) if last else None,
+        "notes": notes,
+    }
+
+
 def apply_follow(parsed: dict[str, dict], specs: dict) -> None:
     """A source that is updated together with another one (the broadcast
     sheet follows the CRM flow sheet) is filled through the later of the two,
@@ -214,13 +234,21 @@ def load_all(cfg: dict) -> tuple[dict, dict]:
     out: dict[str, dict] = {}
     failed: dict[str, str] = {}
     for name, spec in specs.items():
-        sheet_id = os.environ.get(spec["sheet_env"])
-        if not sheet_id:
+        raw = os.environ.get(spec["sheet_env"]) or ""
+        ids = [x.strip() for x in raw.split(",") if x.strip()]
+        if not ids:
             failed[name] = f"sheet id not set ({spec['sheet_env']})"
             continue
         try:
-            rows = fetch_rows(sheet_id, spec["tab"], spec["header_row"] + 1)
-            out[name] = parse_daily(rows, spec)
+            # a source kept in monthly workbooks lists them all, comma
+            # separated; the days of every workbook are put together
+            parts = [
+                parse_daily(
+                    fetch_rows(i, spec["tab"], spec["header_row"] + 1), spec
+                )
+                for i in ids
+            ]
+            out[name] = merge_parsed(parts)
         except Exception as exc:
             failed[name] = f"{type(exc).__name__}: {exc}"
     apply_follow(out, specs)

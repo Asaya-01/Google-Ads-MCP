@@ -212,6 +212,9 @@ groups and nothing below them, because Google reports no spend per asset.
   containing "traffic" is awareness **from 1 Nov 2026** (`sessions.dated_awareness`);
   before that every Reddit campaign counted as performance. Reddit sales
   campaigns are always performance. Reach campaigns are social.
+- The Top Funnel campaign `WOA_Awareness_TOF_Sales_Skincare_ATC_UAS` reaches
+  Shopify as `WOA_TOF_Sales_Skincare_ATC_UAS` or as its bare id, so
+  `sessions.awareness_utm_campaigns` lists those as awareness too.
 - **Perf. sessions** (the D-1 column, `report_perf_sessions`) follow the team's
   Shopify report: the UTM source is on the team's list
   (`sessions.report_perf_sources`: Meta, Google, Reddit, YouTube, the
@@ -258,7 +261,10 @@ account request a Sheets-scoped token for itself.
   in the totals only from the day the sheet starts (1 Nov 2026): earlier days
   leave it out of overall spend rather than blanking it (about 2% of spend),
   and the Reddit row says "n of m days" for a range that straddles the start.
-  Change `tab` and the column when December's workbook replaces it.
+  Put one workbook id per month in `SPEND_SHEET_REDDIT`, comma separated
+  (`oct_id,nov_id`): the days of all of them are put together, and without
+  October's the Reddit spend for October is simply missing from overall spend.
+  Add December's id when the month starts.
 - **Overall ROAS** = GMV / (Meta + Google + affiliate + CRM + Reddit). It stays
   blank for a day until every part is in. The existing MER and Shopify ROAS (Perf) are
   unchanged. Channel ROAS (affiliate, CRM flow, CRM broadcast) is each

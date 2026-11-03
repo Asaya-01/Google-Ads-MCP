@@ -66,6 +66,17 @@ def test_session_kind_follows_the_brief():
         "perf",
         None,
     )
+    # the Top Funnel campaign arrives in Shopify without "Awareness" in its
+    # UTM name, or as its bare id: still awareness
+    assert kind("facebook", "WOA_TOF_Sales_Skincare_ATC_UAS") == (
+        "awareness",
+        None,
+    )
+    assert kind("facebook", "120242708156000304") == ("awareness", None)
+    assert kind("facebook", "WOA_TOF_Sales_AdvantageSales_Non-offer_UAS") == (
+        "perf",
+        None,
+    )
     # a Google campaign ID from the team's awareness list
     aw, kn = rules.google_awareness_ids(
         [], "awareness", scfg["google_awareness_extra_ids"]

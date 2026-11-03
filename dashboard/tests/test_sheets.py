@@ -102,3 +102,27 @@ def test_the_reddit_block_reads_spend_only_and_stops_at_the_last_filled_day():
     assert out["days"]["2026-11-01"]["spend"] == 6950
     assert out["days"]["2026-11-02"]["spend"] == 7263
     assert "2026-11-03" not in out["days"]
+
+
+def test_monthly_workbooks_are_put_together_and_the_larger_spend_wins():
+    a = {
+        "days": {
+            "2026-10-30": {"spend": 100.0, "revenue": 0.0},
+            "2026-10-31": {"spend": 200.0, "revenue": 0.0},
+        },
+        "filled_through": "2026-10-31",
+        "notes": [],
+    }
+    b = {
+        "days": {
+            "2026-10-31": {"spend": 250.0, "revenue": 0.0},
+            "2026-11-01": {"spend": 300.0, "revenue": 0.0},
+        },
+        "filled_through": "2026-11-01",
+        "notes": ["x"],
+    }
+    out = sheets.merge_parsed([a, b])
+    assert sorted(out["days"]) == ["2026-10-30", "2026-10-31", "2026-11-01"]
+    assert out["days"]["2026-10-31"]["spend"] == 250.0
+    assert out["filled_through"] == "2026-11-01"
+    assert sheets.merge_parsed([a]) is a

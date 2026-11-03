@@ -92,6 +92,12 @@ def session_kind(
         return "social", None
     if is_awareness_name(campaign, cfg):
         return "awareness", None
+    # the same awareness campaigns as they arrive in Shopify under another
+    # UTM name (the campaign without "Awareness" in it, or its bare id)
+    if campaign.lower() in {
+        x.lower() for x in cfg.get("awareness_utm_campaigns", [])
+    }:
+        return "awareness", None
     for rule in cfg.get("dated_awareness", []):
         if (
             day
