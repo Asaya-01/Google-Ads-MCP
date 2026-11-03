@@ -32,7 +32,7 @@ const RG_DEP = {
   overall_roas: ["gmv", "all_spend"], affiliate_roas: ["affiliate_revenue", "affiliate_spend"], crm_roas: ["crm_revenue", "crm_spend"],
   crm_flow_roas: ["crm_flow_revenue", "crm_flow_spend"], crm_broadcast_roas: ["crm_broadcast_revenue", "crm_broadcast_spend"],
 };
-const RG_NEUTRAL = new Set(["spend", "sessions", "all_spend", "affiliate_spend", "crm_spend"]);
+const RG_NEUTRAL = new Set(["spend", "sessions", "all_spend", "affiliate_spend", "crm_spend", "reddit_spend"]);
 const rgNa = (w, k) => w.na[k] || (RG_DEP[k] || []).map((d) => w.na[d]).find(Boolean) || null;
 const rgFmtDay = (s, year) => new Date(s + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(year ? { year: "numeric" } : {}), timeZone: "UTC" });
 const rgSpan = (a, b) => (a === b ? rgFmtDay(a, true) : `${rgFmtDay(a)} – ${rgFmtDay(b, true)}`);
@@ -103,7 +103,7 @@ const RG_MODE_NOTE = {
   aw: "Awareness campaigns only: spend, delivery and whatever sessions and orders were credited to them. Awareness is judged on reach and cost of reach, so ROAS here is attribution only.",
   all: "Everything together, so the totals tie back to Shopify.",
 };
-const RG_AW_DROP = new Set(["affiliate_spend", "crm_spend", "all_spend", "overall_roas", "affiliate_roas", "crm_roas", "perf_roas", "new_share"]);
+const RG_AW_DROP = new Set(["affiliate_spend", "crm_spend", "reddit_spend", "all_spend", "overall_roas", "affiliate_roas", "crm_roas", "perf_roas", "new_share"]);
 const RG_AW_LABEL = {
   gmv: "GMV credited to awareness", orders: "Orders credited to awareness", sessions: "Sessions from awareness",
   spend: "Awareness spend (Meta + Google)", meta_spend: "Meta awareness spend", google_spend: "Google awareness spend",

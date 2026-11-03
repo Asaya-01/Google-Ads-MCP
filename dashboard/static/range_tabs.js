@@ -4,7 +4,7 @@
 const MK = { phase: null };
 const RG_MKT = [
   ["gmv", "GMV", "inr"], ["meta_spend", "Meta spend", "inr"], ["google_spend", "Google spend", "inr"],
-  ["affiliate_spend", "Affiliate spend", "inr"], ["crm_spend", "CRM spend (flow + broadcast)", "inr"],
+  ["affiliate_spend", "Affiliate spend", "inr"], ["crm_spend", "CRM spend (flow + broadcast)", "inr"], ["reddit_spend", "Reddit spend (sales)", "inr"],
   ["all_spend", "Overall spend", "inr"], ["spend", "Meta + Google spend", "inr"],
   ["overall_roas", "Overall ROAS (GMV / all spend)", "x"], ["mer", "MER (GMV / Meta + Google)", "x"], ["perf_roas", "Shopify ROAS (Perf)", "x"],
   ["meta_sales_roas", "Meta ROAS", "x"], ["google_sales_roas", "Google Ads ROAS", "x"],

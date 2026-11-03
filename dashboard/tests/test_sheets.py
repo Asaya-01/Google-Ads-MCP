@@ -85,3 +85,20 @@ def test_the_broadcast_sheet_is_filled_through_the_day_the_flow_sheet_is():
     # 31 Oct had no broadcast: a real zero, now that the CRM team has filled it
     assert parsed["crm_broadcast"]["days"]["2026-10-31"]["spend"] == 0.0
     assert "2026-11-01" not in parsed["crm_broadcast"]["days"]
+
+
+def test_the_reddit_block_reads_spend_only_and_stops_at_the_last_filled_day():
+    pad = [""] * 32  # columns A..AF
+    row = lambda d, spend: [d, "Sun", "BAU", "BAU", *[""] * 27, "8,800", spend]
+    rows = [
+        row("01-Nov-2026", "6,950"),
+        row("02-Nov-2026", "7,263"),
+        row("03-Nov-2026", ""),  # not entered yet
+        ["NOVEMBER TOTAL", *pad],
+    ]
+    assert len(rows[0]) == 33  # the spend is column AG
+    out = sheets.parse_daily(rows, SPECS["reddit"])
+    assert out["filled_through"] == "2026-11-02"
+    assert out["days"]["2026-11-01"]["spend"] == 6950
+    assert out["days"]["2026-11-02"]["spend"] == 7263
+    assert "2026-11-03" not in out["days"]

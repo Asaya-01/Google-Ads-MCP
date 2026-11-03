@@ -171,7 +171,8 @@ by the UTM of the converting visit, organic and direct included), then
 - **Meta** › **TOF / MOF / BOF / Catalog** › **product** › campaign › ad set › ad
 - **Google Ads** › **Brand Search / Brand PMax / Non-brand PMax** (› product) /
   Demand Gen / YouTube › campaign › ad group or asset group › ad
-- **Affiliate** and **CRM** (› flows / broadcasts), from the spend sheets
+- **Affiliate**, **Reddit** (sales campaigns, spend only) and **CRM**
+  (› flows / broadcasts), from the spend sheets
 - a last row with Shopify GMV over all spend
 
 In the Awareness view Meta opens by goal (ATC, LPV, Amazon) instead of stage.
@@ -220,14 +221,25 @@ account request a Sheets-scoped token for itself.
   yet"), never zero. The broadcast sheet is filled through the day the flow
   sheet is, because its real no-broadcast days are zeros too. A date written
   twice keeps the row with the larger spend.
-- **Overall ROAS** = GMV / (Meta + Google + affiliate + CRM). It stays blank for
-  a day until every part is in. The existing MER and Shopify ROAS (Perf) are
+- **Reddit (temporary)**: sales-campaign spend from the Reddit block of the
+  monthly media-plan workbook ("Target vs Achieved" tab, the Reddit "Actual
+  Spend" column, id in `SPEND_SHEET_REDDIT`), until the Reddit bot loads
+  BigQuery. The sheet has no Reddit revenue, so Reddit has a spend and no ROAS.
+  Reddit traffic campaigns belong to the Awareness bucket, which will come from
+  BigQuery; they are not in this sheet. The workbook is monthly, so Reddit is
+  in the totals only from the day the sheet starts (1 Nov 2026): earlier days
+  leave it out of overall spend rather than blanking it (about 2% of spend),
+  and the Reddit row says "n of m days" for a range that straddles the start.
+  Change `tab` and the column when December's workbook replaces it.
+- **Overall ROAS** = GMV / (Meta + Google + affiliate + CRM + Reddit). It stays
+  blank for a day until every part is in. The existing MER and Shopify ROAS (Perf) are
   unchanged. Channel ROAS (affiliate, CRM flow, CRM broadcast) is each
   channel's own revenue / its spend.
 - **Today (live)**: Meta and Google are real. Affiliate and CRM are estimates
   from the latest filled days of the same kind (sale or BAU): CRM = a typical
   day's spend x hours so far / 24; affiliate = its share of GMV x today's GMV so
-  far. Reddit is not included yet; add it once it lands in BigQuery.
+  far. Reddit = a typical day's spend x hours so far / 24, and is left out of
+  the total when the sheet has fewer than two filled days.
 - If a sheet cannot be read, the last good copy is used and the dashboard says
   so; a sheet never read stays unavailable with the reason.
 

@@ -542,6 +542,50 @@ def test_affiliate_and_crm_spends_flow_into_the_overall_roas(
     assert late["overall_roas"] is None  # never a ROAS on a partial spend
 
 
+def test_reddit_counts_from_its_first_day_and_does_not_blank_earlier_days(
+    built_without_meta,
+):
+    from app.pages.common import Context
+
+    _, ctx = built_without_meta
+    days = sorted(ctx.facts)
+    first, before = days[-3], days[-5]
+    data = dict(ctx.data)
+    full = lambda s: {"days": {d: {"spend": s, "revenue": 0.0} for d in days}}
+    data["manual_spends"] = {
+        "sources": {
+            "affiliate": {**full(100.0), "filled_through": days[-1]},
+            "crm_flow": {**full(50.0), "filled_through": days[-1]},
+            "crm_broadcast": {**full(25.0), "filled_through": days[-1]},
+            "reddit": {
+                "days": {first: {"spend": 8000.0, "revenue": 0.0}},
+                "filled_through": first,
+            },
+        },
+        "failed": {},
+        "stale": {},
+    }
+    c2 = Context(data, ctx.cfg)
+    # before the sheet starts: Reddit is missing but the total still stands
+    b = c2.facts[before]
+    assert b["reddit_spend"] is None
+    assert "not in the sheet before" in b["na"]["reddit_spend"]
+    assert b["other_spend"] == 175.0
+    # from its first day it is part of the total
+    f = c2.facts[first]
+    assert f["reddit_spend"] == 8000.0 and f["other_spend"] == 8175.0
+    assert "reddit_revenue" not in f
+    # a day the sheet has not reached yet is unavailable, not zero
+    late = c2.facts[days[-1]]
+    assert late["reddit_spend"] is None and late["all_spend"] is None
+    # a Reddit sheet that cannot be read never blanks the other days
+    data["manual_spends"]["sources"].pop("reddit")
+    data["manual_spends"]["failed"] = {"reddit": "no access"}
+    c3 = Context(data, ctx.cfg)
+    assert c3.facts[first]["other_spend"] == 175.0
+    assert "no access" in c3.facts[first]["na"]["reddit_spend"]
+
+
 def test_performance_and_awareness_add_up_to_the_whole(built_without_meta):
     _, ctx = built_without_meta
     checked = 0

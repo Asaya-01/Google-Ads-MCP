@@ -82,11 +82,23 @@
         "start_year": 2026,
         "columns": {"spend": "B", "revenue": "C"},
         "filled_through_follows": "crm_flow"
+      },
+      "reddit": {
+        "label": "Reddit",
+        "sheet_env": "SPEND_SHEET_REDDIT",
+        "tab": "Target vs Achieved",
+        "header_row": 4,
+        "date_col": "A",
+        "date_format": "%d-%b-%Y",
+        "columns": {"spend": "AG"},
+        "optional_before_first_day": true,
+        "note": "Temporary: the Reddit block of the monthly media-plan workbook (Actual Spend, sales campaigns only) until the Reddit bot loads BigQuery. The sheet has no Reddit revenue, so there is no Reddit ROAS. Traffic campaigns count as awareness."
       }
     },
     "live_estimate": {
       "affiliate": "per_gmv",
       "crm": "per_hour",
+      "reddit": "per_hour",
       "basis_days": 7
     }
   },

@@ -44,6 +44,7 @@ COUNT_FIELDS = [
     "crm_broadcast_revenue",
     "crm_spend",
     "crm_revenue",
+    "reddit_spend",
     "other_spend",
     "all_spend",
     # the same numbers split by campaign type: Awareness (campaigns named
@@ -542,33 +543,47 @@ class Context:
         specs = self.cfg.get("manual_spends", {}).get("sources", {})
         sources = ms.get("sources") or {}
         failed = ms.get("failed") or {}
+        # sources that count in the totals only where they exist: Reddit,
+        # read from a monthly workbook, has no days before it starts
+        skip: set[str] = set()
         for name, spec in specs.items():
             label = spec.get("label", name)
             src = sources.get(name)
+            keys = [f"{name}_spend"] + (
+                [f"{name}_revenue"] if "revenue" in spec["columns"] else []
+            )
+            optional = spec.get("optional_before_first_day")
             if src is None:
                 reason = failed.get(name) or "sheet not read yet"
-                f[f"{name}_spend"] = f[f"{name}_revenue"] = None
-                f["na"][f"{name}_spend"] = f["na"][f"{name}_revenue"] = (
-                    f"{label} sheet unavailable: {reason}"
-                )
+                for k in keys:
+                    f[k] = None
+                    f["na"][k] = f"{label} sheet unavailable: {reason}"
+                if optional:
+                    skip.add(f"{name}_spend")
                 continue
             rec = src["days"].get(day)
             if rec is None:
                 first = min(src["days"]) if src["days"] else None
+                before = bool(first and day < first)
                 why = (
                     f"{label} spend is not in the sheet before {first}"
-                    if first and day < first
+                    if before
                     else f"{label} spend not entered in the sheet yet "
                     f"(filled through {src['filled_through'] or 'nothing'})"
                 )
-                f[f"{name}_spend"] = f[f"{name}_revenue"] = None
-                f["na"][f"{name}_spend"] = f["na"][f"{name}_revenue"] = why
+                for k in keys:
+                    f[k] = None
+                    f["na"][k] = why
+                if optional and before:
+                    skip.add(f"{name}_spend")
             else:
                 f[f"{name}_spend"] = rec["spend"]
-                f[f"{name}_revenue"] = rec["revenue"]
+                if "revenue" in spec["columns"]:
+                    f[f"{name}_revenue"] = rec["revenue"]
         # the affiliate sheet's names are "affiliate"; CRM is flow + broadcast
 
         def total(out: str, parts: list[str]) -> None:
+            parts = [p for p in parts if p not in skip]
             vals = [f.get(p) for p in parts]
             f[out] = sum(vals) if None not in vals else None
             if f[out] is None:
@@ -578,7 +593,7 @@ class Context:
 
         total("crm_spend", ["crm_flow_spend", "crm_broadcast_spend"])
         total("crm_revenue", ["crm_flow_revenue", "crm_broadcast_revenue"])
-        total("other_spend", ["affiliate_spend", "crm_spend"])
+        total("other_spend", ["affiliate_spend", "crm_spend", "reddit_spend"])
         total("all_spend", ["spend", "other_spend"])
         total("perf_all_spend", ["perf_spend", "other_spend"])
 

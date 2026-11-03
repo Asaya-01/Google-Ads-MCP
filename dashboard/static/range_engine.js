@@ -57,7 +57,7 @@
           meta_perf_value: "meta_aw_value", google_perf_spend: "google_aw_spend", google_perf_value: "google_aw_value" },
         ...GK.map((k) => ({ [k]: "awareness_" + k }))),
       blank: { new_orders: 1, repeat_orders: 1, new_gmv: 1, repeat_gmv: 1, affiliate_spend: 1, affiliate_revenue: 1, crm_flow_spend: 1,
-        crm_flow_revenue: 1, crm_broadcast_spend: 1, crm_broadcast_revenue: 1, crm_spend: 1, crm_revenue: 1, other_spend: 1, perf_all_spend: 1 },
+        crm_flow_revenue: 1, crm_broadcast_spend: 1, crm_broadcast_revenue: 1, crm_spend: 1, crm_revenue: 1, reddit_spend: 1, other_spend: 1, perf_all_spend: 1 },
       why: "not an awareness channel, or not split by campaign type",
     },
   };

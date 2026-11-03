@@ -174,7 +174,7 @@ def estimate_other_spend(
     Returns {channel: {"value", "basis", "dates"}} and a "total"."""
     mcfg = cfg["manual_spends"]["live_estimate"]
     n = mcfg["basis_days"]
-    out: dict = {"affiliate": None, "crm": None, "total": None}
+    out: dict = {"affiliate": None, "crm": None, "reddit": None, "total": None}
     if not days or not days.get("dates"):
         return out
     dates, phase = days["dates"], days.get("phase") or []
@@ -196,7 +196,10 @@ def estimate_other_spend(
     for ch, field, how in (
         ("affiliate", "affiliate_spend", mcfg["affiliate"]),
         ("crm", "crm_spend", mcfg["crm"]),
+        ("reddit", "reddit_spend", mcfg.get("reddit", "per_hour")),
     ):
+        if field not in days["values"]:
+            continue
         use, kind = pick(field, need_gmv=how == "per_gmv")
         if len(use) < 2:
             continue
@@ -225,8 +228,12 @@ def estimate_other_spend(
             "dates": [dates[i] for i in use],
         }
         parts.append(value)
-    if len(parts) == 2:
-        out["total"] = sum(parts)
+    # Reddit is a small, newer source: the total does not wait for it
+    if out["affiliate"] and out["crm"]:
+        out["total"] = sum(
+            (out[c] or {}).get("value", 0.0)
+            for c in ("affiliate", "crm", "reddit")
+        )
     return out
 
 
@@ -758,10 +765,18 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
                 or "not enough filled days in the sheets to estimate",
             },
             {
+                "label": "Reddit (sales campaigns)",
+                "value": (est["reddit"] or {}).get("value"),
+                "kind": "estimate",
+                "note": (est["reddit"] or {}).get("basis")
+                or "not enough filled days in the Reddit sheet to estimate "
+                "(left out of the total)",
+            },
+            {
                 "label": "All channels",
                 "value": all_t,
                 "kind": "estimate",
-                "note": "actual Meta and Google plus the two estimates",
+                "note": "actual Meta and Google plus the estimates above",
             },
         ],
         "unavailable": unavailable,
@@ -870,7 +885,13 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
         d: p for d, p in zip(days.get("dates", []), days.get("phase", [])) if p
     }
     if days.get("dates"):
-        keep = ("gmv", "affiliate_spend", "crm_spend", "all_spend")
+        keep = (
+            "gmv",
+            "affiliate_spend",
+            "crm_spend",
+            "reddit_spend",
+            "all_spend",
+        )
         inp["days_manual"] = {
             "dates": days["dates"],
             "phase": days.get("phase") or [],

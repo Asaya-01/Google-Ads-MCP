@@ -149,18 +149,31 @@ function trBuild(g) {
   }
   // ---------------------------------------------------------------- sheets
   if (RG.mode !== "aw") {
-    const sheet = (k, label, sk, rk, order, note) => {
-      const v = (win, f) => (win ? win[f] : null);
-      const n = { key: k, k, label, level: 0, order, note, sheet: true, kinds: new Set(["perf"]), kids: new Map(), splits: new Set(),
-        a: { spend: v(w, sk), value: v(w, rk), pspend: v(w, sk), pvalue: v(w, rk), results: null, clicks: null, impr: null },
-        p: pw ? { spend: v(pw, sk), value: v(pw, rk), pspend: v(pw, sk), pvalue: v(pw, rk) } : trZero(), hasPrev: !!pw,
-        na: w.na[sk] || w.na[rk] || null };
-      return n;
+    // a sheet-fed row sums the days the sheet has; the others say so ("12 of 20 days")
+    const e = RG.eng;
+    const sheet = (k, label, sk, rk, order, note, hasRev = true) => {
+      const need = hasRev ? [sk, rk] : [sk];
+      const win = (list, whole) => {
+        if (!list || !list.length) return null;
+        const ok = list.filter((d) => e.hasAll(d, need));
+        if (!ok.length) return { w: null, ok: 0, of: list.length };
+        return { w: ok.length === list.length ? whole : e.windowOf(ok), ok: ok.length, of: list.length };
+      };
+      const c = win(g.cur, w), pp = pw ? win(g.prev, pw) : null;
+      const v = (x, f) => (x && x.w && f ? x.w[f] : null);
+      const part = c && c.ok && c.ok < c.of ? `${c.ok} of ${c.of} days (the sheet has no data for the rest)` : null;
+      return { key: k, k, label, level: 0, order, sheet: true, kinds: new Set(["perf"]), kids: new Map(), splits: new Set(),
+        note: [note, part].filter(Boolean).join(" · "), sub: part,
+        a: { spend: v(c, sk), value: hasRev ? v(c, rk) : null, pspend: v(c, sk), pvalue: hasRev ? v(c, rk) : null, results: null, clicks: null, impr: null },
+        p: pp ? { spend: v(pp, sk), value: hasRev ? v(pp, rk) : null, pspend: v(pp, sk), pvalue: hasRev ? v(pp, rk) : null } : trZero(), hasPrev: !!(pp && pp.ok),
+        days: c ? c.ok : 0, pdays: pp ? pp.ok : 0,
+        na: !c || !c.ok ? (w.na[sk] || (hasRev && w.na[rk]) || "not in the sheet for these days") : null };
     };
     roots.set("affiliate", sheet("affiliate", "Affiliate", "affiliate_spend", "affiliate_revenue", 2, "From the affiliate sheet: spend and the sales the affiliates are credited with."));
+    roots.set("reddit", sheet("reddit", "Reddit (sales campaigns)", "reddit_spend", null, 2.5, "From the media-plan sheet, sales campaigns only, until the Reddit bot loads BigQuery. No revenue is reported there, so no ROAS; traffic campaigns count as awareness.", false));
     const crm = sheet("crm", "CRM", "crm_spend", "crm_revenue", 3, "Flow + broadcast, from the CRM sheets.");
     const f = sheet("crm|flow", "Flows", "crm_flow_spend", "crm_flow_revenue", 0), b = sheet("crm|broadcast", "Broadcasts", "crm_broadcast_spend", "crm_broadcast_revenue", 1);
-    f.level = b.level = 1; f.chip = b.chip = "CRM";
+    f.level = b.level = 1; f.chip = b.chip = "CRM"; f.sub = b.sub = null;
     crm.kids.set("flow", f); crm.kids.set("broadcast", b);
     roots.set("crm", crm);
   }
@@ -187,10 +200,10 @@ function trCols() {
   if (RG.mode === "perf") return [spend, dsp, share, val, roas, dr, res, cpa, ctr];
   return [spend, dsp, share, val, roas, dr, impr, ctr];
 }
-const trRoas = (a) => (a && a.pspend ? a.pvalue / a.pspend : null);
+const trRoas = (a) => (a && a.pspend && a.pvalue != null ? a.pvalue / a.pspend : null);
 function trCell(n, col, parent, g, total) {
   const [, f, special] = col;
-  if (special === "dspend") return g.pw && n.hasPrev && n.a.spend != null && n.p.spend ? deltaHtml(rgAvgChange(n.a.spend, g.w.days, n.p.spend, g.pw.days), "spend") : '<span class="flat">–</span>';
+  if (special === "dspend") return g.pw && n.hasPrev && n.a.spend != null && n.p.spend ? deltaHtml(rgAvgChange(n.a.spend, n.days || g.w.days, n.p.spend, n.pdays || g.pw.days), "spend") : '<span class="flat">–</span>';
   if (special === "share") {
     const base = parent ? parent.a.spend : total;
     return n.a.spend != null && base ? `${((n.a.spend / base) * 100).toFixed(1)}%${parent ? "" : ""}` : '<span class="na">–</span>';
