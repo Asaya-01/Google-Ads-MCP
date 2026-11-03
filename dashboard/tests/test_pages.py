@@ -856,10 +856,13 @@ def test_drill_days_cover_every_dimension_and_add_up(built_without_meta):
     for dim in ("channel", "source", "campaign", "landing_page"):
         assert p[dim]["names"] and p[dim]["rows"], dim
         for r in p[dim]["rows"]:
-            assert len(r) == 9 and 0 <= r[1] < len(p[dim]["names"])
+            assert len(r) == 10 and 0 <= r[1] < len(p[dim]["names"])
+            assert 0 <= r[2] <= 3
     # by channel, a day's sessions add up to the day's sessions
     day = next(d for d in sorted(ctx.session_rows) if ctx.session_rows[d])
-    got = sum(r[2] for r in p["channel"]["rows"] if r[0] == day)
+    got = sum(r[3] for r in p["channel"]["rows"] if r[0] == day)
     assert got == sum(r["sessions"] for r in ctx.session_rows[day])
     # perf sessions per channel never exceed sessions
-    assert all(r[3] <= r[2] for r in p["channel"]["rows"])
+    assert all(r[4] <= r[3] for r in p["channel"]["rows"])
+    # awareness rows never count as perf sessions
+    assert all(r[4] == 0 for r in p["campaign"]["rows"] if r[2] == 1)

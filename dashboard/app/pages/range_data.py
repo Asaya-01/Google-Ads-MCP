@@ -445,6 +445,9 @@ def slabs(ctx: Context) -> dict:
     }
 
 
+KINDS = ["perf", "awareness", "social"]
+
+
 def drills(ctx: Context) -> dict:
     """The D-1 drill-downs per day, so the browser can rebuild them for any
     dates picked: by channel, UTM source, campaign and landing page. Each
@@ -478,7 +481,8 @@ def drills(ctx: Context) -> dict:
             if k not in index:
                 index[k] = len(names)
                 names.append({"key": k, "kind": r.get("kind")})
-            return agg.setdefault((day, index[k]), [0] * 7)
+            kind = KINDS.index(r.get("kind")) if r.get("kind") in KINDS else 3
+            return agg.setdefault((day, index[k], kind), [0] * 7)
 
         for day in days:
             for r in ctx.session_rows.get(day, []):
@@ -504,8 +508,8 @@ def drills(ctx: Context) -> dict:
         out[dim] = {
             "names": names,
             "rows": [
-                [d, i, *[round(x, 2) for x in a]]
-                for (d, i), a in sorted(agg.items())
+                [d, i, k, *[round(x, 2) for x in a]]
+                for (d, i, k), a in sorted(agg.items())
                 if any(a)
             ],
         }
@@ -513,12 +517,13 @@ def drills(ctx: Context) -> dict:
     # GoKwik recorded (orders are not known per landing page)
     names, index, agg = [], {}, {}
 
-    def lslot(day, page):
+    def lslot(day, page, kind=None):
         page = page or "(unknown)"
         if page not in index:
             index[page] = len(names)
             names.append({"key": page, "kind": None})
-        return agg.setdefault((day, index[page]), [0] * 7)
+        k = KINDS.index(kind) if kind in KINDS else 3
+        return agg.setdefault((day, index[page], k), [0] * 7)
 
     for day in days:
         for r in (ctx.data.get("landing") or {}).get(day, []):
@@ -527,15 +532,20 @@ def drills(ctx: Context) -> dict:
             a[2] += r["atc"] or 0
     for r in ctx.funnel_rows:
         if r["date"] in day_set:
-            a = lslot(r["date"], r.get("landing_page"))
+            a = lslot(r["date"], r.get("landing_page"), r.get("kind"))
             a[3] += r.get("checkout_started") or 0
             a[6] += r.get("converted") or 0
     out["landing_page"] = {
         "names": names,
-        "rows": [[d, i, *a] for (d, i), a in sorted(agg.items()) if any(a)],
+        "rows": [
+            [d, i, k, *a] for (d, i, k), a in sorted(agg.items()) if any(a)
+        ],
     }
     return {
         "title": "Drill days",
+        # rows: [date, name, kind, sessions, perf_sessions, atc, ic, orders,
+        # gmv, converted]; kind indexes KINDS, 3 = not split by campaign type
+        "kinds": KINDS + ["none"],
         "as_of": ctx.d1,
         "from": days[0] if days else None,
         "to": days[-1] if days else None,

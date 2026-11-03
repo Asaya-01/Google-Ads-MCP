@@ -24,11 +24,11 @@ const RG_TILES = [
   ["all_spend", "Overall spend (all channels)", "inr"], ["overall_roas", "Overall ROAS (GMV / all spend)", "x"],
   ["affiliate_roas", "Affiliate ROAS", "x"], ["crm_roas", "CRM ROAS", "x"],
 ];
-const RG_RATES = ["aov", "cvr", "sh_aov", "sh_cvr", "sh_perf_cvr", "sh_ic_to_order", "sh_roas", "perf_cvr", "ic_to_order", "cps", "perf_overall_roas", "atc_rate", "mer", "perf_roas", "meta_sales_roas", "google_sales_roas", "new_share", "overall_roas", "affiliate_roas", "crm_roas", "crm_flow_roas", "crm_broadcast_roas"];
+const RG_RATES = ["cps_all", "cps_ad", "sh_roas_all", "aov", "cvr", "sh_aov", "sh_cvr", "sh_perf_cvr", "sh_ic_to_order", "sh_roas", "perf_cvr", "ic_to_order", "cps", "perf_overall_roas", "atc_rate", "mer", "perf_roas", "meta_sales_roas", "google_sales_roas", "new_share", "overall_roas", "affiliate_roas", "crm_roas", "crm_flow_roas", "crm_broadcast_roas"];
 const RG_DEP = {
   aov: ["gmv", "orders"], cvr: ["orders", "sessions"], atc_rate: ["atc", "sessions"], mer: ["gmv", "spend"],
   perf_roas: ["gmv", "perf_spend"], meta_sales_roas: ["meta_perf_value", "meta_perf_spend"],
-  google_sales_roas: ["google_perf_value", "google_perf_spend"], new_share: ["new_orders", "repeat_orders"], atc_to_ic: ["atc", "ic"], ic_to_order: ["orders", "ic"], perf_cvr: ["orders", "report_perf_sessions"], cps: ["perf_all_spend", "sessions"], sh_aov: ["sh_sales", "sh_orders"], sh_cvr: ["sh_orders", "sessions"], sh_perf_cvr: ["sh_orders", "report_perf_sessions"], sh_ic_to_order: ["sh_orders", "ic"], sh_roas: ["sh_sales", "perf_all_spend"], perf_overall_roas: ["gmv", "perf_all_spend"],
+  google_sales_roas: ["google_perf_value", "google_perf_spend"], new_share: ["new_orders", "repeat_orders"], atc_to_ic: ["atc", "ic"], ic_to_order: ["orders", "ic"], perf_cvr: ["orders", "report_perf_sessions"], cps: ["perf_all_spend", "sessions"], cps_all: ["all_spend", "sessions"], cps_ad: ["spend", "sessions"], sh_roas_all: ["sh_sales", "all_spend"], sh_aov: ["sh_sales", "sh_orders"], sh_cvr: ["sh_orders", "sessions"], sh_perf_cvr: ["sh_orders", "report_perf_sessions"], sh_ic_to_order: ["sh_orders", "ic"], sh_roas: ["sh_sales", "perf_all_spend"], perf_overall_roas: ["gmv", "perf_all_spend"],
   overall_roas: ["gmv", "all_spend"], affiliate_roas: ["affiliate_revenue", "affiliate_spend"], crm_roas: ["crm_revenue", "crm_spend"],
   crm_flow_roas: ["crm_flow_revenue", "crm_flow_spend"], crm_broadcast_roas: ["crm_broadcast_revenue", "crm_broadcast_spend"],
 };
@@ -133,7 +133,7 @@ function rgBar() {
   const mix = [...c.groups.map((g) => `${g.cur.length} ${g.phase === "sale" ? "sale" : "BAU"}`), ...(c.mixed.length ? [`${c.mixed.length} transition`] : [])].join(" · ");
   return `<section class="card rg-barcard" id="rg-bar">
     <div class="rg-wrap">
-      <div class="rg-modebar"><div class="seg rg-mode" id="rg-mode" role="group" aria-label="Campaign type">${RG_MODES.map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${RG.mode === k}">${l}</button>`).join("")}</div></div>
+      <div class="rg-modebar">${RG.tab === "products" ? '<span class="rg-modenote">Whole store: product sales cannot be split by campaign type, so there is no Performance / Awareness switch here.</span>' : `<div class="seg rg-mode" id="rg-mode" role="group" aria-label="Campaign type">${RG_MODES.map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${RG.mode === k}">${l}</button>`).join("")}</div>`}</div>
       <div class="rg-chips">
         <button type="button" class="rg-chip" id="rg-open-main" aria-haspopup="dialog" aria-expanded="${RG.pop === "main"}"><span aria-hidden="true">▦</span> ${esc(rgRangeLabel())} <span aria-hidden="true" class="rg-caret">▾</span></button>
         <span class="rg-vs">compared to</span>
@@ -262,7 +262,7 @@ function rgApply() {
 function rgBind() {
   const bar = document.getElementById("rg-bar");
   if (!bar) return;
-  bar.querySelector("#rg-mode").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-mode]"); if (b) rgSetMode(b.dataset.mode); });
+  bar.querySelector("#rg-mode")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-mode]"); if (b) rgSetMode(b.dataset.mode); });
   bar.querySelector("#rg-open-main").addEventListener("click", () => (RG.pop === "main" ? rgClose() : rgOpen("main")));
   bar.querySelector("#rg-open-cmp").addEventListener("click", () => (RG.pop === "cmp" ? rgClose() : rgOpen("cmp")));
   const pop = bar.querySelector(".rg-pop");

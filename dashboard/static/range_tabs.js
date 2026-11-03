@@ -232,11 +232,18 @@ R.products = (p) => {
 
 // ---------------------------------------------------------------- D-1
 R.d1 = (p) => {
-  // the whole store, whatever the Performance / Awareness toggle says: overall and performance sessions side by side
-  const F = [["sessions", "Overall sessions", "int"], ["report_perf_sessions", "Perf. sessions", "int"], ["atc", "ATC", "int"], ["ic", "IC", "int"], ["sh_orders", "Orders", "int"], ["sh_sales", "Revenue", "inr"], ["sh_aov", "AOV", "inr"],
+  // Performance: the team's D-1 sheet (whole-store sessions and revenue, performance sessions, sales spend).
+  // All campaigns: the same, with awareness and social spend in Spends, RoAS and CPS.
+  // Awareness: awareness traffic only, the orders and revenue credited to it, and awareness spend.
+  const F_PERF = [["sessions", "Overall sessions", "int"], ["report_perf_sessions", "Perf. sessions", "int"], ["atc", "ATC", "int"], ["ic", "IC", "int"], ["sh_orders", "Orders", "int"], ["sh_sales", "Revenue", "inr"], ["sh_aov", "AOV", "inr"],
     ["atc_rate", "Sessions → ATC %", "pct"], ["atc_to_ic", "ATC → IC %", "pct"], ["sh_ic_to_order", "IC → orders %", "pct"], ["sh_cvr", "CVR % (on sessions)", "pct"], ["sh_perf_cvr", "CVR % (on perf)", "pct"],
     ["perf_all_spend", "Spends", "inr"], ["sh_roas", "RoAS", "x"], ["cps", "CPS", "inr2"]];
-  const e0 = () => (RG.engAll || (RG.engAll = createRangeEngine(RG.raw, "all")));
+  const F_ALL = F_PERF.map((f) => (f[0] === "perf_all_spend" ? ["all_spend", "Spends (all)", "inr"] : f[0] === "sh_roas" ? ["sh_roas_all", "RoAS", "x"] : f[0] === "cps" ? ["cps_all", "CPS", "inr2"] : f));
+  const F_AW = [["sessions", "Awareness sessions", "int"], ["atc", "ATC", "int"], ["ic", "IC", "int"], ["orders", "Orders credited", "int"], ["gmv", "Revenue credited", "inr"], ["aov", "AOV", "inr"],
+    ["atc_rate", "Sessions → ATC %", "pct"], ["atc_to_ic", "ATC → IC %", "pct"], ["ic_to_order", "IC → orders %", "pct"], ["cvr", "CVR %", "pct"],
+    ["spend", "Awareness spend", "inr"], ["mer", "RoAS (credited)", "x"], ["cps_ad", "Cost / session", "inr2"]];
+  const F = RG.mode === "aw" ? F_AW : RG.mode === "all" ? F_ALL : F_PERF;
+  const e0 = () => (RG.mode === "aw" ? RG.eng : RG.engAll || (RG.engAll = createRangeEngine(RG.raw, "all")));
   const span = (s) => (s ? rgSpan(s[0], s[1]) : "no matching period");
   const dayRows = (list) => list.map((d) => { const w = e0().windowOf([d]); const na = { ...w.na }; for (const k of Object.keys(RG_DEP)) { const x = rgNa(w, k); if (x) na[k] = x; } return { ...w, date: d, phase: e0().phaseOf(d), note: e0().noteOf(d), na }; });
   const totalRow = (w, label) => { const na = { ...w.na }; for (const k of Object.keys(RG_DEP)) { const x = rgNa(w, k); if (x) na[k] = x; } return { ...w, _label: label, _class: "total", na }; };
@@ -274,10 +281,12 @@ R.d1 = (p) => {
       return m;
     }
     const src = (state.pages.drill_days || {})[dim];
+    // the Performance / Awareness switch: kind 0 perf, 1 awareness, 2 social, 3 not split (landing-page sessions)
+    const keep = (k) => RG.mode === "all" || k === 3 || (RG.mode === "aw" ? k === 1 : k === 0);
     for (const r of src ? src.rows : []) {
-      if (!set.has(r[0])) continue;
+      if (!set.has(r[0]) || !keep(r[2])) continue;
       const a = m.get(r[1]) || m.set(r[1], { sessions: 0, perf_sessions: 0, atc: 0, ic: 0, orders: 0, gmv: 0, converted: 0 }).get(r[1]);
-      a.sessions += r[2]; a.perf_sessions += r[3]; a.atc += r[4]; a.ic += r[5]; a.orders += r[6]; a.gmv += r[7]; a.converted += r[8];
+      a.sessions += r[3]; a.perf_sessions += r[4]; a.atc += r[5]; a.ic += r[6]; a.orders += r[7]; a.gmv += r[8]; a.converted += r[9];
     }
     return m;
   };
@@ -305,13 +314,15 @@ R.d1 = (p) => {
   const drillTable = (g) => {
     const dd = state.pages.drill_days;
     if (state.drill !== "product" && (!dd || !dd[state.drill])) return '<p class="na">Data unavailable: the drill-down data has not been built yet. It appears after the next refresh.</p>';
-    const fields = drillCols[state.drill] || defaultDrill;
+    const fields = (drillCols[state.drill] || defaultDrill).filter((f) => !(RG.mode === "aw" && f[0] === "perf_sessions"));
     const rows = d1Drill(g, state.drill);
     const hasPrev = g.prev && g.prev.length;
     const cols = [{ label: DRILLS.find((d) => d[0] === state.drill)[1], text: true, render: (r) => `${esc(r.key)}${state.drill === "campaign" && r.kind === "awareness" ? ' <span class="phase sale">Awareness</span>' : ""}` },
       ...fields.map(([k, l, u]) => ({ label: l, render: (r) => `${esc(fmt(r.current[k], u, true) ?? "–")}${hasPrev ? `<br><span class="sub">${esc(fmt(r.prior[k], u, true) ?? "–")} · ${deltaHtml(r.delta[k], k)}</span>` : ""}` }))];
     const gaps = [];
     if (dd && dd.from && g.cur.some((d) => d < dd.from)) gaps.push(`Drill-down detail starts ${rgFmtDay(dd.from, true)}; earlier days are not in it.`);
+    if (RG.mode !== "all" && state.drill === "product") gaps.push("Products are for the whole store: orders cannot be split by campaign type here.");
+    if (RG.mode !== "all" && state.drill === "landing_page") gaps.push("Landing-page sessions cannot be split by campaign type, so they are for the whole store; IC and conversions follow the switch.");
     if (state.drill === "landing_page" && dd) { const ld = new Set(dd.landing_days || []); const miss = g.cur.filter((d) => !ld.has(d)); if (miss.length) gaps.push(`Landing-page sessions are missing for ${rgListDays(miss)}.`); }
     return (gaps.length ? `<div class="banner">${esc(gaps.join(" "))}</div>` : "") + table(cols, rows, { maxHeight: "65vh" });
   };
@@ -341,7 +352,7 @@ R.d1 = (p) => {
       const e = e0(), c2 = e.compare(RG.from, RG.to, RG.cmp);
       const host = document.getElementById("rg-body");
       const funnels = c2.groups.length
-        ? c2.groups.map((g) => `<section class="card"><div class="section-head"><h2>Funnel ${phaseChip(g.phase)}</h2><span class="sub">${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${statusStrip()}${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}${funnel(g)}<p class="legend-note">Whole store, whatever the Performance / Awareness switch says. Perf. sessions are sessions from the team's UTM source list with a UTM campaign, not awareness or social (direct, organic and other sources are not in it); Spends are all channels on sales campaigns (Meta, Google, Reddit, affiliate and CRM; awareness and social left out); Orders and Revenue are Shopify's own Sales report (Orders, Total sales; cancelled orders still count as orders, returns come off Total sales; only influencer and sample orders left out); RoAS is revenue ÷ Spends; CPS is Spends ÷ overall sessions; IC → orders is orders ÷ GoKwik checkouts started.</p></section><section class="card"><div class="section-head"><h2>Basket size ${phaseChip(g.phase)}</h2><span class="sub">orders by number of items · ${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${bkHtml(g)}</section>`).join("")
+        ? c2.groups.map((g) => `<section class="card"><div class="section-head"><h2>Funnel ${phaseChip(g.phase)}</h2><span class="sub">${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${statusStrip()}${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}${funnel(g)}<p class="legend-note">${RG.mode === "aw" ? "Awareness view: sessions, add-to-carts and checkouts from awareness campaigns, the orders and revenue credited to them by UTM, and Meta + Google awareness spend. RoAS here is attribution only." : (RG.mode === "all" ? "All campaigns: as Performance, but Spends, RoAS and CPS include awareness and social spend. " : "Performance: the team's D-1 sheet. ")}${RG.mode === "aw" ? "" : "Overall sessions, Orders and Revenue are the whole store. Perf. sessions'} are sessions from the team's UTM source list with a UTM campaign, not awareness or social (direct, organic and other sources are not in it); Spends are all channels on sales campaigns (Meta, Google, Reddit, affiliate and CRM; awareness and social left out); Orders and Revenue are Shopify's own Sales report (Orders, Total sales; cancelled orders still count as orders, returns come off Total sales; only influencer and sample orders left out); RoAS is revenue ÷ Spends; CPS is Spends ÷ overall sessions; IC → orders is orders ÷ GoKwik checkouts started."}</p></section><section class="card"><div class="section-head"><h2>Basket size ${phaseChip(g.phase)}</h2><span class="sub">orders by number of items · ${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${bkHtml(g)}</section>`).join("")
         : `<section class="card"><p class="na">Data unavailable: there are no days in the data for ${esc(rgSpan(RG.from, RG.to))}.</p></section>`;
       let tail = `<section class="card">${notes(p)}</section>`;
       let g = null;
