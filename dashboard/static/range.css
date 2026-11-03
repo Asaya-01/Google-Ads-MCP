@@ -166,3 +166,10 @@ table.matrix .mx-empty { color: var(--muted); }
 /* basket size */
 .bk-cell { position: relative; display: inline-block; min-width: 120px; padding: 1px 4px; text-align: right; z-index: 0; }
 .bk-bar { position: absolute; right: 0; top: 0; bottom: 0; z-index: -1; border-radius: 3px; background: color-mix(in srgb, var(--series-1) 18%, transparent); }
+
+/* wide tables (D-1 funnel): tighter so all columns fit a laptop screen */
+table.dense { font-size: 13px; }
+table.dense th, table.dense td { padding: 8px 7px; }
+table.dense th { min-width: 0; }
+table.dense td.text { min-width: 0; white-space: nowrap; }
+table.dense td:first-child, table.dense th:first-child { padding-left: 12px; }

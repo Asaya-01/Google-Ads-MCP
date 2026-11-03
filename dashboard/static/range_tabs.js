@@ -212,7 +212,7 @@ R.d1 = (p) => {
   // the whole store, whatever the Performance / Awareness toggle says: overall and performance sessions side by side
   const F = [["sessions", "Overall sessions", "int"], ["report_perf_sessions", "Perf. sessions", "int"], ["atc", "ATC", "int"], ["ic", "IC", "int"], ["sh_orders", "Orders", "int"], ["sh_sales", "Revenue", "inr"], ["sh_aov", "AOV", "inr"],
     ["atc_rate", "Sessions → ATC %", "pct"], ["atc_to_ic", "ATC → IC %", "pct"], ["sh_ic_to_order", "IC → orders %", "pct"], ["sh_cvr", "CVR % (on sessions)", "pct"], ["sh_perf_cvr", "CVR % (on perf)", "pct"],
-    ["perf_all_spend", "Spends", "inr"], ["sh_roas", "RoAS", "x"], ["cps", "CPS", "inr"]];
+    ["perf_all_spend", "Spends", "inr"], ["sh_roas", "RoAS", "x"], ["cps", "CPS", "inr2"]];
   const e0 = () => (RG.engAll || (RG.engAll = createRangeEngine(RG.raw, "all")));
   const span = (s) => (s ? rgSpan(s[0], s[1]) : "no matching period");
   const dayRows = (list) => list.map((d) => { const w = e0().windowOf([d]); const na = { ...w.na }; for (const k of Object.keys(RG_DEP)) { const x = rgNa(w, k); if (x) na[k] = x; } return { ...w, date: d, phase: e0().phaseOf(d), note: e0().noteOf(d), na }; });
@@ -230,7 +230,7 @@ R.d1 = (p) => {
       const first = r._label ? esc(r._label) : `${esc(dayLabel(r.date))} ${phaseChip(r.phase, r.note)}`;
       return `<tr class="${r._class || ""}"><td class="text">${first}</td>${F.map(([k, , u]) => `<td>${r._delta ? deltaHtml(g.change(k), k) : cell(r[k], u, r.na?.[k])}</td>`).join("")}</tr>`;
     }).join("");
-    return `<div class="table-wrap"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+    return `<div class="table-wrap"><table class="dense"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
   };
   const DRILLS = [["channel", "Channel"], ["source", "Source"], ["campaign", "Campaign"], ["landing_page", "Landing page"], ["product", "Product"]];
   const drillCols = {

@@ -133,7 +133,7 @@ function rgBar() {
   const mix = [...c.groups.map((g) => `${g.cur.length} ${g.phase === "sale" ? "sale" : "BAU"}`), ...(c.mixed.length ? [`${c.mixed.length} transition`] : [])].join(" · ");
   return `<section class="card rg-barcard" id="rg-bar">
     <div class="rg-wrap">
-      <div class="rg-modebar"><div class="seg rg-mode" id="rg-mode" role="group" aria-label="Campaign type">${RG_MODES.map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${RG.mode === k}">${l}</button>`).join("")}</div><span class="rg-modenote">${esc(RG_MODE_NOTE[RG.mode])}</span></div>
+      <div class="rg-modebar"><div class="seg rg-mode" id="rg-mode" role="group" aria-label="Campaign type">${RG_MODES.map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${RG.mode === k}">${l}</button>`).join("")}</div></div>
       <div class="rg-chips">
         <button type="button" class="rg-chip" id="rg-open-main" aria-haspopup="dialog" aria-expanded="${RG.pop === "main"}"><span aria-hidden="true">▦</span> ${esc(rgRangeLabel())} <span aria-hidden="true" class="rg-caret">▾</span></button>
         <span class="rg-vs">compared to</span>

@@ -49,7 +49,7 @@ a { color: var(--accent); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
 .bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
-.bar-inner, main { max-width: 1320px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.bar-inner, main { max-width: 1760px; margin: 0 auto; padding-left: max(clamp(16px, 3vw, 48px), env(safe-area-inset-left, 0px)); padding-right: max(clamp(16px, 3vw, 48px), env(safe-area-inset-right, 0px)); }
 .bar-inner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding-block: 10px; }
 .brand { display: flex; align-items: baseline; gap: 8px; }
 .brand h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.015em; line-height: 1; color: var(--brand); }
@@ -62,8 +62,8 @@ nav.tabs a:hover { color: var(--ink); }
 .theme-toggle:hover { border-color: var(--accent); color: var(--ink); }
 .meta-line { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
 
-main { padding-block: 20px 48px; display: grid; gap: 20px; }
-section.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; align-content: start; }
+main { padding-block: 24px 56px; display: grid; gap: 22px; }
+section.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: clamp(16px, 1.6vw, 26px); display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; align-content: start; }
 .section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 16px; }
 .sub { color: var(--muted); font-size: 12px; }
 .grid-2 { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); }
@@ -101,7 +101,7 @@ section.card { background: var(--surface); border: 1px solid var(--line); border
 .steps .steprow:last-child { border-bottom: 0; }
 .steps .steprow .sub { text-align: right; }
 
-.tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
+.tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 168px), 1fr)); }
 .tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 4px; align-content: start; }
 .tile .label { color: var(--ink-2); font-size: 12px; overflow-wrap: anywhere; }
 .tile .value { font-family: var(--font-display); font-size: clamp(19px, 1.7vw, 24px); font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
@@ -113,9 +113,9 @@ section.card { background: var(--surface); border: 1px solid var(--line); border
 .flat { color: var(--ink-2); }
 
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
-table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
-th, td { padding: 6px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
-th { position: sticky; top: 0; background: var(--surface); color: var(--ink-2); font-weight: 500; font-size: 12px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th, td { padding: 9px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+th { position: sticky; top: 0; z-index: 1; background: var(--surface); color: var(--ink-2); font-weight: 600; font-size: 12px; line-height: 1.25; vertical-align: bottom; white-space: normal; min-width: 64px; }
 th:first-child, td:first-child, td.text, th.text { text-align: left; }
 td.text { white-space: normal; overflow-wrap: anywhere; min-width: 180px; max-width: 360px; }
 tbody tr:hover td { background: color-mix(in srgb, var(--accent-wash) 60%, transparent); }
@@ -180,6 +180,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     if (v === null || v === undefined || Number.isNaN(v)) return null;
     switch (unit) {
       case "inr": return compact ? inrCompact(v) : "Rs " + inGroup.format(v);
+      case "inr2": return "Rs " + v.toFixed(2);
       case "int": return inGroup.format(v);
       case "num": return inGroup.format(Math.round(v));
       case "pct": return (v * 100).toFixed(2) + "%";
