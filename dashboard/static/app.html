@@ -101,7 +101,7 @@ section.card { background: var(--surface); border: 1px solid var(--line); border
 .steps .steprow:last-child { border-bottom: 0; }
 .steps .steprow .sub { text-align: right; }
 
-.tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 168px), 1fr)); }
+.tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 168px), 1fr)); }
 .tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 4px; align-content: start; }
 .tile .label { color: var(--ink-2); font-size: 12px; overflow-wrap: anywhere; }
 .tile .value { font-family: var(--font-display); font-size: clamp(19px, 1.7vw, 24px); font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
@@ -117,7 +117,7 @@ table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-
 th, td { padding: 9px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
 th { position: sticky; top: 0; z-index: 1; background: var(--surface); color: var(--ink-2); font-weight: 600; font-size: 12px; line-height: 1.25; vertical-align: bottom; white-space: normal; min-width: 64px; }
 th:first-child, td:first-child, td.text, th.text { text-align: left; }
-td.text { white-space: normal; overflow-wrap: anywhere; min-width: 180px; max-width: 360px; }
+td.text { white-space: normal; overflow-wrap: anywhere; min-width: 96px; max-width: 360px; }
 tbody tr:hover td { background: color-mix(in srgb, var(--accent-wash) 60%, transparent); }
 tr.total td { font-weight: 600; border-top: 2px solid var(--axis); }
 tr.delta td { font-weight: 600; }
@@ -166,6 +166,26 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
   const embedded = window.__DASH__ || null;   // set by the preview build; absent on Cloud Run
   const state = { config: null, status: null, pages: {}, tab: null, charts: [], drill: "channel", d1View: "table" };
   const $main = document.getElementById("main");
+  // Every table on every tab follows the same rule: it uses the width it is
+  // given; if it does not fit, it steps down to a denser style; if it still
+  // does not fit, it scrolls sideways with its first column pinned. Run after
+  // each render and on resize, so no tab needs its own fix.
+  function fitTables() {
+    for (const wrap of $main.querySelectorAll(".table-wrap")) {
+      const t = wrap.querySelector("table");
+      if (!t || t.classList.contains("tree") || t.classList.contains("matrix")) continue;
+      t.classList.remove("dense", "denser", "pin-first");
+      if (wrap.scrollWidth <= wrap.clientWidth + 1) continue;
+      t.classList.add("dense");
+      if (wrap.scrollWidth <= wrap.clientWidth + 1) continue;
+      t.classList.add("denser");
+      if (wrap.scrollWidth > wrap.clientWidth + 1) t.classList.add("pin-first");
+    }
+  }
+  let fitQueued = false;
+  const queueFit = () => { if (!fitQueued) { fitQueued = true; requestAnimationFrame(() => { fitQueued = false; fitTables(); }); } };
+  new MutationObserver(queueFit).observe($main, { childList: true, subtree: true });
+  window.addEventListener("resize", queueFit);
 
   // ------------------------------------------------------------ formatting
   const inGroup = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });

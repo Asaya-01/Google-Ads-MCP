@@ -167,9 +167,20 @@ table.matrix .mx-empty { color: var(--muted); }
 .bk-cell { position: relative; display: inline-block; min-width: 120px; padding: 1px 4px; text-align: right; z-index: 0; }
 .bk-bar { position: absolute; right: 0; top: 0; bottom: 0; z-index: -1; border-radius: 3px; background: color-mix(in srgb, var(--series-1) 18%, transparent); }
 
-/* wide tables (D-1 funnel): tighter so all columns fit a laptop screen */
+/* tables that do not fit their card (any tab): denser, then pinned first column */
 table.dense { font-size: 13px; }
 table.dense th, table.dense td { padding: 8px 7px; }
 table.dense th { min-width: 0; }
-table.dense td.text { min-width: 0; white-space: nowrap; }
+table.dense td.text { min-width: 0; }
 table.dense td:first-child, table.dense th:first-child { padding-left: 12px; }
+table.denser { font-size: 12.5px; }
+table.denser th { font-size: 11px; }
+table.denser th, table.denser td { padding: 7px 5px; }
+table.pin-first td:first-child, table.pin-first th:first-child { position: sticky; left: 0; z-index: 2; background: var(--surface); box-shadow: 1px 0 0 var(--line); }
+table.pin-first tr.total td:first-child { background: var(--surface); }
+table.pin-first tr.group td:first-child { background: var(--accent-wash); }
+/* labels and the first column never break mid-word, whatever the table */
+.phase, .chip { white-space: nowrap; }
+table.dense td.text:first-child, table.denser td.text:first-child { white-space: nowrap; }
+table.dense tr.total td.text:first-child, table.dense tr.delta td.text:first-child, table.denser tr.total td.text:first-child, table.denser tr.delta td.text:first-child { white-space: normal; }
+table.dense tr.total td.text:first-child, table.dense tr.delta td.text:first-child, table.denser tr.total td.text:first-child, table.denser tr.delta td.text:first-child { overflow-wrap: normal; word-break: normal; }

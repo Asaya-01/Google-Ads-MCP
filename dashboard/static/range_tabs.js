@@ -221,16 +221,16 @@ R.d1 = (p) => {
     const head = `<tr><th class="text" scope="col">Day</th>${F.map(([, l]) => `<th scope="col">${esc(l)}</th>`).join("")}</tr>`;
     const rows = [];
     if (g.pw) {
-      rows.push({ _group: `Comparison · ${g.phase === "sale" ? "sale days" : "BAU days"} · ${span(g.prevSpan)}` }, ...dayRows(g.prev), totalRow(g.pw, "Comparison total"));
+      rows.push({ _group: `Comparison · ${g.phase === "sale" ? "sale days" : "BAU days"} · ${span(g.prevSpan)}` }, ...dayRows(g.prev), totalRow(g.pw, "Total"));
     }
-    rows.push({ _group: `Selected · ${g.phase === "sale" ? "sale days" : "BAU days"} · ${span(g.curSpan)}` }, ...dayRows(g.cur), totalRow(g.w, "Selected total"));
-    if (g.pw) rows.push({ _label: "Δ vs comparison", _class: "delta", _delta: true });
+    rows.push({ _group: `Selected · ${g.phase === "sale" ? "sale days" : "BAU days"} · ${span(g.curSpan)}` }, ...dayRows(g.cur), totalRow(g.w, "Total"));
+    if (g.pw) rows.push({ _label: "Change", _class: "delta", _delta: true });
     const body = rows.map((r) => {
       if (r._group) return `<tr class="group"><td colspan="${F.length + 1}">${esc(r._group)}</td></tr>`;
-      const first = r._label ? esc(r._label) : `${esc(dayLabel(r.date))} ${phaseChip(r.phase, r.note)}`;
+      const first = r._label ? esc(r._label) : esc(dayLabel(r.date)); // the group row above already says sale or BAU
       return `<tr class="${r._class || ""}"><td class="text">${first}</td>${F.map(([k, , u]) => `<td>${r._delta ? deltaHtml(g.change(k), k) : cell(r[k], u, r.na?.[k])}</td>`).join("")}</tr>`;
     }).join("");
-    return `<div class="table-wrap"><table class="dense"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+    return `<div class="table-wrap"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
   };
   const DRILLS = [["channel", "Channel"], ["source", "Source"], ["campaign", "Campaign"], ["landing_page", "Landing page"], ["product", "Product"]];
   const drillCols = {
