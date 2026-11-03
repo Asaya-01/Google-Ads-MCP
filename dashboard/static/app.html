@@ -1,7 +1,5 @@
 <title>Asaya D2C Dashboard</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap">
 <style>
 /* Layout: sticky brand + tab bar; each tab is a vertical stack of sections,
    summary (tiles, period tables) before detail (charts, then dense tables). */
@@ -30,8 +28,8 @@
   --warn-ink: #6b4300;
   --bad-bg: #fbe3ec;
   --good-bg: #e4f1e5;
-  --font-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  --font-body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: "Helvetica Neue", Helvetica, Arial, sans-serif;
   --radius: 12px;
   color-scheme: light;
 }
@@ -44,7 +42,7 @@
 }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
-h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; color: var(--head); }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 700; margin: 0; text-wrap: balance; color: var(--head); }
 h2 { font-size: 19px; font-weight: 600; letter-spacing: -0.005em; }
 h3 { font-size: 14px; font-weight: 600; }
 a { color: var(--accent); }
@@ -106,7 +104,7 @@ section.card { background: var(--surface); border: 1px solid var(--line); border
 .tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
 .tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 4px; align-content: start; }
 .tile .label { color: var(--ink-2); font-size: 12px; overflow-wrap: anywhere; }
-.tile .value { font-family: var(--font-display); font-size: clamp(19px, 1.7vw, 24px); font-weight: 600; line-height: 1.15; white-space: nowrap; }
+.tile .value { font-family: var(--font-display); font-size: clamp(19px, 1.7vw, 24px); font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
 .tile .foot { font-size: 12px; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; }
 .na { color: var(--muted); font-size: 12px; }
 .tile .na { font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
