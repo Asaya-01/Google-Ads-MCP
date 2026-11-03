@@ -210,7 +210,7 @@ R.products = (p) => {
 // ---------------------------------------------------------------- D-1
 R.d1 = (p) => {
   // the whole store, whatever the Performance / Awareness toggle says: overall and performance sessions side by side
-  const F = [["sessions", "Overall sessions", "int"], ["perf_sessions", "Perf. sessions", "int"], ["atc", "ATC", "int"], ["ic", "IC", "int"], ["orders", "Orders", "int"], ["gmv", "Revenue", "inr"], ["aov", "AOV", "inr"],
+  const F = [["sessions", "Overall sessions", "int"], ["report_perf_sessions", "Perf. sessions", "int"], ["atc", "ATC", "int"], ["ic", "IC", "int"], ["orders", "Orders", "int"], ["gmv", "Revenue", "inr"], ["aov", "AOV", "inr"],
     ["atc_rate", "Sessions → ATC %", "pct"], ["atc_to_ic", "ATC → IC %", "pct"], ["ic_to_order", "IC → orders %", "pct"], ["cvr", "CVR % (on sessions)", "pct"], ["perf_cvr", "CVR % (on perf)", "pct"],
     ["perf_spend", "Spends", "inr"], ["perf_roas", "RoAS", "x"], ["cps", "CPS", "inr"]];
   const e0 = () => (RG.engAll || (RG.engAll = createRangeEngine(RG.raw, "all")));
@@ -263,7 +263,7 @@ R.d1 = (p) => {
     const e = e0(), c2 = e.compare(RG.from, RG.to, RG.cmp);
     const host = document.getElementById("rg-body");
     const funnels = c2.groups.length
-      ? c2.groups.map((g) => `<section class="card"><div class="section-head"><h2>Funnel ${phaseChip(g.phase)}</h2><span class="sub">${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${statusStrip()}${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}${funnel(g)}<p class="legend-note">Whole store, whatever the Performance / Awareness switch says. Perf. sessions are the sessions from performance campaigns; Spends are Meta + Google sales-campaign spend; RoAS is revenue ÷ Spends; CPS is Spends ÷ overall sessions; IC → orders is orders ÷ GoKwik checkouts started.</p></section><section class="card"><div class="section-head"><h2>Basket size ${phaseChip(g.phase)}</h2><span class="sub">orders by number of items · ${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${bkHtml(g)}</section>`).join("")
+      ? c2.groups.map((g) => `<section class="card"><div class="section-head"><h2>Funnel ${phaseChip(g.phase)}</h2><span class="sub">${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${statusStrip()}${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}${funnel(g)}<p class="legend-note">Whole store, whatever the Performance / Awareness switch says. Perf. sessions are sessions from tagged performance campaigns (a UTM campaign present; not awareness, social or CRM; direct and organic are not in it); Spends are Meta + Google sales-campaign spend; RoAS is revenue ÷ Spends; CPS is Spends ÷ overall sessions; IC → orders is orders ÷ GoKwik checkouts started.</p></section><section class="card"><div class="section-head"><h2>Basket size ${phaseChip(g.phase)}</h2><span class="sub">orders by number of items · ${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${bkHtml(g)}</section>`).join("")
       : `<section class="card"><p class="na">Data unavailable: there are no days in the data for ${esc(rgSpan(RG.from, RG.to))}.</p></section>`;
     host.innerHTML = funnels + tail;
     host.querySelectorAll("[data-drill]").forEach((b) => b.addEventListener("click", () => {

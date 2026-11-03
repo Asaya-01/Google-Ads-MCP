@@ -88,7 +88,7 @@
       w.atc_rate = ratio(w.atc, w.sessions);
       w.atc_to_ic = ratio(w.ic, w.atc);
       w.ic_to_order = ratio(w.orders, w.ic);
-      w.perf_cvr = ratio(w.orders, w.perf_sessions);
+      w.perf_cvr = ratio(w.orders, w.report_perf_sessions);
       w.cps = ratio(w.perf_spend, w.sessions);
       w.address_rate = ratio(w.gk_address, w.ic);
       w.payment_rate = ratio(w.gk_payment, w.gk_address);

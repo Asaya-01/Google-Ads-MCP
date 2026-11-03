@@ -15,6 +15,7 @@ from .. import rules
 COUNT_FIELDS = [
     "sessions",
     "perf_sessions",
+    "report_perf_sessions",
     "awareness_sessions",
     "atc",
     "perf_atc",
@@ -88,7 +89,7 @@ def derive(f: dict) -> dict:
     f.update(
         aov=r(f.get("gmv"), f.get("orders")),
         cvr=r(f.get("orders"), f.get("sessions")),
-        perf_cvr=r(f.get("orders"), f.get("perf_sessions")),
+        perf_cvr=r(f.get("orders"), f.get("report_perf_sessions")),
         atc_rate=r(f.get("atc"), f.get("sessions")),
         atc_to_ic=r(f.get("ic"), f.get("atc")),
         ic_to_order=r(f.get("orders"), f.get("ic")),
@@ -127,6 +128,7 @@ class Context:
         self.aware_ids, self.known_ids = rules.google_awareness_ids(
             data.get("google_campaigns", []),
             cfg["sessions"]["awareness_name_regex"],
+            cfg["sessions"].get("google_awareness_extra_ids"),
         )
         self.google_names = {
             c["campaign_id"]: c["campaign_name"]
@@ -191,6 +193,7 @@ class Context:
                     self.aware_ids,
                     self.known_ids,
                     scfg,
+                    day,
                 )
                 if unknown:
                     u = self.unclassified_google.setdefault(
@@ -221,6 +224,7 @@ class Context:
                 self.aware_ids,
                 self.known_ids,
                 scfg,
+                r.get("date"),
             )
             channel = self.channel(r.get("utm_source"), r.get("utm_medium"))
             if r.get("in_gokwik") is False:
@@ -284,7 +288,19 @@ class Context:
                     for r in self.session_rows[day]
                     if r["kind"] == "social"
                 )
+                # "Perf. sessions" as the team's Shopify report counts them:
+                # tagged traffic only (a UTM campaign), not awareness or
+                # social, and not CRM. Sessions with no UTM campaign are
+                # direct / organic and are not in it.
+                rp = sum(
+                    r["sessions"]
+                    for r in self.session_rows[day]
+                    if r["kind"] == "perf"
+                    and (r.get("utm_campaign") or "").strip()
+                    and r["channel"] != "CRM"
+                )
                 f.update(
+                    report_perf_sessions=rp,
                     sessions=s["totals"]["sessions"],
                     atc=s["totals"]["atc"],
                     awareness_sessions=aw_s,
@@ -297,6 +313,7 @@ class Context:
                     "atc",
                     "awareness_sessions",
                     "perf_sessions",
+                    "report_perf_sessions",
                     "perf_atc",
                 ):
                     f[k] = None

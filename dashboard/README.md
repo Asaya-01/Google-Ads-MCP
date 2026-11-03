@@ -203,6 +203,22 @@ days the campaign name decides, and the table says so. Meta's older ad-level
 days are filled in 21 days per refresh, newest first. Performance Max has asset
 groups and nothing below them, because Google reports no spend per asset.
 
+## What counts as awareness, and "Perf. sessions"
+
+- **Meta**: a campaign name containing "awareness". **Google**: the campaign id
+  is one of the awareness campaigns (looked up by name through the API, plus
+  the ids the team listed in `sessions.google_awareness_extra_ids`, which
+  covers old campaigns the API no longer returns). **Reddit**: a campaign name
+  containing "traffic" is awareness **from 1 Nov 2026** (`sessions.dated_awareness`);
+  before that every Reddit campaign counted as performance. Reddit sales
+  campaigns are always performance. Reach campaigns are social.
+- **Perf. sessions** (the D-1 column, `report_perf_sessions`) follow the team's
+  Shopify report: sessions that carry a UTM campaign, are not awareness or
+  social, and are not from CRM. Direct and organic visits (no UTM campaign) are
+  not in it, as in Shopify's "not one of" filters. CVR % (on perf) is orders
+  divided by it. It sits within about 1% of the team's sheet on 1 and 2 Oct;
+  the rest is probably a few affiliate sources the report leaves out.
+
 ## Affiliate and CRM spends
 
 Affiliate, CRM flow and CRM broadcast spends come from the team's Google

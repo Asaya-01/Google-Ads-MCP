@@ -50,10 +50,31 @@ def test_session_kind_follows_the_brief():
     assert kind("facebook", "MG_TOF_awareness_reach") == ("social", None)
     assert kind("facebook", "WOA_Awareness_TOF_Reach") == ("social", None)
     assert kind("facebook", "WOA_Reachout_Sales") == ("perf", None)
-    # Reddit traffic campaigns are awareness; Reddit sales campaigns are not
-    assert kind("reddit", "WOA_TOF_Traffic_Campaign") == ("awareness", None)
-    assert kind("reddit", "WOA_MOF_Sales") == ("perf", None)
-    assert kind("reddit", "WOA_Sales_Open_Catalog") == ("perf", None)
+    # Reddit traffic campaigns are awareness from 1 Nov 2026 only; before
+    # that every Reddit campaign counted as performance. Sales ones always do.
+    on = lambda s, c, d: rules.session_kind(s, c, aware, known, scfg, d)
+    assert on("reddit", "WOA_TOF_Traffic_Campaign", "2026-11-01") == (
+        "awareness",
+        None,
+    )
+    assert on("reddit", "WOA_TOF_Traffic_Campaign", "2026-10-31") == (
+        "perf",
+        None,
+    )
+    assert on("reddit", "WOA_MOF_Sales", "2026-11-02") == ("perf", None)
+    assert on("reddit", "WOA_Sales_Open_Catalog", "2026-11-02") == (
+        "perf",
+        None,
+    )
+    # a Google campaign ID from the team's awareness list
+    aw, kn = rules.google_awareness_ids(
+        [], "awareness", scfg["google_awareness_extra_ids"]
+    )
+    assert "24394676551" in aw and "23901964996" in aw
+    assert rules.session_kind("google", "23901964996", aw, kn, scfg) == (
+        "awareness",
+        None,
+    )
     assert kind("google", "Conv_Awareness_Asaya_Traffic") == ("awareness", None)
     assert kind("facebook", "WOA_TOF_Sales_AdvantageSales_Non-offer_ITB") == (
         "perf",

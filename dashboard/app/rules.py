@@ -76,6 +76,7 @@ def session_kind(
     google_awareness_ids: set[str],
     known_google_ids: set[str],
     cfg: dict,
+    day: str | None = None,
 ) -> tuple[str, str | None]:
     """Classify a session as "awareness", "social" or "perf".
 
@@ -91,6 +92,14 @@ def session_kind(
         return "social", None
     if is_awareness_name(campaign, cfg):
         return "awareness", None
+    for rule in cfg.get("dated_awareness", []):
+        if (
+            day
+            and day >= rule["from"]
+            and source == rule["source"]
+            and _rx(rule["regex"]).search(campaign)
+        ):
+            return "awareness", None
     if source in cfg["google_sources"] and _NUMERIC_ID.match(campaign):
         if campaign in google_awareness_ids:
             return "awareness", None
@@ -100,16 +109,19 @@ def session_kind(
 
 
 def google_awareness_ids(
-    campaigns: list[dict], name_regex: str
+    campaigns: list[dict], name_regex: str, extra: list[str] | None = None
 ) -> tuple[set[str], set[str]]:
-    """(awareness IDs, all known IDs) from the google_campaigns query."""
+    """(awareness IDs, all known IDs) from the google_campaigns query, plus
+    the awareness IDs the team lists in config (old campaigns that no longer
+    come back from the API)."""
     known = {str(c["campaign_id"]) for c in campaigns}
     aware = {
         str(c["campaign_id"])
         for c in campaigns
         if _rx(name_regex).search(c.get("campaign_name") or "")
     }
-    return aware, known
+    extra_ids = {str(i) for i in extra or []}
+    return aware | extra_ids, known | extra_ids
 
 
 def is_social_name(campaign_name: str, cfg: dict) -> bool:

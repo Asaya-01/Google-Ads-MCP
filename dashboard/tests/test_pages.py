@@ -780,3 +780,22 @@ def test_basket_size_rows_and_missing_data(built_without_meta):
     assert p["na"] is None and p["top"] == 5 and p["days"] == [day]
     assert [r[1] for r in p["rows"]] == [1, 2, 5]
     assert sum(r[2] for r in p["rows"]) == 14
+
+
+def test_report_perf_sessions_are_tagged_non_awareness_non_crm(
+    built_without_meta,
+):
+    _, ctx = built_without_meta
+    day = next(d for d in sorted(ctx.session_rows) if ctx.session_rows[d])
+    rows = ctx.session_rows[day]
+    want = sum(
+        r["sessions"]
+        for r in rows
+        if r["kind"] == "perf"
+        and (r.get("utm_campaign") or "").strip()
+        and r["channel"] != "CRM"
+    )
+    f = ctx.facts[day]
+    assert f["report_perf_sessions"] == want
+    # never more than the broader performance count, never more than the whole
+    assert f["report_perf_sessions"] <= f["perf_sessions"] <= f["sessions"]
