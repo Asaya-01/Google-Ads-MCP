@@ -806,3 +806,42 @@ def test_report_perf_sessions_follow_the_teams_source_list(
     f = ctx.facts[day]
     assert f["report_perf_sessions"] == want
     assert f["report_perf_sessions"] <= f["perf_sessions"] <= f["sessions"]
+
+
+def test_shopify_sales_report_numbers_reach_the_days_page(built_without_meta):
+    from app.pages import days
+    from app.pages.common import Context
+
+    _, ctx = built_without_meta
+    day = sorted(ctx.facts)[-2]
+    data = dict(ctx.data)
+    data["shopify_sales"] = {day: {"orders": 804, "sales": 631947.0}}
+    c2 = Context(data, ctx.cfg)
+    assert c2.facts[day]["sh_orders"] == 804
+    assert c2.facts[day]["sh_sales"] == 631947.0
+    other = sorted(c2.facts)[-1]
+    assert c2.facts[other]["sh_orders"] is None  # absent, never zero
+    assert c2.facts[other]["na"]["sh_orders"]
+    page = days.build(c2)
+    assert "sh_orders" in page["fields"] and "sh_sales" in page["fields"]
+
+
+def test_sales_daily_asks_shopify_for_its_own_report_and_parses_it():
+    from app.shopify import Shopify
+
+    seen = []
+    s = Shopify.__new__(Shopify)
+    s.shopifyql = lambda q: (
+        seen.append(q)
+        or [
+            {"day": "2026-11-01", "orders": "804", "total_sales": "631947"},
+            {"day": "2026-11-02", "orders": "691", "total_sales": "547749.65"},
+        ]
+    )
+    out = s.sales_daily("2026-11-01", "2026-11-02", ["ASAYAINF", "ASAYASS"])
+    assert out["2026-11-01"] == {"orders": 804, "sales": 631947.0}
+    assert out["2026-11-02"]["sales"] == 547749.65
+    q = seen[0]
+    assert "FROM sales SHOW orders, total_sales TIMESERIES day" in q
+    assert "order_name NOT CONTAINS 'ASAYAINF'" in q
+    assert "order_name NOT CONTAINS 'ASAYASS'" in q

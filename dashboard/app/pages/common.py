@@ -16,6 +16,8 @@ COUNT_FIELDS = [
     "sessions",
     "perf_sessions",
     "report_perf_sessions",
+    "sh_orders",
+    "sh_sales",
     "awareness_sessions",
     "atc",
     "perf_atc",
@@ -446,6 +448,17 @@ class Context:
                     f["na"][total] = "; ".join(
                         sorted({f["na"][p] for p in parts if p in f["na"]})
                     )
+            # Shopify's own Orders and Total sales (the team's D-1 sheet)
+            ss = d.get("shopify_sales")
+            if ss is not None and day in ss:
+                f["sh_orders"] = ss[day]["orders"]
+                f["sh_sales"] = ss[day]["sales"]
+            else:
+                f["sh_orders"] = f["sh_sales"] = None
+                f["na"]["sh_orders"] = f["na"]["sh_sales"] = (
+                    self.unavailable.get("shopify_sales")
+                    or "Shopify's sales report has nothing for this day yet"
+                )
             self._kind_split(f, day, maps)
             self._manual_spends(f, day)
             facts[day] = derive(f)

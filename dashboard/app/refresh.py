@@ -175,6 +175,27 @@ def collect(
             missing["shopify_sessions"] = (
                 f"Shopify reports no sessions for {d1} yet"
             )
+        # Shopify's own Orders and Total sales per day (what the team's D-1
+        # sheet uses); the whole window is pulled each run, because returns
+        # change Total sales after the day.
+        try:
+            names = [
+                n for n in cfg["orders"]["exclude_name_regex"].split("|") if n
+            ]
+            data["shopify_sales"] = shop.sales_daily(
+                start.isoformat(), d1, names
+            )
+            store.put_json("cache/shopify_sales.json", data["shopify_sales"])
+        except Exception as exc:
+            data["shopify_sales"] = store.get_json("cache/shopify_sales.json")
+            data["unavailable"]["shopify_sales"] = (
+                f"Shopify sales report pull failed: {exc}"
+                + (
+                    " (showing the last good copy)"
+                    if data["shopify_sales"]
+                    else ""
+                )
+            )
         try:
             data["catalog"] = shop.catalog()
             store.put_json("cache/catalog.json", data["catalog"])
@@ -191,6 +212,7 @@ def collect(
         missing["shopify_sessions"] = reason
         data["sessions"], data["landing"] = {}, {}
         data["catalog"] = store.get_json("cache/catalog.json")
+        data["shopify_sales"] = store.get_json("cache/shopify_sales.json")
 
     # Meta Marketing API: last 7 days at ad level, cached per day
     mcfg = cfg["meta"]

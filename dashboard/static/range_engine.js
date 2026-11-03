@@ -90,6 +90,12 @@
       w.ic_to_order = ratio(w.orders, w.ic);
       w.perf_cvr = ratio(w.orders, w.report_perf_sessions);
       w.cps = ratio(w.perf_all_spend, w.sessions);
+      // the same rates on Shopify's own Orders and Total sales (D-1)
+      w.sh_aov = ratio(w.sh_sales, w.sh_orders);
+      w.sh_cvr = ratio(w.sh_orders, w.sessions);
+      w.sh_perf_cvr = ratio(w.sh_orders, w.report_perf_sessions);
+      w.sh_ic_to_order = ratio(w.sh_orders, w.ic);
+      w.sh_roas = ratio(w.sh_sales, w.perf_all_spend);
       w.perf_overall_roas = ratio(w.gmv, w.perf_all_spend);
       w.address_rate = ratio(w.gk_address, w.ic);
       w.payment_rate = ratio(w.gk_payment, w.gk_address);
@@ -132,7 +138,7 @@
     }
 
     /* Per-day change: counts compare averages, rates compare directly. */
-    const RATE_FIELDS = new Set(["aov", "cvr", "atc_rate", "atc_to_ic", "ic_to_order", "perf_cvr", "cps", "perf_overall_roas", "address_rate", "payment_rate", "paid_rate", "meta_sales_roas", "google_sales_roas", "mer", "perf_roas", "overall_roas", "affiliate_roas", "crm_roas", "crm_flow_roas", "crm_broadcast_roas", "new_share"]);
+    const RATE_FIELDS = new Set(["aov", "cvr", "atc_rate", "atc_to_ic", "ic_to_order", "perf_cvr", "cps", "perf_overall_roas", "sh_aov", "sh_cvr", "sh_perf_cvr", "sh_ic_to_order", "sh_roas", "address_rate", "payment_rate", "paid_rate", "meta_sales_roas", "google_sales_roas", "mer", "perf_roas", "overall_roas", "affiliate_roas", "crm_roas", "crm_flow_roas", "crm_broadcast_roas", "new_share"]);
     function change(cur, prev, key) {
       if (!prev) return null;
       let c = cur[key], p = prev[key];

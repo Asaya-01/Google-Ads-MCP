@@ -89,6 +89,31 @@ class Shopify:
             raise ShopifyError("ShopifyQL: " + "; ".join(data["parseErrors"]))
         return (data.get("tableData") or {}).get("rows") or []
 
+    def sales_daily(
+        self, since: str, until: str, exclude_names: list[str]
+    ) -> dict[str, dict]:
+        """Shopify's own "Orders" and "Total sales" per IST day, as its Sales
+        report shows them: cancelled orders still count as orders and Total
+        sales nets off returns. Only the named order types (influencer and
+        sample orders) are left out. {date: {"orders", "sales"}}."""
+        cond = " AND ".join(
+            f"order_name NOT CONTAINS '{n}'" for n in exclude_names
+        )
+        rows = self.shopifyql(
+            "FROM sales SHOW orders, total_sales TIMESERIES day "
+            + (f"WHERE {cond} " if cond else "")
+            + f"SINCE {since} UNTIL {until}"
+        )
+        out = {}
+        for r in rows:
+            day = str(r.get("day") or "")[:10]
+            if day:
+                out[day] = {
+                    "orders": _int(r.get("orders")),
+                    "sales": float(r.get("total_sales") or 0),
+                }
+        return out
+
     def orders_count(self, day: str) -> int:
         """Shopify's own count of orders created on one IST day (test orders
         excluded), used to check the BigQuery copy is complete."""

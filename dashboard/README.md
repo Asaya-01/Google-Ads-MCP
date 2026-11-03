@@ -220,7 +220,13 @@ groups and nothing below them, because Google reports no spend per asset.
   criteo and any source not on the list are not in it. CVR % (on perf) is
   orders divided by it. On 1 and 2 Nov it matches the report's add-to-carts
   and is within 0.3% on sessions. A new source is one word in the list.
-  On D-1, **Spends** is all channels on sales campaigns (Meta, Google, Reddit,
+  On D-1, **Orders** and **Revenue** are Shopify's own Sales report (Orders and
+  Total sales per day, with only ASAYAINF and ASAYASS orders left out), pulled
+  with ShopifyQL on every refresh. Cancelled orders still count as orders there
+  and returns come off Total sales, so D-1 differs from the Overview's GMV on
+  purpose; it matches the team's sheet exactly (1 Nov: 804 orders, Rs 631,947).
+  The AOV, IC → orders %, CVR % and RoAS on D-1 use these two numbers.
+  **Spends** is all channels on sales campaigns (Meta, Google, Reddit,
   affiliate, CRM; awareness and social left out), **RoAS** is revenue ÷ Spends
   and **CPS** is Spends ÷ overall sessions. For 1 Nov this reproduces the
   team's sheet to within Rs 53 (521,170 against 521,117).

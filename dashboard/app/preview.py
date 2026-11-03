@@ -25,6 +25,7 @@ KEYS = [
     "order_attribution",
     "products",
     "order_slabs",
+    "shopify_sales",
     "funnel",
     "google_ads",
     "google_campaigns",
