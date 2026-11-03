@@ -187,7 +187,7 @@ R.products = (p) => {
     </div>
     <section class="card">${notes(p)}</section>`;
   const head = p.mrp_check.na ? `<div class="banner">MRP: data unavailable. ${esc(p.mrp_check.na)}. Landed discount stays blank.</div>` : "";
-  rgTab("products", ["product_days"], head, () => {
+  rgTab("products", ["product_days", "slab_days"], head, () => {
     const draw = () => {
       const e = RG.eng, c = e.compare(RG.from, RG.to, RG.cmp), pd = state.pages.product_days;
       const host = document.getElementById("rg-body");
@@ -199,6 +199,7 @@ R.products = (p) => {
         <section class="card"><div class="section-head"><h2>Products</h2>${ctl}<span class="sub">${n} products · ${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""} · excluded product types left out</span></div>
           ${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}${prodTbl}</section>
         <section class="card"><div class="section-head"><h2>Categories</h2></div>${catTbl}</section>
+        <section class="card"><div class="section-head"><h2>Basket size</h2><span class="sub">orders by number of items · ${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${bkHtml(g)}</section>
         <section class="card"><div class="section-head"><h2>Excluded product types</h2><span class="sub">${esc(rgSpan(RG.from, RG.to))}, all days</span></div>${rgExcluded(pd, all)}</section>` + tail;
       rgPhaseBind("pr-phase", draw);
     };
@@ -255,11 +256,11 @@ R.d1 = (p) => {
       <div id="drill">${drillTable()}</div>
     </section>
     <section class="card">${notes(p)}</section>`;
-  rgTab("d1", [], "", () => {
+  rgTab("d1", ["slab_days"], "", () => {
     const e = RG.eng, c2 = e.compare(RG.from, RG.to, RG.cmp);
     const host = document.getElementById("rg-body");
     const funnels = c2.groups.length
-      ? c2.groups.map((g) => `<section class="card"><div class="section-head"><h2>Funnel ${phaseChip(g.phase)}</h2><span class="sub">${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${statusStrip()}${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}${funnel(g)}</section>`).join("")
+      ? c2.groups.map((g) => `<section class="card"><div class="section-head"><h2>Funnel ${phaseChip(g.phase)}</h2><span class="sub">${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${statusStrip()}${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}${funnel(g)}</section><section class="card"><div class="section-head"><h2>Basket size ${phaseChip(g.phase)}</h2><span class="sub">orders by number of items · ${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${bkHtml(g)}</section>`).join("")
       : `<section class="card"><p class="na">Data unavailable: there are no days in the data for ${esc(rgSpan(RG.from, RG.to))}.</p></section>`;
     host.innerHTML = funnels + tail;
     host.querySelectorAll("[data-drill]").forEach((b) => b.addEventListener("click", () => {

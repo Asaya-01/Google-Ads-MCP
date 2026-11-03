@@ -24,6 +24,7 @@ KEYS = [
     "orders_daily",
     "order_attribution",
     "products",
+    "order_slabs",
     "funnel",
     "google_ads",
     "google_campaigns",

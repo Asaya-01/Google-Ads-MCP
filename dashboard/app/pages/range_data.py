@@ -404,3 +404,42 @@ def channels(ctx: Context) -> dict:
         "session_days": sorted(sessions_days),
         "order_days": sorted(order_days),
     }
+
+
+SLAB_TOP = 5  # the last slab is "5 or more"
+
+
+def slabs(ctx: Context) -> dict:
+    """Basket size per day: orders, units and sales by how many items the
+    order held (gifts, merch and the other excluded types do not count).
+    Rows are [date, slab, orders, units, sales, gmv]. Slab 0 is an order
+    with nothing but excluded items; SLAB_TOP is "that many or more"."""
+    rows = ctx.data.get("order_slabs")
+    if rows is None:
+        return {
+            "title": "Basket size",
+            "as_of": ctx.d1,
+            "top": SLAB_TOP,
+            "rows": [],
+            "days": [],
+            "na": "the basket-size query has not been loaded",
+        }
+    return {
+        "title": "Basket size",
+        "as_of": ctx.d1,
+        "top": SLAB_TOP,
+        "rows": [
+            [
+                r["date"],
+                int(r["slab"]),
+                int(r["orders"]),
+                int(r["units"] or 0),
+                round(r["sales"] or 0, 2),
+                round(r["gmv"] or 0, 2),
+            ]
+            for r in sorted(rows, key=lambda r: (r["date"], r["slab"]))
+        ],
+        # a day with orders always has a row; a day absent here has no data
+        "days": sorted({r["date"] for r in rows}),
+        "na": None,
+    }

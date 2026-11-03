@@ -432,7 +432,7 @@ function rgBody() {
 const OV = { phase: null };
 async function rgOverviewBreakdown(c) {
   const slot = document.getElementById("ov-break");
-  try { for (const pg of ["channel_days", "campaign_days", "meta_tree", "google_tree"]) await loadPage(pg); }
+  try { for (const pg of ["channel_days", "slab_days", "campaign_days", "meta_tree", "google_tree"]) await loadPage(pg); }
   catch (err) { if (slot) slot.innerHTML = `<section class="card"><p class="na">Data unavailable: ${esc(err.message)}</p></section>`; return; }
   if (state.tab !== "overview" || !document.getElementById("ov-break")) return;
   const have = c.groups.map((g) => g.phase);
@@ -442,6 +442,7 @@ async function rgOverviewBreakdown(c) {
   const vs = `${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}`;
   document.getElementById("ov-break").innerHTML = `
     <section class="card"><div class="section-head"><h2>${phaseChip(g.phase)} Where the sales came from</h2>${ctl}<span class="sub">Shopify, by channel · ${vs}</span></div>${trChannelHtml(g)}</section>
+    <section class="card"><div class="section-head"><h2>${phaseChip(g.phase)} Basket size</h2><span class="sub">orders by number of items · ${vs}</span></div>${bkHtml(g)}</section>
     <section class="card"><div class="section-head"><h2>${phaseChip(g.phase)} Spend and return: channel › stage › product</h2><span class="sub">${vs}</span></div>${trBarHtml("ov-tree")}<div id="ov-tree"></div></section>`;
   trBind("ov-tree", g);
   document.getElementById("ov-phase")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-ph]"); if (b) { OV.phase = b.dataset.ph; rgOverviewBreakdown(c); } });

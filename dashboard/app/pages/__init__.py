@@ -27,4 +27,5 @@ def build_all(
     pages["meta_tree"] = range_data.meta_tree(ctx)
     pages["google_tree"] = range_data.google_tree(ctx)
     pages["channel_days"] = range_data.channels(ctx)
+    pages["slab_days"] = range_data.slabs(ctx)
     return pages, ctx

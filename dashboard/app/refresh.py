@@ -108,6 +108,12 @@ def collect(
         **orders,
         exclude_product_types=fb["exclude_product_types"],
     )
+    # basket size: orders by how many (non-gift) items they held
+    data["order_slabs"] = bq.run(
+        "order_slabs",
+        **orders,
+        exclude_product_types=fb["exclude_product_types"],
+    )
     data["funnel"] = bq.run("funnel_daily", **window)
     data["google_ads"] = bq.run("google_ads_daily", **window)
     data["google_campaigns"] = bq.run("google_campaigns")

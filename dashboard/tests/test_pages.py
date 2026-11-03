@@ -272,6 +272,7 @@ def test_every_phase1_tab_builds_and_serialises(built_without_meta):
         "meta_tree",
         "google_tree",
         "channel_days",
+        "slab_days",
     }
     for page in pages.values():
         json.dumps(page, default=str)
@@ -738,3 +739,44 @@ def test_channel_days_add_up_to_the_sessions(built_without_meta):
     got = sum(r[3] for r in p["rows"] if r[0] == day)
     assert got == ctx.data["sessions"][day]["totals"]["sessions"]
     assert set(p["kinds"]) == {"perf", "awareness", "social"}
+
+
+def test_basket_size_rows_and_missing_data(built_without_meta):
+    from app.pages import range_data
+    from app.pages.common import Context
+
+    _, ctx = built_without_meta
+    day = ctx.d1
+    # nothing loaded: unavailable with a reason, never an empty table of zeros
+    assert range_data.slabs(ctx)["na"]
+    data = dict(ctx.data)
+    data["order_slabs"] = [
+        {
+            "date": day,
+            "slab": 2,
+            "orders": 3,
+            "units": 6,
+            "sales": 2500.5,
+            "gmv": 2510.0,
+        },
+        {
+            "date": day,
+            "slab": 1,
+            "orders": 10,
+            "units": 10,
+            "sales": 6000.0,
+            "gmv": 6020.0,
+        },
+        {
+            "date": day,
+            "slab": 5,
+            "orders": 1,
+            "units": 7,
+            "sales": 3000.0,
+            "gmv": 3001.0,
+        },
+    ]
+    p = range_data.slabs(Context(data, ctx.cfg))
+    assert p["na"] is None and p["top"] == 5 and p["days"] == [day]
+    assert [r[1] for r in p["rows"]] == [1, 2, 5]
+    assert sum(r[2] for r in p["rows"]) == 14
