@@ -126,3 +126,61 @@ def test_monthly_workbooks_are_put_together_and_the_larger_spend_wins():
     assert out["days"]["2026-10-31"]["spend"] == 250.0
     assert out["filled_through"] == "2026-11-01"
     assert sheets.merge_parsed([a]) is a
+
+
+def _workbook(label_row, label_col, actual_col, days, fmt):
+    """A monthly workbook laid out like the team's: title rows, a row naming
+    the blocks, a header row, then one row per day."""
+    width = actual_col + 3
+    blank = [""] * width
+    rows = [list(blank) for _ in range(4)]
+    rows[label_row][label_col] = "REDDIT"
+    head = rows[3]
+    head[0], head[label_col], head[actual_col] = (
+        "Date",
+        "Target Spend ₹",
+        "Actual Spends" if actual_col % 2 else "Actual Spend ₹",
+    )
+    for d, spend in days:
+        row = list(blank)
+        row[0], row[label_col], row[actual_col] = d, "8,800", spend
+        rows.append(row)
+    rows.append(["NOVEMBER TOTAL"] + [""] * (width - 1))
+    return rows
+
+
+def test_the_reddit_block_is_found_by_name_in_each_months_layout():
+    oct_rows = _workbook(
+        1, 38, 39, [("01-Oct-26", "₹26,943"), ("02-Oct-26", "₹27,420")], 0
+    )
+    nov_rows = _workbook(
+        2, 31, 32, [("01-Nov-2026", "6,950"), ("02-Nov-2026", "")], 0
+    )
+    assert sheets.locate_block(oct_rows, "REDDIT") == (39, 3)
+    assert sheets.locate_block(nov_rows, "REDDIT") == (32, 3)
+    assert sheets.locate_block(oct_rows, "GOOGLE") is None
+    spec = {**SPECS["reddit"], "date_col": "A"}
+    for rows, (col, header) in ((oct_rows, (39, 3)), (nov_rows, (32, 3))):
+        spec["columns"] = {"spend": sheets.col_letters(col)}
+        out = sheets.parse_daily(rows[header + 1 :], spec)
+        assert out["filled_through"] in ("2026-10-02", "2026-11-01")
+    oct_out = sheets.parse_daily(
+        oct_rows[4:], {**spec, "columns": {"spend": "AN"}}
+    )
+    assert oct_out["days"]["2026-10-01"]["spend"] == 26943
+    assert oct_out["days"]["2026-10-02"]["spend"] == 27420
+    nov_out = sheets.parse_daily(
+        nov_rows[4:], {**spec, "columns": {"spend": "AG"}}
+    )
+    assert nov_out["days"]["2026-11-01"]["spend"] == 6950
+    assert "2026-11-02" not in nov_out["days"]  # not entered yet
+
+
+def test_dates_may_be_written_two_ways():
+    assert sheets.parse_date("01-Oct-26", ["%d-%b-%Y", "%d-%b-%y"]) == dt.date(
+        2026, 10, 1
+    )
+    assert sheets.parse_date(
+        "01-Nov-2026", ["%d-%b-%Y", "%d-%b-%y"]
+    ) == dt.date(2026, 11, 1)
+    assert sheets.parse_date("nonsense", ["%d-%b-%Y", "%d-%b-%y"]) is None

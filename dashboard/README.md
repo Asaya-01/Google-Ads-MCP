@@ -264,7 +264,10 @@ account request a Sheets-scoped token for itself.
   Put one workbook id per month in `SPEND_SHEET_REDDIT`, comma separated
   (`oct_id,nov_id`): the days of all of them are put together, and without
   October's the Reddit spend for October is simply missing from overall spend.
-  Add December's id when the month starts.
+  Add December's id when the month starts. The Reddit block is found by its
+  name ("REDDIT") and its "Actual Spend" header, so a month whose columns moved
+  (October's sits in AN, November's in AG) needs no setting, and the dates may be
+  written "01-Oct-26" or "01-Nov-2026".
 - **Overall ROAS** = GMV / (Meta + Google + affiliate + CRM + Reddit). It stays
   blank for a day until every part is in. The existing MER and Shopify ROAS (Perf) are
   unchanged. Channel ROAS (affiliate, CRM flow, CRM broadcast) is each

@@ -30,6 +30,34 @@ class SheetsError(RuntimeError):
 # ------------------------------------------------------------------ parsing
 
 
+def col_letters(index: int) -> str:
+    out = ""
+    n = index + 1
+    while n:
+        n, r = divmod(n - 1, 26)
+        out = chr(65 + r) + out
+    return out
+
+
+def locate_block(rows: list[list], label: str) -> tuple[int, int] | None:
+    """Where a channel's block is in a monthly workbook whose columns move
+    from month to month: (column of its "Actual Spend" cell, row of the
+    header it sits in), or None. The block's name ("REDDIT") is in one of
+    the first rows, above its Target column; its Actual Spend column is the
+    first one after it whose header says actual and spend."""
+    want = label.strip().upper()
+    for r in range(min(len(rows), 6)):
+        for c, cell in enumerate(rows[r]):
+            if str(cell).strip().upper() != want:
+                continue
+            for hr in range(r, min(len(rows), r + 4)):
+                for k in range(c, min(c + 6, len(rows[hr]))):
+                    t = str(rows[hr][k]).lower()
+                    if "actual" in t and "spend" in t:
+                        return k, hr
+    return None
+
+
 def col_index(letters: str) -> int:
     n = 0
     for ch in letters.upper():
@@ -53,12 +81,20 @@ def to_number(value) -> float | None:
         return None
 
 
-def parse_date(text, fmt: str, state: dict | None = None) -> dt.date | None:
-    """A date as written in the sheet. `fmt` is a strptime format. A format
+def parse_date(text, fmt, state: dict | None = None) -> dt.date | None:
+    """A date as written in the sheet. `fmt` is a strptime format, or a list
+    of them (months written "01-Oct-26" one month and "01-Nov-2026" the
+    next): the first that fits wins. A format
     without a year ("%b %d": "May 1") walks forward from `start_year`, taking
     the next year each time the month wraps from December to January."""
     s = str(text or "").strip()
     if not s:
+        return None
+    if isinstance(fmt, (list, tuple)):
+        for f in fmt:
+            got = parse_date(s, f, state)
+            if got is not None:
+                return got
         return None
     if "%Y" in fmt or "%y" in fmt:
         try:
@@ -210,7 +246,7 @@ def fetch_rows(spreadsheet_id: str, tab: str, first_row: int) -> list[list]:
     `first_row` down, columns A to AZ."""
     from urllib.parse import quote
 
-    rng = quote(f"'{tab}'!A{first_row}:AZ", safe="")
+    rng = quote(f"'{tab}'!A{first_row}:CZ", safe="")
     url = (
         f"{API}/{spreadsheet_id}/values/{rng}"
         "?valueRenderOption=FORMATTED_VALUE&majorDimension=ROWS"
@@ -228,6 +264,30 @@ def fetch_rows(spreadsheet_id: str, tab: str, first_row: int) -> list[list]:
     return resp.json().get("values") or []
 
 
+def read_workbook(sheet_id: str, spec: dict) -> dict:
+    """One workbook of a source. With a "block" in the spec the columns are
+    found by name (monthly workbooks move them); otherwise they are the ones
+    written in the spec."""
+    if not spec.get("block"):
+        return parse_daily(
+            fetch_rows(sheet_id, spec["tab"], spec["header_row"] + 1), spec
+        )
+    rows = fetch_rows(sheet_id, spec["tab"], 1)
+    found = locate_block(rows, spec["block"])
+    if not found:
+        raise SheetsError(
+            f"no {spec['block']} block with an Actual Spend column in the "
+            f"'{spec['tab']}' tab"
+        )
+    col, header = found
+    found_spec = {
+        **spec,
+        "date_col": "A",
+        "columns": {"spend": col_letters(col)},
+    }
+    return parse_daily(rows[header + 1 :], found_spec)
+
+
 def load_all(cfg: dict) -> tuple[dict, dict]:
     """(parsed sources, {source: reason it could not be read})."""
     specs = cfg["manual_spends"]["sources"]
@@ -242,12 +302,7 @@ def load_all(cfg: dict) -> tuple[dict, dict]:
         try:
             # a source kept in monthly workbooks lists them all, comma
             # separated; the days of every workbook are put together
-            parts = [
-                parse_daily(
-                    fetch_rows(i, spec["tab"], spec["header_row"] + 1), spec
-                )
-                for i in ids
-            ]
+            parts = [read_workbook(i, spec) for i in ids]
             out[name] = merge_parsed(parts)
         except Exception as exc:
             failed[name] = f"{type(exc).__name__}: {exc}"
