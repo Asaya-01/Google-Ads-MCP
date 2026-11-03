@@ -187,7 +187,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       default: return String(v);
     }
   }
-  const NEUTRAL_DELTA = new Set(["spend", "meta_spend", "google_spend", "perf_spend", "sessions", "awareness_sessions"]);
+  const NEUTRAL_DELTA = new Set(["cps", "spend", "meta_spend", "google_spend", "perf_spend", "sessions", "awareness_sessions"]);
   function deltaHtml(d, key) {
     if (d === null || d === undefined) return '<span class="flat">–</span>';
     if (Math.abs(d) < 0.00005) d = 0;

@@ -87,6 +87,9 @@
       w.cvr = ratio(w.orders, w.sessions);
       w.atc_rate = ratio(w.atc, w.sessions);
       w.atc_to_ic = ratio(w.ic, w.atc);
+      w.ic_to_order = ratio(w.orders, w.ic);
+      w.perf_cvr = ratio(w.orders, w.perf_sessions);
+      w.cps = ratio(w.perf_spend, w.sessions);
       w.address_rate = ratio(w.gk_address, w.ic);
       w.payment_rate = ratio(w.gk_payment, w.gk_address);
       w.paid_rate = ratio(w.gk_converted, w.gk_payment);
@@ -128,7 +131,7 @@
     }
 
     /* Per-day change: counts compare averages, rates compare directly. */
-    const RATE_FIELDS = new Set(["aov", "cvr", "atc_rate", "atc_to_ic", "address_rate", "payment_rate", "paid_rate", "meta_sales_roas", "google_sales_roas", "mer", "perf_roas", "overall_roas", "affiliate_roas", "crm_roas", "crm_flow_roas", "crm_broadcast_roas", "new_share"]);
+    const RATE_FIELDS = new Set(["aov", "cvr", "atc_rate", "atc_to_ic", "ic_to_order", "perf_cvr", "cps", "address_rate", "payment_rate", "paid_rate", "meta_sales_roas", "google_sales_roas", "mer", "perf_roas", "overall_roas", "affiliate_roas", "crm_roas", "crm_flow_roas", "crm_broadcast_roas", "new_share"]);
     function change(cur, prev, key) {
       if (!prev) return null;
       let c = cur[key], p = prev[key];

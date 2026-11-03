@@ -126,7 +126,7 @@
   },
 
   "sessions": {
-    "awareness_name_regex": "awareness",
+    "awareness_name_regex": "awareness|(^|_)traffic_campaign($|_)",
     "social_name_regex": "(^|_)reach(_|$)",
     "google_sources": ["google", "youtube"],
     "breakdown_limit": 10000,
