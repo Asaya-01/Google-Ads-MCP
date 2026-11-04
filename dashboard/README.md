@@ -227,13 +227,13 @@ groups and nothing below them, because Google reports no spend per asset.
   Total sales per day, with only ASAYAINF and ASAYASS orders left out), pulled
   with ShopifyQL on every refresh. Cancelled orders still count as orders there
   and returns come off Total sales, so D-1 differs from the Overview's GMV on
-  purpose; it matches the team's sheet exactly (1 Nov: 804 orders, Rs 631,947).
+  purpose; it matches the team's sheet exactly.
   The AOV, IC → orders %, CVR % and RoAS on D-1 use these two numbers.
   **Spends** is all channels on sales campaigns (Meta, Google, Reddit,
   affiliate, CRM; awareness and social left out; affiliate included in
   October too, though the October sheet left it out), **RoAS** is revenue ÷ Spends
   and **CPS** is Spends ÷ overall sessions. For 1 Nov this reproduces the
-  team's sheet to within Rs 53 (521,170 against 521,117).
+  team's sheet to within a few rupees.
 
 ## Affiliate and CRM spends
 
@@ -263,7 +263,7 @@ account request a Sheets-scoped token for itself.
   traffic spend belongs to the Awareness bucket, which will come from
   BigQuery. Reddit traffic *sessions* are awareness on every day either way. The workbook is monthly, so Reddit is
   in the totals only from the day the sheet starts (1 Nov 2026): earlier days
-  leave it out of overall spend rather than blanking it (about 2% of spend),
+  leave it out of overall spend rather than blanking it (a small share of spend),
   and the Reddit row says "n of m days" for a range that straddles the start.
   Put one workbook id per month in `SPEND_SHEET_REDDIT`, comma separated
   (`oct_id,nov_id`): the days of all of them are put together, and without
@@ -293,7 +293,7 @@ BAU, "Sale (Go-live 6PM)", "Sale", "Sale (Ends 11:59PM)"). On every day a
 workbook covers, that label decides sale or BAU, and "Go-live 6PM" makes the
 day a transition day with the sale starting at 6 pm. Days no workbook covers
 fall back to the detection below. This keeps planned BAU ramps (the
-month-start "Ramp +19.2%") from being read as sales.
+month-start "Ramp") from being read as sales.
 
 
 Sales are found from the hour-by-hour order counts (`orders_hourly.sql`), not
@@ -337,6 +337,13 @@ refreshes itself every 3 minutes in the browser. D-1 is untouched: the live job
   yesterday. Platforms report 15 to 60 minutes late and attribute purchases
   later, so today's ROAS reads low; spend is shown as a share of yesterday's.
   Awareness campaigns stay out of ROAS, as everywhere else.
+- **Campaign switch**: spend and returns follow Performance / Awareness / All
+  like every other tab. Performance shows sales-campaign spend only (Meta and
+  Google sales campaigns, plus the affiliate, CRM and Reddit estimates) and an
+  Overall ROAS on that spend; Awareness shows awareness spend only (Meta and
+  Google; Reddit traffic has no live source yet); All shows each platform's
+  total with its Performance, Awareness and Reach rows under it. Google
+  awareness campaigns are matched by id, the same list as the other tabs.
 - **GoKwik checkout**: the newest BigQuery load of today's rows, with its age
   on screen. For this to be useful the load must run through the day (planned
   every 30 minutes) and each load must hold the whole day so far; rows of one

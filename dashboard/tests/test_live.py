@@ -364,3 +364,42 @@ def test_yesterday_comes_from_shopify_not_the_half_synced_bigquery_copy(
     assert sum(out[yday]["gmv"]) == pytest.approx(500 * 900)
     older = (NOW.date() - dt.timedelta(days=7)).isoformat()
     assert sum(out[older]["orders"]) == 40 * 24  # older days stay on BigQuery
+
+
+def test_spend_follows_the_campaign_type_switch():
+    """Performance shows sales-campaign spend only, Awareness awareness only,
+    All every campaign with each platform split by campaign type. A Google
+    awareness campaign is found by its id even without "awareness" in its
+    name, and the awareness totals cover every campaign, not just the top 15."""
+    meta = ad_rows(1000, 3000) + [
+        {"date": "2026-10-31", "campaign_name": "WOA_Reach_Social", "spend": 200, "purchase_value": 0, "purchases": 0, "clicks": 1},
+    ] + [
+        {"date": "2026-10-31", "campaign_name": f"WOA_Awareness_Small_{i}", "spend": 1, "purchase_value": 0, "purchases": 0, "clicks": 0, "impressions": 10}
+        for i in range(20)
+    ]
+    google = [
+        {"date": "2026-10-31", "campaign_id": "111", "campaign_name": "WOA_Pmax_ITB", "spend": 700, "conversion_value": 1400, "conversions": 2, "clicks": 5},
+        {"date": "2026-10-31", "campaign_id": "999", "campaign_name": "WOA_YT_Video_Hyd", "spend": 300, "conversion_value": 0, "conversions": 0, "clicks": 5},
+        {"date": "2026-10-30", "campaign_id": "111", "campaign_name": "WOA_Pmax_ITB", "spend": 600, "conversion_value": 900, "conversions": 1, "clicks": 5},
+    ]
+    inp = inputs(meta_rows=meta, google_rows=google, google_aware_ids=["999"])
+    inp["days_manual"] = manual_days()
+    page = live.build(inp, CFG, NOW)
+    v = page["views"]
+
+    perf = {r["label"]: r["value"] for r in v["perf"]["spend_breakdown"]}
+    assert perf["Meta"] == 1000 and perf["Google Ads"] == 700
+    assert [c["key"] for c in v["perf"]["cards"]][-1] == "overall_perf_roas"
+
+    aw = {r["label"]: r["value"] for r in v["aw"]["spend_breakdown"]}
+    assert aw["Meta"] == 520 and aw["Google Ads"] == 300 and aw["All channels"] == 820
+    assert v["aw"]["totals"]["spend"] == 820
+
+    rows = v["all"]["spend_breakdown"]
+    assert rows[0]["label"] == "Meta" and rows[0]["value"] == 1720
+    subs = [(r["label"], r["value"]) for r in rows[1:4]]
+    assert subs == [("Performance", 1000), ("Awareness", 520), ("Social (Reach)", 200)]
+    assert all(r.get("level") == 1 for r in rows[1:4])
+    g = next(i for i, r in enumerate(rows) if r["label"] == "Google Ads")
+    assert rows[g]["value"] == 1000 and rows[g + 1]["value"] == 700 and rows[g + 2]["value"] == 300
+    assert page["google"]["today"]["roas"] == pytest.approx(2.0)  # awareness out of ROAS

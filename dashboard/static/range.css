@@ -196,3 +196,7 @@ table.dense tr.total td.text:first-child, table.dense tr.delta td.text:first-chi
 .d1-summary .d1-points b { color: var(--head); }
 .d1-commentary summary { cursor: pointer; font-weight: 600; color: var(--head); }
 .d1-sec { scroll-margin-top: 80px; }
+
+/* Today tab: campaign-type rows under a platform's total */
+tr.live-subrow td:first-child { padding-left: 28px; color: var(--ink-2); }
+tr.live-subrow td { font-size: 13px; }

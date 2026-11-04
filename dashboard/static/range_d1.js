@@ -31,7 +31,7 @@ const d1All = () => RG.engAll || (RG.engAll = createRangeEngine(RG.raw, "all"));
 const d1Eng = () => (RG.mode === "aw" ? RG.eng : d1All());
 const d1IsRate = (u, k) => u === "pct" || u === "x" || u === "inr2" || RG_RATES.includes(k) || ["aov", "sh_aov"].includes(k);
 const d1Sign = (v) => (v > 0 ? "+" : v < 0 ? "−" : "±");
-// a change written out: "+52,653", "−0.70 pp", "+0.03x", "+Rs 26"
+// a change written out: "+12,345", "−0.70 pp", "+0.03x", "+Rs 12"
 function d1Abs(d, unit) {
   if (d == null || !isFinite(d)) return '<span class="flat">–</span>';
   const a = Math.abs(d);

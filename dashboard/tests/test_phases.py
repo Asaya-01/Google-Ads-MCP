@@ -143,7 +143,7 @@ def test_the_team_calendar_labels_read_as_phases():
     from app.rules import calendar_phase as cp
 
     assert cp("BAU")["phase"] == "bau"
-    assert cp("BAU — Ramp +19.2%")["phase"] == "bau"
+    assert cp("BAU — Ramp +10%")["phase"] == "bau"
     assert cp("BAU (App Early Access)")["phase"] == "bau"
     assert cp("Sale")["phase"] == "sale"
     assert cp("Burst 1")["phase"] == "sale"
@@ -180,8 +180,8 @@ def test_the_calendar_wins_where_it_speaks_and_rebuilds_the_sales():
         },
     ]
     labels = {
-        "2026-11-01": "BAU — Ramp +19.2%",
-        "2026-11-02": "BAU — Ramp +19.2%",
+        "2026-11-01": "BAU — Ramp +10%",
+        "2026-11-02": "BAU — Ramp +10%",
         "2026-10-13": "Sale (Go-live 6PM)",
         "2026-10-14": "Sale",
         "2026-10-18": "Sale (Ends 11:59PM)",
@@ -211,7 +211,7 @@ def test_calendar_labels_come_from_the_phase_column_first():
         [],
         ["", "", "", "", "Shopify"],
         ["Date", "Day", "Day type", "Phase"],
-        ["01-Nov-2026", "Sun", "BAU — Ramp +19.2%", "BAU"],
+        ["01-Nov-2026", "Sun", "BAU — Ramp +10%", "BAU"],
         ["13-Nov-2026", "Fri", "BURST — Buy 2 @ 699", "Burst 1"],
         ["NOVEMBER TOTAL"],
     ]

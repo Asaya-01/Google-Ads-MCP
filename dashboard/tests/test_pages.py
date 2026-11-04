@@ -816,10 +816,10 @@ def test_shopify_sales_report_numbers_reach_the_days_page(built_without_meta):
     _, ctx = built_without_meta
     day = sorted(ctx.facts)[-2]
     data = dict(ctx.data)
-    data["shopify_sales"] = {day: {"orders": 804, "sales": 631947.0}}
+    data["shopify_sales"] = {day: {"orders": 500, "sales": 400000.0}}
     c2 = Context(data, ctx.cfg)
-    assert c2.facts[day]["sh_orders"] == 804
-    assert c2.facts[day]["sh_sales"] == 631947.0
+    assert c2.facts[day]["sh_orders"] == 500
+    assert c2.facts[day]["sh_sales"] == 400000.0
     other = sorted(c2.facts)[-1]
     assert c2.facts[other]["sh_orders"] is None  # absent, never zero
     assert c2.facts[other]["na"]["sh_orders"]
@@ -835,12 +835,12 @@ def test_sales_daily_asks_shopify_for_its_own_report_and_parses_it():
     s.shopifyql = lambda q: (
         seen.append(q)
         or [
-            {"day": "2026-11-01", "orders": "804", "total_sales": "631947"},
+            {"day": "2026-11-01", "orders": "500", "total_sales": "400000"},
             {"day": "2026-11-02", "orders": "691", "total_sales": "547749.65"},
         ]
     )
     out = s.sales_daily("2026-11-01", "2026-11-02", ["ASAYAINF", "ASAYASS"])
-    assert out["2026-11-01"] == {"orders": 804, "sales": 631947.0}
+    assert out["2026-11-01"] == {"orders": 500, "sales": 400000.0}
     assert out["2026-11-02"]["sales"] == 547749.65
     q = seen[0]
     assert "FROM sales SHOW orders, total_sales TIMESERIES day" in q

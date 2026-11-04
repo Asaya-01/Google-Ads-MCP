@@ -256,18 +256,41 @@ def median_curve(days: list[dict], key: str) -> list[float | None]:
 # --------------------------------------------------------------------- ads
 
 
-def _ad_totals(rows: list[dict], cfg: dict, value_key: str, count_key: str):
-    """Spend, Awareness-free ("Perf") spend and value, and a campaign table."""
+KINDS = ("perf", "awareness", "social")
+
+
+def _kind(name: str, cid, scfg: dict, aware_ids: set[str]) -> str:
+    """The campaign type, as on the other tabs: Reach is social; a Google
+    campaign on the awareness list (by id) or any campaign named awareness is
+    awareness; the rest is performance."""
+    if rules.is_social_name(name, scfg):
+        return "social"
+    if cid is not None and str(cid) in aware_ids:
+        return "awareness"
+    return rules.campaign_kind(name, scfg)
+
+
+def _ad_totals(
+    rows: list[dict],
+    cfg: dict,
+    value_key: str,
+    count_key: str,
+    aware_ids: set[str] | None = None,
+):
+    """Spend, Awareness-free ("Perf") spend and value, totals per campaign
+    type over every campaign, and a campaign table."""
     scfg = cfg["sessions"]
+    aware_ids = aware_ids or set()
     camps: dict[str, dict] = {}
     for r in rows:
         name = r.get("campaign_name") or "(unnamed)"
+        kind = _kind(name, r.get("campaign_id"), scfg, aware_ids)
         c = camps.setdefault(
             name,
             {
                 "campaign": name,
-                "kind": rules.campaign_kind(name, scfg),
-                "awareness": rules.is_awareness_name(name, scfg),
+                "kind": kind,
+                "awareness": kind == "awareness",
                 "spend": 0.0,
                 "value": 0.0,
                 "results": 0.0,
@@ -289,6 +312,13 @@ def _ad_totals(rows: list[dict], cfg: dict, value_key: str, count_key: str):
         "results": sum(c["results"] for c in perf),
     }
     out["roas"] = ratio(out["perf_value"], out["perf_spend"])
+    out["by_kind"] = {
+        k: {
+            f: sum(c[f] for c in table if c["kind"] == k)
+            for f in ("spend", "value", "clicks", "impressions")
+        }
+        for k in KINDS
+    }
     for c in table:
         c["roas"] = (
             ratio(c["value"], c["spend"]) if c["kind"] == "perf" else None
@@ -304,14 +334,23 @@ def ads_block(
     value_key: str,
     count_key: str,
     reason: str | None,
+    aware_ids: set[str] | None = None,
 ) -> dict:
     if rows is None:
         return {"na": reason or "not available"}
     t, table = _ad_totals(
-        [r for r in rows if r["date"] == today], cfg, value_key, count_key
+        [r for r in rows if r["date"] == today],
+        cfg,
+        value_key,
+        count_key,
+        aware_ids,
     )
     y, _ = _ad_totals(
-        [r for r in rows if r["date"] == yesterday], cfg, value_key, count_key
+        [r for r in rows if r["date"] == yesterday],
+        cfg,
+        value_key,
+        count_key,
+        aware_ids,
     )
     has_today = any(r["date"] == today for r in rows)
     has_yday = any(r["date"] == yesterday for r in rows)
@@ -556,6 +595,7 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
         "conversion_value",
         "conversions",
         unavailable.get("google"),
+        set(inp.get("google_aware_ids") or []),
     )
 
     # -- returns cards (same definitions as the D-1 pulse) ------------------
@@ -650,7 +690,7 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
             "Overall ROAS (est.)",
             ratio(gmv_now, all_t),
             y_overall,
-            "Shopify GMV so far / Meta + Google (actual) + affiliate + CRM (estimated)",
+            "Shopify GMV so far / Meta + Google (actual) + affiliate + CRM + Reddit (estimated)",
             (
                 "ad spend for today is not in yet"
                 if spend_t is None
@@ -669,6 +709,188 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
                 "na": None if v is not None else na,
             }
         )
+
+    # -- per campaign type, for the Performance / Awareness / All switch ----
+    def kind_spend(blk, which, kind, f="spend"):
+        d = blk.get(which)
+        return None if not d else d["by_kind"][kind][f]
+
+    def plus(*vals):
+        return None if any(v is None for v in vals) else sum(vals)
+
+    est_rows = [
+        {
+            "label": "Affiliate",
+            "value": (est["affiliate"] or {}).get("value"),
+            "kind": "estimate",
+            "note": (est["affiliate"] or {}).get("basis")
+            or "not enough filled days in the sheet to estimate",
+        },
+        {
+            "label": "CRM (flow + broadcast)",
+            "value": (est["crm"] or {}).get("value"),
+            "kind": "estimate",
+            "note": (est["crm"] or {}).get("basis")
+            or "not enough filled days in the sheets to estimate",
+        },
+        {
+            "label": "Reddit (sales campaigns)",
+            "value": (est["reddit"] or {}).get("value"),
+            "kind": "estimate",
+            "note": (est["reddit"] or {}).get("basis")
+            or "not enough filled days in the Reddit sheet to estimate "
+            "(left out of the total)",
+        },
+    ]
+    other_t = est["total"]
+    perf_all_t = plus(perf_t, other_t)
+    y_perf_overall = None
+    if yesterday in (dm.get("dates") or []):
+        i = dm["dates"].index(yesterday)
+        y_perf_overall = ratio(
+            dm["values"]["gmv"][i],
+            (dm["values"].get("perf_all_spend") or [None] * (i + 1))[i],
+        )
+
+    def platform(label, blk, api, kinds):
+        """A platform's total, then one row per campaign type under it."""
+        rows = [
+            {
+                "label": label,
+                "value": (blk.get("today") or {}).get("spend"),
+                "kind": "actual",
+                "note": f"every {label} campaign, from {api}",
+            }
+        ]
+        for k, name in kinds:
+            rows.append(
+                {
+                    "label": name,
+                    "value": kind_spend(blk, "today", k),
+                    "kind": "actual",
+                    "level": 1,
+                    "note": {
+                        "perf": "sales campaigns",
+                        "awareness": "awareness campaigns",
+                        "social": "the social team's Reach campaigns: in total spend only",
+                    }[k],
+                }
+            )
+        return rows
+
+    aw_meta = kind_spend(meta_blk, "today", "awareness")
+    aw_google = kind_spend(google_blk, "today", "awareness")
+    aw_total = plus(aw_meta, aw_google)
+    aw_impr = plus(
+        kind_spend(meta_blk, "today", "awareness", "impressions"),
+        kind_spend(google_blk, "today", "awareness", "impressions"),
+    )
+    aw_clicks = plus(
+        kind_spend(meta_blk, "today", "awareness", "clicks"),
+        kind_spend(google_blk, "today", "awareness", "clicks"),
+    )
+    views = {
+        "perf": {
+            "spend_breakdown": [
+                {
+                    "label": "Meta",
+                    "value": kind_spend(meta_blk, "today", "perf"),
+                    "kind": "actual",
+                    "note": "sales campaigns, from Meta's API; awareness and Reach left out",
+                },
+                {
+                    "label": "Google Ads",
+                    "value": kind_spend(google_blk, "today", "perf"),
+                    "kind": "actual",
+                    "note": "sales campaigns, from Google's API; awareness campaigns left out",
+                },
+                *est_rows,
+                {
+                    "label": "All channels",
+                    "value": perf_all_t,
+                    "kind": "estimate",
+                    "note": "performance spend: Meta and Google sales campaigns plus the estimates above",
+                },
+            ],
+            "cards": cards[:3]
+            + [
+                {
+                    "key": "overall_perf_roas",
+                    "label": "Overall ROAS (Perf, est.)",
+                    "value": ratio(gmv_now, perf_all_t),
+                    "yesterday": y_perf_overall,
+                    "delta": delta(ratio(gmv_now, perf_all_t), y_perf_overall),
+                    "sub": "Shopify GMV so far / sales-campaign spend on every channel: Meta + Google (actual) + affiliate + CRM + Reddit (estimated)",
+                    "na": None
+                    if ratio(gmv_now, perf_all_t) is not None
+                    else (
+                        "ad spend for today is not in yet"
+                        if perf_t is None
+                        else "there are not enough filled days in the affiliate and CRM sheets to estimate them"
+                    ),
+                }
+            ],
+        },
+        "aw": {
+            "spend_breakdown": [
+                {
+                    "label": "Meta",
+                    "value": aw_meta,
+                    "kind": "actual",
+                    "note": "awareness campaigns, from Meta's API (Reach is social, left out)",
+                },
+                {
+                    "label": "Google Ads",
+                    "value": aw_google,
+                    "kind": "actual",
+                    "note": "awareness campaigns, from Google's API",
+                },
+                {
+                    "label": "Reddit (traffic campaigns)",
+                    "value": None,
+                    "kind": "actual",
+                    "note": "no live source yet: Reddit traffic spend will come from BigQuery once the Reddit bot loads it",
+                },
+                {
+                    "label": "All channels",
+                    "value": aw_total,
+                    "kind": "actual",
+                    "note": "Meta and Google awareness campaigns",
+                },
+            ],
+            "totals": {
+                "spend": aw_total,
+                "meta_spend": aw_meta,
+                "google_spend": aw_google,
+                "impressions": aw_impr,
+                "clicks": aw_clicks,
+            },
+        },
+        "all": {
+            "spend_breakdown": platform(
+                "Meta",
+                meta_blk,
+                "Meta's API, a little behind real time",
+                [("perf", "Performance"), ("awareness", "Awareness"), ("social", "Social (Reach)")],
+            )
+            + platform(
+                "Google Ads",
+                google_blk,
+                "Google's API",
+                [("perf", "Performance"), ("awareness", "Awareness")],
+            )
+            + est_rows
+            + [
+                {
+                    "label": "All channels",
+                    "value": all_t,
+                    "kind": "estimate",
+                    "note": "every Meta and Google campaign plus the estimates above",
+                }
+            ],
+            "cards": cards,
+        },
+    }
 
     # -- sources and freshness ----------------------------------------------
     stale = lcfg["stale_minutes"]
@@ -737,48 +959,9 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
         "meta": meta_blk,
         "google": google_blk,
         "cards": cards,
-        "spend_breakdown": [
-            {
-                "label": "Meta",
-                "value": (meta_blk.get("today") or {}).get("spend"),
-                "kind": "actual",
-                "note": "from Meta's API, a little behind real time",
-            },
-            {
-                "label": "Google Ads",
-                "value": (google_blk.get("today") or {}).get("spend"),
-                "kind": "actual",
-                "note": "from Google's API",
-            },
-            {
-                "label": "Affiliate",
-                "value": (est["affiliate"] or {}).get("value"),
-                "kind": "estimate",
-                "note": (est["affiliate"] or {}).get("basis")
-                or "not enough filled days in the sheet to estimate",
-            },
-            {
-                "label": "CRM (flow + broadcast)",
-                "value": (est["crm"] or {}).get("value"),
-                "kind": "estimate",
-                "note": (est["crm"] or {}).get("basis")
-                or "not enough filled days in the sheets to estimate",
-            },
-            {
-                "label": "Reddit (sales campaigns)",
-                "value": (est["reddit"] or {}).get("value"),
-                "kind": "estimate",
-                "note": (est["reddit"] or {}).get("basis")
-                or "not enough filled days in the Reddit sheet to estimate "
-                "(left out of the total)",
-            },
-            {
-                "label": "All channels",
-                "value": all_t,
-                "kind": "estimate",
-                "note": "actual Meta and Google plus the estimates above",
-            },
-        ],
+        # the All campaigns view; "views" has each campaign type
+        "spend_breakdown": views["all"]["spend_breakdown"],
+        "views": views,
         "unavailable": unavailable,
         "sources": sources,
         "notes": notes,
@@ -891,6 +1074,7 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
             "crm_spend",
             "reddit_spend",
             "all_spend",
+            "perf_all_spend",
         )
         inp["days_manual"] = {
             "dates": days["dates"],
@@ -901,6 +1085,16 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
                 for k in keep
             },
         }
+    # Google awareness campaigns by id, the same list the other tabs use
+    cd = store.get_json("pages/campaign_days.json") or {}
+    inp["google_aware_ids"] = sorted(
+        {
+            str(n["id"])
+            for n in (cd.get("google") or {}).get("names", [])
+            if n.get("kind") == "awareness" or n.get("awareness")
+        }
+        | {str(i) for i in cfg["sessions"].get("google_awareness_extra_ids") or []}
+    )
     inp["phases_eff"] = {
         d: p
         for d, p in zip(days.get("dates", []), days.get("phase_eff", []))

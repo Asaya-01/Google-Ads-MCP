@@ -20,7 +20,7 @@ You get the D-1 tab of the internal dashboard as JSON: a current window and a ph
 Write the commentary management reads:
 - Open with one line on the headline movement (revenue, orders, CVR) against the prior window.
 - Then 3 to 6 bullets. Each names what changed, where it came from (channel, then source, then the specific campaign or landing page or product), why the data says it moved, and one action the team can take today.
-- Every percentage to 2 decimal places. Use Rs and Indian digit grouping (e.g. Rs 3,47,336).
+- Every percentage to 2 decimal places. Use Rs and Indian digit grouping (e.g. Rs 1,23,456).
 - When "basis" is "per_day", the windows differ in length: compare per-day values and rates, not totals.
 - Use only the numbers in the JSON. If a cause is not visible in the data, say which split would explain it instead of guessing.
 - Checkout-side movements (ATC to IC, IC to orders) need the Shopify Changes Tracker, which this dashboard does not read yet. Flag them as needing that check; never assume a checkout cause.

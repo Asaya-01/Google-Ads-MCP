@@ -66,7 +66,7 @@ def col_index(letters: str) -> int:
 
 
 def to_number(value) -> float | None:
-    """A number as written in a sheet: "34,621", "Rs 5,075", "2.55%", "".
+    """A number as written in a sheet: "12,345", "Rs 1,234", "2.55%", "".
     None when the cell is empty or not a number."""
     if value is None:
         return None
@@ -242,7 +242,7 @@ def _session():
 
 
 def fetch_rows(spreadsheet_id: str, tab: str, first_row: int) -> list[list]:
-    """The cells as shown on screen (so "34,621" stays text we parse), from
+    """The cells as shown on screen (so "12,345" stays text we parse), from
     `first_row` down, columns A to AZ."""
     from urllib.parse import quote
 

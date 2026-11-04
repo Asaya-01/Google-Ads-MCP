@@ -8,8 +8,8 @@ SPECS = settings.config()["manual_spends"]["sources"]
 
 
 def test_numbers_are_read_as_written_in_a_sheet():
-    assert sheets.to_number("34,621") == 34621
-    assert sheets.to_number("Rs 5,075") == 5075
+    assert sheets.to_number("12,345") == 12345
+    assert sheets.to_number("Rs 1,234") == 1234
     assert sheets.to_number("2.55%") == 2.55
     assert sheets.to_number("") is None and sheets.to_number(None) is None
     assert sheets.to_number("n/a") is None
@@ -151,7 +151,7 @@ def _workbook(label_row, label_col, actual_col, days, fmt):
 
 def test_the_reddit_block_is_found_by_name_in_each_months_layout():
     oct_rows = _workbook(
-        1, 38, 39, [("01-Oct-26", "₹26,943"), ("02-Oct-26", "₹27,420")], 0
+        1, 38, 39, [("01-Oct-26", "₹10,000"), ("02-Oct-26", "₹11,000")], 0
     )
     nov_rows = _workbook(
         2, 31, 32, [("01-Nov-2026", "6,950"), ("02-Nov-2026", "")], 0
@@ -167,8 +167,8 @@ def test_the_reddit_block_is_found_by_name_in_each_months_layout():
     oct_out = sheets.parse_daily(
         oct_rows[4:], {**spec, "columns": {"spend": "AN"}}
     )
-    assert oct_out["days"]["2026-10-01"]["spend"] == 26943
-    assert oct_out["days"]["2026-10-02"]["spend"] == 27420
+    assert oct_out["days"]["2026-10-01"]["spend"] == 10000
+    assert oct_out["days"]["2026-10-02"]["spend"] == 11000
     nov_out = sheets.parse_daily(
         nov_rows[4:], {**spec, "columns": {"spend": "AG"}}
     )
