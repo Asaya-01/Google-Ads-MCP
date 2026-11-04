@@ -170,7 +170,7 @@ function trBuild(g) {
         na: !c || !c.ok ? (w.na[sk] || (hasRev && w.na[rk]) || "not in the sheet for these days") : null };
     };
     roots.set("affiliate", sheet("affiliate", "Affiliate", "affiliate_spend", "affiliate_revenue", 2, "From the affiliate sheet: spend and the sales the affiliates are credited with."));
-    roots.set("reddit", sheet("reddit", "Reddit (sales campaigns)", "reddit_spend", null, 2.5, "From the media-plan sheet, sales campaigns only, until the Reddit bot loads BigQuery. No revenue is reported there, so no ROAS; traffic campaigns count as awareness.", false));
+    roots.set("reddit", sheet("reddit", "Reddit (performance)", "reddit_spend", null, 2.5, "From the media-plan sheet until the Reddit bot loads BigQuery, all counted as performance spend. Up to 31 Oct it includes the traffic campaigns (the team's rule then); from 1 Nov it is sales campaigns only. No revenue is reported there, so no ROAS.", false));
     const crm = sheet("crm", "CRM", "crm_spend", "crm_revenue", 3, "Flow + broadcast, from the CRM sheets.");
     const f = sheet("crm|flow", "Flows", "crm_flow_spend", "crm_flow_revenue", 0), b = sheet("crm|broadcast", "Broadcasts", "crm_broadcast_spend", "crm_broadcast_revenue", 1);
     f.level = b.level = 1; f.chip = b.chip = "CRM"; f.sub = b.sub = null;

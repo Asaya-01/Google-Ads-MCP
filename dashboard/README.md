@@ -171,7 +171,7 @@ by the UTM of the converting visit, organic and direct included), then
 - **Meta** › **TOF / MOF / BOF / Catalog** › **product** › campaign › ad set › ad
 - **Google Ads** › **Brand Search / Brand PMax / Non-brand PMax** (› product) /
   Demand Gen / YouTube › campaign › ad group or asset group › ad
-- **Affiliate**, **Reddit** (sales campaigns, spend only) and **CRM**
+- **Affiliate**, **Reddit** (performance spend, spend only) and **CRM**
   (› flows / broadcasts), from the spend sheets
 - a last row with Shopify GMV over all spend
 
@@ -230,7 +230,8 @@ groups and nothing below them, because Google reports no spend per asset.
   purpose; it matches the team's sheet exactly (1 Nov: 804 orders, Rs 631,947).
   The AOV, IC → orders %, CVR % and RoAS on D-1 use these two numbers.
   **Spends** is all channels on sales campaigns (Meta, Google, Reddit,
-  affiliate, CRM; awareness and social left out), **RoAS** is revenue ÷ Spends
+  affiliate, CRM; awareness and social left out; affiliate included in
+  October too, though the October sheet left it out), **RoAS** is revenue ÷ Spends
   and **CPS** is Spends ÷ overall sessions. For 1 Nov this reproduces the
   team's sheet to within Rs 53 (521,170 against 521,117).
 
@@ -256,8 +257,11 @@ account request a Sheets-scoped token for itself.
   monthly media-plan workbook ("Target vs Achieved" tab, the Reddit "Actual
   Spend" column, id in `SPEND_SHEET_REDDIT`), until the Reddit bot loads
   BigQuery. The sheet has no Reddit revenue, so Reddit has a spend and no ROAS.
-  Reddit traffic campaigns belong to the Awareness bucket, which will come from
-  BigQuery; they are not in this sheet. The workbook is monthly, so Reddit is
+  Up to 31 Oct 2026 the workbook's Reddit spend is all Reddit campaigns,
+  traffic included, and the team counted all of it as performance spend; the
+  dashboard does the same. From 1 Nov the block holds sales campaigns only, and Reddit
+  traffic spend belongs to the Awareness bucket, which will come from
+  BigQuery. Reddit traffic *sessions* are awareness on every day either way. The workbook is monthly, so Reddit is
   in the totals only from the day the sheet starts (1 Nov 2026): earlier days
   leave it out of overall spend rather than blanking it (about 2% of spend),
   and the Reddit row says "n of m days" for a range that straddles the start.

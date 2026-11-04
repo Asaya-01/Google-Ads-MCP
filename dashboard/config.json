@@ -93,7 +93,7 @@
         "block": "REDDIT",
         "columns": {"spend": "AG"},
         "optional_before_first_day": true,
-        "note": "Temporary: the Reddit block of the monthly media-plan workbook (Actual Spend, sales campaigns only) until the Reddit bot loads BigQuery. The sheet has no Reddit revenue, so there is no Reddit ROAS. Traffic campaigns count as awareness."
+        "note": "Temporary: the Reddit block of the monthly media-plan workbook (Actual Spend) until the Reddit bot loads BigQuery, all of it performance spend. Up to 31 Oct 2026 the number covers every Reddit campaign, traffic included (the team's rule then); from 1 Nov it is sales campaigns only and traffic spend is awareness. The sheet has no Reddit revenue, so there is no Reddit ROAS."
       }
     },
     "phase_plan": {

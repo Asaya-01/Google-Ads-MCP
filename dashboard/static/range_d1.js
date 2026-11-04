@@ -269,7 +269,7 @@ function d1Retention(g) {
 function d1Spend(g) {
   const e = d1All(), W = e.windowOf(g.cur), PW = g.prev && g.prev.length ? e.windowOf(g.prev) : null;
   const nc = g.cur.length, np = g.prev ? g.prev.length : 0;
-  const perf = [["Meta (sales)", "meta_perf_spend", "meta_perf_value"], ["Google (sales)", "google_perf_spend", "google_perf_value"], ["Reddit (sales)", "reddit_spend", null], ["Affiliate", "affiliate_spend", "affiliate_revenue"], ["CRM (flow + broadcast)", "crm_spend", "crm_revenue"]];
+  const perf = [["Meta (sales)", "meta_perf_spend", "meta_perf_value"], ["Google (sales)", "google_perf_spend", "google_perf_value"], ["Reddit", "reddit_spend", null], ["Affiliate", "affiliate_spend", "affiliate_revenue"], ["CRM (flow + broadcast)", "crm_spend", "crm_revenue"]];
   const aw = [["Meta (awareness)", "meta_aw_spend", "meta_aw_value"], ["Google (awareness)", "google_aw_spend", "google_aw_value"]];
   const list = RG.mode === "aw" ? aw : RG.mode === "all" ? [...perf, ...aw, ["Social (Reach)", "meta_social_spend", null]] : perf;
   const totK = RG.mode === "aw" ? ["aw_spend", "awareness_gmv"] : RG.mode === "all" ? ["all_spend", "sh_sales"] : ["perf_all_spend", "sh_sales"];
