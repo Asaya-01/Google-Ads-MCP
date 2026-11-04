@@ -105,8 +105,6 @@ function askRender(scroll) {
   send.textContent = ASK.busy ? "Stop" : "Ask";
   send.classList.toggle("stop", ASK.busy);
   send.setAttribute("aria-label", ASK.busy ? "Stop answering" : "Send question");
-  const mic = ASK.el.querySelector(".ask-mic");
-  if (mic) mic.disabled = ASK.busy;
 }
 
 function askToggle(open) {
@@ -116,7 +114,7 @@ function askToggle(open) {
   if (ASK.open) { askRender(); ASK.el.querySelector("textarea").focus(); } else ASK.fab.focus();
 }
 
-async function askSend(q) {
+async function askSend(q, voice) {
   q = (q || "").trim();
   if (!q || ASK.busy) return;
   if (embedded) {
@@ -131,7 +129,7 @@ async function askSend(q) {
   let pending = "";
   const repaint = () => { askRender(); };
   try {
-    const r = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, history, view: askContext() }), signal: ASK.ctrl.signal, credentials: "same-origin" });
+    const r = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, history, view: askContext(), voice: !!voice }), signal: ASK.ctrl.signal, credentials: "same-origin" });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
       throw new Error(r.status === 401 ? "Your session has ended. Reload the page and sign in again." : j.detail || `The assistant is not available (${r.status}).`);
@@ -160,86 +158,168 @@ async function askSend(q) {
     bot.error = e.name === "AbortError" ? "Stopped." : e.message || "The assistant could not be reached.";
   }
   bot.live = false; ASK.busy = false; ASK.ctrl = null;
-  if (!bot.text && !bot.error) bot.error = "No answer came back. Try again.";
+  if (!bot.text.trim() && !bot.error) bot.error = "No answer came back. Try again.";
   askSave(); askRender();
 }
 
-// ------------------------------------------------------------ hold to talk
-/* Press and hold the mic, speak, let go: the question is sent. Speech is
-   turned into text by the browser's own speech recognition (Chrome, Edge,
-   Safari), in Indian English; the words appear in the box as you speak.
-   Esc while holding, or a quick tap, sends nothing. Browsers without speech
-   recognition (Firefox) do not show the button. */
+// ------------------------------------------------------------------ voice
+/* Click the mic to start talking, click again to stop. The words land in the
+   box to check or fix; press Ask to send (click the mic again to add more).
+   The recording goes to Google Speech-to-Text in the dashboard's own project
+   (POST /api/transcribe, Indian English, the dashboard's vocabulary boosted).
+   If that is not set up, the browser's own speech recognition is used
+   instead. Questions asked by voice are flagged so Claude reads past any
+   word the recognition misheard. Esc while recording cancels. */
 const ASK_SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 const ASK_MIC_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5"/></svg>';
-const MIC = { holding: false, started: 0, base: "", finals: "", sess: "", interim: "", err: null, cancel: false, tap: false, rec: null, stop: () => {} };
-const MIC_MIN_MS = 350; // shorter than this is a tap, not a hold
+const ASK_STOP_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>';
+const MIC_MAX_S = 59;
+const MIC = { on: false, busy: false, engine: null, stop: () => {} };
+
+function askPcm16(chunks, inRate) {
+  // mono float chunks at the device rate -> 16 kHz 16-bit PCM, base64
+  let n = 0; for (const c of chunks) n += c.length;
+  const all = new Float32Array(n); let o = 0; for (const c of chunks) { all.set(c, o); o += c.length; }
+  const ratio = inRate / 16000, len = Math.floor(all.length / ratio), out = new Int16Array(len);
+  for (let i = 0; i < len; i++) {
+    // average the samples this output sample covers (a simple low-pass)
+    const a = Math.floor(i * ratio), b = Math.min(all.length, Math.floor((i + 1) * ratio));
+    let s = 0; for (let j = a; j < b; j++) s += all[j];
+    const v = Math.max(-1, Math.min(1, b > a ? s / (b - a) : all[a] || 0));
+    out[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+  }
+  const bytes = new Uint8Array(out.buffer); let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
 
 function askMicSetup(el, ta, grow) {
   const btn = el.querySelector(".ask-mic"), note = el.querySelector(".ask-note"), noteText = note.textContent;
-  if (!ASK_SR) { btn.hidden = true; return; }
-  const say = (msg) => { note.textContent = msg; note.classList.add("warn"); };
-  const reset = () => { note.textContent = noteText; note.classList.remove("warn"); };
-  const show = () => { ta.value = [MIC.base, (MIC.finals + MIC.sess + MIC.interim).trim()].filter(Boolean).join(" "); grow(); ta.scrollTop = ta.scrollHeight; };
+  const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && (window.AudioContext || window.webkitAudioContext));
+  if (embedded || (!canRecord && !ASK_SR)) { btn.hidden = true; return; }
+  MIC.engine = canRecord ? "cloud" : "browser";
+  const say = (msg, warn) => { note.textContent = msg; note.classList.toggle("warn", !!warn); };
+  const reset = () => say(noteText, false);
+  const paint = () => {
+    btn.classList.toggle("rec", MIC.on); btn.classList.toggle("wait", MIC.busy);
+    btn.setAttribute("aria-pressed", String(MIC.on));
+    btn.setAttribute("aria-label", MIC.on ? "Stop recording" : "Ask by voice: click to start talking");
+    btn.title = MIC.on ? "Click to stop" : "Click to talk";
+    btn.innerHTML = MIC.on ? ASK_STOP_ICON : ASK_MIC_ICON;
+    btn.disabled = MIC.busy;
+  };
+  const put = (text) => {
+    // add the words after whatever is already in the box
+    const t = (text || "").replace(/\s+/g, " ").trim();
+    if (!t) return false;
+    ta.value = [ta.value.trim(), t].filter(Boolean).join(" ");
+    grow(); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+    ASK.voice = true;
+    return true;
+  };
+  const done = (ok) => say(ok ? "Check the words, then press Ask. Click the mic to add more." : noteText, false);
 
-  function listen() {
-    const r = new ASK_SR();
-    r.lang = "en-IN"; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
-    MIC.rec = r; MIC.sess = ""; MIC.interim = ""; MIC.err = null;
-    r.onresult = (ev) => {
-      let f = "", it = "";
-      for (let i = 0; i < ev.results.length; i++) { const t = ev.results[i][0].transcript; if (ev.results[i].isFinal) f += t; else it += t; }
-      MIC.sess = f; MIC.interim = it; show();
+  // --- Google Speech-to-Text: record PCM, send when stopped
+  let rec = null;
+  async function cloudStart() {
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    } catch (e) {
+      return say(e && e.name === "NotFoundError" ? "No microphone was found." : "Microphone access is blocked. Allow the microphone for this site in the browser's settings, then click the mic again.", true);
+    }
+    const AC = window.AudioContext || window.webkitAudioContext, ctx = new AC();
+    const src = ctx.createMediaStreamSource(stream), proc = ctx.createScriptProcessor(4096, 1, 1);
+    rec = { stream, ctx, src, proc, chunks: [], rate: ctx.sampleRate, t0: Date.now(), timer: 0 };
+    proc.onaudioprocess = (ev) => {
+      const d = ev.inputBuffer.getChannelData(0); rec.chunks.push(new Float32Array(d));
+      let s = 0; for (let i = 0; i < d.length; i += 16) s += d[i] * d[i];
+      btn.style.setProperty("--lvl", Math.min(1, Math.sqrt(s / (d.length / 16)) * 6).toFixed(2));
     };
-    r.onerror = (ev) => { MIC.err = ev.error; };
-    r.onend = () => {
-      MIC.finals += MIC.sess + MIC.interim; MIC.sess = ""; MIC.interim = "";
-      // browsers end a session after a pause; keep listening while held
-      if (MIC.holding && (!MIC.err || MIC.err === "no-speech")) { MIC.finals += " "; try { listen(); return; } catch (e) { /* fall through */ } }
-      finish();
+    src.connect(proc); proc.connect(ctx.destination);
+    MIC.on = true; paint();
+    const tick = () => {
+      const s = Math.floor((Date.now() - rec.t0) / 1000);
+      say(`Listening… ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} · click the mic to stop · Esc to cancel`);
+      if (s >= MIC_MAX_S) stop(false);
     };
-    r.start();
+    tick(); rec.timer = setInterval(tick, 500);
   }
-  function start() {
-    if (ASK.busy || MIC.holding) return;
-    reset();
-    Object.assign(MIC, { holding: true, started: Date.now(), base: ta.value.trim(), finals: "", cancel: false, tap: false });
-    btn.classList.add("rec"); btn.setAttribute("aria-pressed", "true");
-    note.textContent = "Listening… let go to send · Esc to cancel";
-    try { listen(); } catch (e) { MIC.err = "start"; MIC.holding = false; finish(); }
+  async function cloudStop(cancel) {
+    const r = rec; rec = null;
+    clearInterval(r.timer);
+    try { r.src.disconnect(); r.proc.disconnect(); } catch (e) { /* already gone */ }
+    r.stream.getTracks().forEach((t) => t.stop());
+    r.ctx.close().catch(() => {});
+    btn.style.removeProperty("--lvl");
+    MIC.on = false;
+    if (cancel) { paint(); return reset(); }
+    if ((Date.now() - r.t0) < 600) { paint(); return say("That was too short. Click the mic, speak, then click it again to stop.", true); }
+    MIC.busy = true; paint(); say("Turning your words into text…");
+    try {
+      const resp = await fetch("/api/transcribe", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ audio: askPcm16(r.chunks, r.rate) }) });
+      const j = await resp.json().catch(() => ({}));
+      if (resp.ok) {
+        if (put(j.text)) done(true);
+        else say("Didn't catch any words. Click the mic and try again, a little closer to the microphone.", true);
+      }
+      else if ((resp.status === 503 || resp.status === 502) && ASK_SR) {
+        MIC.engine = "browser";
+        say(`Server speech-to-text is not available (${j.detail || resp.status}), so the browser's own recognition will be used. Click the mic and speak again.`, true);
+      } else say(resp.status === 401 ? "Your session has ended. Reload the page and sign in again." : j.detail || `Speech-to-text failed (${resp.status}).`, true);
+    } catch (e) {
+      say("Could not reach the dashboard to turn speech into text. Try again.", true);
+    }
+    MIC.busy = false; paint();
   }
+
+  // --- fallback: the browser's own speech recognition, live in the box
+  let sr = null;
+  function browserStart() {
+    const base = ta.value.trim();
+    sr = { base, finals: "", sess: "", interim: "", err: null, cancel: false, r: null };
+    const show = () => { ta.value = [sr.base, (sr.finals + sr.sess + sr.interim).trim()].filter(Boolean).join(" "); grow(); };
+    const listen = () => {
+      const r = new ASK_SR(); sr.r = r; sr.sess = ""; sr.interim = ""; sr.err = null;
+      r.lang = "en-IN"; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
+      r.onresult = (ev) => { let f = "", it = ""; for (let i = 0; i < ev.results.length; i++) { const t = ev.results[i][0].transcript; if (ev.results[i].isFinal) f += t; else it += t; } sr.sess = f; sr.interim = it; show(); };
+      r.onerror = (ev) => { sr.err = ev.error; };
+      r.onend = () => {
+        sr.finals += sr.sess + sr.interim + " "; sr.sess = ""; sr.interim = "";
+        if (MIC.on && (!sr.err || sr.err === "no-speech")) { try { return listen(); } catch (e) { /* stop below */ } }
+        const s = sr; sr = null; MIC.on = false; paint();
+        if (s.err === "not-allowed" || s.err === "service-not-allowed") { ta.value = s.base; grow(); return say("Microphone access is blocked. Allow the microphone for this site in the browser's settings, then click the mic again.", true); }
+        if (s.cancel) { ta.value = s.base; grow(); return reset(); }
+        const text = s.finals.replace(/\s+/g, " ").trim();
+        ta.value = s.base; grow();
+        if (!put(text)) return say(s.err === "network" ? "Speech recognition needs an internet connection." : "Didn't catch any words. Click the mic and try again.", true);
+        done(true);
+      };
+      r.start();
+    };
+    try { listen(); } catch (e) { sr = null; return say("Speech recognition could not start in this browser.", true); }
+    MIC.on = true; paint();
+    say("Listening… click the mic to stop · Esc to cancel");
+  }
+  function browserStop(cancel) {
+    if (!sr) return;
+    MIC.on = false; sr.cancel = !!cancel;
+    try { if (cancel) sr.r.abort(); else sr.r.stop(); } catch (e) { /* ended already */ }
+  }
+
   function stop(cancel) {
-    if (!MIC.holding) return;
-    MIC.holding = false;
-    MIC.tap = Date.now() - MIC.started < MIC_MIN_MS;
-    MIC.cancel = !!cancel || MIC.tap;
-    try { if (MIC.cancel) MIC.rec.abort(); else MIC.rec.stop(); } catch (e) { finish(); }
-  }
-  function finish() {
-    btn.classList.remove("rec"); btn.setAttribute("aria-pressed", "false");
-    const text = MIC.finals.replace(/\s+/g, " ").trim();
-    if (MIC.err === "not-allowed" || MIC.err === "service-not-allowed") { ta.value = MIC.base; say("Microphone access is blocked. Allow the microphone for this site in the browser's settings, then hold the mic again."); }
-    else if (MIC.tap) { ta.value = MIC.base; say("Press and hold the mic while you speak, then let go to send."); }
-    else if (MIC.cancel) { ta.value = MIC.base; reset(); }
-    else if (!text) { ta.value = MIC.base; say(MIC.err === "network" ? "Speech recognition needs an internet connection." : MIC.err === "audio-capture" ? "No microphone was found." : "Didn't catch that. Hold the mic and speak again."); }
-    else { show(); reset(); el.querySelector("form").requestSubmit(); }
-    grow();
+    if (!MIC.on) return;
+    if (rec) cloudStop(cancel); else browserStop(cancel);
   }
   MIC.stop = stop;
-  btn.addEventListener("pointerdown", (ev) => {
-    if (ev.button !== 0) return;
-    ev.preventDefault();
-    try { btn.setPointerCapture(ev.pointerId); } catch (e) { /* not capturable */ }
-    start();
+  btn.addEventListener("click", () => {
+    if (MIC.busy) return;
+    if (MIC.on) return stop(false);
+    reset();
+    if (MIC.engine === "cloud") cloudStart(); else browserStart();
   });
-  btn.addEventListener("pointerup", () => stop(false));
-  btn.addEventListener("pointercancel", () => stop(true));
-  btn.addEventListener("lostpointercapture", () => stop(false));
-  btn.addEventListener("contextmenu", (ev) => ev.preventDefault());
-  // keyboard: hold Space or Enter on the button
-  btn.addEventListener("keydown", (ev) => { if ((ev.key === " " || ev.key === "Enter") && !ev.repeat) { ev.preventDefault(); start(); } });
-  btn.addEventListener("keyup", (ev) => { if (ev.key === " " || ev.key === "Enter") { ev.preventDefault(); stop(false); } });
-  window.addEventListener("blur", () => stop(true));
+  window.addEventListener("pagehide", () => stop(true));
+  paint();
 }
 
 function askMount() {
@@ -255,20 +335,21 @@ function askMount() {
       <button type="button" class="ask-iconbtn x" data-act="close" aria-label="Close">×</button></div>
     <div class="ask-ctx"></div>
     <div class="ask-log" aria-live="polite"></div>
-    <div class="ask-foot"><form class="ask-form"><textarea rows="1" placeholder="Ask about any number on the dashboard…" aria-label="Your question" maxlength="2000"></textarea><button type="button" class="ask-mic" aria-label="Press and hold to ask by voice" aria-pressed="false" title="Press and hold to talk">${ASK_MIC_ICON}</button><button type="submit" class="ask-send">Ask</button></form>
-      <p class="ask-note">Uses the tab, dates and view you're on. Enter to send${ASK_SR ? ", or press and hold the mic to speak" : ", Shift+Enter for a new line"}.</p></div>`;
+    <div class="ask-foot"><form class="ask-form"><textarea rows="1" placeholder="Ask about any number on the dashboard…" aria-label="Your question" maxlength="2000"></textarea><button type="button" class="ask-mic" aria-pressed="false">${ASK_MIC_ICON}</button><button type="submit" class="ask-send">Ask</button></form>
+      <p class="ask-note">Uses the tab, dates and view you're on. Enter to send, or click the mic to talk.</p></div>`;
   document.body.append(fab, el);
   ASK.el = el; ASK.fab = fab;
   fab.addEventListener("click", () => askToggle(true));
   const ta = el.querySelector("textarea");
   const grow = () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px"; };
-  ta.addEventListener("input", grow);
+  ta.addEventListener("input", () => { grow(); if (!ta.value.trim()) ASK.voice = false; });
   askMicSetup(el, ta, grow);
   ta.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); el.querySelector("form").requestSubmit(); } });
   el.querySelector("form").addEventListener("submit", (ev) => {
     ev.preventDefault();
-    if (ASK.busy) { ASK.ctrl && ASK.ctrl.abort(); return; }
-    const q = ta.value; ta.value = ""; grow(); askSend(q);
+    if (ASK.busy) { if (ev.submitter && ev.submitter.classList.contains("ask-send")) ASK.ctrl && ASK.ctrl.abort(); return; }
+    if (MIC.on) MIC.stop(false);
+    const q = ta.value, voice = !!ASK.voice; ta.value = ""; ASK.voice = false; grow(); askSend(q, voice);
   });
   el.addEventListener("click", (ev) => {
     const b = ev.target.closest("button");
@@ -279,7 +360,7 @@ function askMount() {
   });
   el.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
-    if (MIC.holding) { ev.preventDefault(); MIC.stop(true); return; } // Esc cancels a recording first
+    if (MIC.on) { ev.preventDefault(); MIC.stop(true); return; } // Esc cancels a recording first
     askToggle(false);
   });
   // the context line follows the tab, dates and view

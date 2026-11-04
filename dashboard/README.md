@@ -410,13 +410,19 @@ data, streaming as it works.
   Performance / Awareness / All view on screen, so "these dates" means what
   the user is looking at. Follow-up questions keep the conversation (for the
   browser session; "New chat" clears it).
-- **Voice**: press and hold the mic next to Ask, speak, let go to send. The
-  words appear in the box as you speak; Esc while holding cancels, and a quick
-  tap only shows a hint. Speech becomes text in the browser's own speech
-  recognition (Chrome, Edge, Safari on desktop and iPhone; Indian English), so
-  Chrome and Edge send the audio to Google's speech service and Safari to
-  Apple's; the dashboard
-  never receives audio. Firefox has no speech recognition, so it shows no mic.
+- **Voice**: click the mic next to Ask to start talking, click it again to
+  stop (Esc cancels; recordings stop at a minute). The words land in the box
+  to check or fix, and nothing sends until you press Ask; click the mic again
+  to add more. The recording goes to Google Cloud Speech-to-Text in this
+  project (`app/voice.py`, `POST /api/transcribe`): Indian English, with the
+  dashboard's vocabulary boosted (metrics, channels, PMax, GoKwik, and every
+  product name and code from `config.json`, so new products are covered).
+  Audio is not stored. A question asked by voice is flagged to Claude, which
+  reads past a misheard word ("revise" for revenue) and says when it did.
+  `deploy.sh` enables the Speech-to-Text API and grants the service account
+  `roles/speech.client`; until that is in place the mic falls back to the
+  browser's own speech recognition (Chrome, Edge, Safari), which is less
+  accurate. Settings are under `assistant.voice` in `config.json`.
 - **Limits**: signed-in, allowlisted users only; 40 questions per person per
   hour (`questions_per_user_per_hour`); up to 14 tool rounds per answer. The
   service runs with a 15-minute request timeout and 1 GiB for this. Turn it

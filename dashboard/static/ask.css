@@ -76,9 +76,10 @@ main { padding-bottom: 88px; }
 .ask-mic svg { width: 19px; height: 19px; }
 .ask-mic:hover { color: var(--accent); border-color: var(--accent); }
 .ask-mic:disabled { opacity: 0.45; cursor: default; }
-.ask-mic.rec { background: var(--bad); border-color: var(--bad); color: #fff; animation: ask-rec 1.4s ease-out infinite; }
-@keyframes ask-rec { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--bad) 45%, transparent); } 100% { box-shadow: 0 0 0 12px transparent; } }
-@media (prefers-reduced-motion: reduce) { .ask-mic.rec { animation: none; } }
+.ask-mic.rec { background: var(--bad); border-color: var(--bad); color: #fff;
+  box-shadow: 0 0 0 calc(3px + var(--lvl, 0) * 9px) color-mix(in srgb, var(--bad) 28%, transparent); transition: box-shadow 0.08s linear; }
+.ask-mic.wait { opacity: 0.6; cursor: progress; }
+.ask-mic svg { pointer-events: none; }
 .ask-note.warn { color: var(--bad); }
 .ask-send { border: 0; border-radius: 10px; background: var(--accent); color: var(--surface); font: 600 13px/1 var(--font-body); padding: 0 14px; height: 42px; cursor: pointer; }
 .ask-send:disabled { opacity: 0.45; cursor: default; }

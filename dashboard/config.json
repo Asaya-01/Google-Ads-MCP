@@ -236,7 +236,16 @@
     "api_key_secret": "anthropic-api-key",
     "max_turns": 14,
     "max_tokens": 32000,
-    "questions_per_user_per_hour": 40
+    "questions_per_user_per_hour": 40,
+    "voice": {
+      "enabled": true,
+      "language": "en-IN",
+      "model": "latest_long",
+      "boost": 12,
+      "max_seconds": 60,
+      "per_user_per_hour": 120,
+      "note": "Ask Claude's mic: Google Cloud Speech-to-Text in this project (app/voice.py), with the dashboard's vocabulary boosted. Falls back to the browser's own speech recognition if the API is not reachable."
+    }
   },
   "taxonomy": {
     "_note": "How campaign and ad names map to funnel stage, product and Google campaign group. See app/taxonomy.py.",

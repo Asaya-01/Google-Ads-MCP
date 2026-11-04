@@ -701,6 +701,17 @@ def _context_text(view: dict | None) -> str:
     return "What the user is looking at on the dashboard:\n" + json.dumps(keep, default=str)
 
 
+VOICE_NOTE = (
+    "The user spoke this question and speech-to-text wrote it down, so some "
+    "words may be misheard (e.g. 'revise' or 'revenues' for revenue, 'solo' for "
+    "'so low', 'roast' or 'rose' for ROAS, 'pee max' for PMax, 'go quick' for "
+    "GoKwik, 'a OV' for AOV). Read it as an Asaya D2C manager most likely meant "
+    "it, using the dashboard's vocabulary. If you reinterpret a word, say so in "
+    "one short line at the start (e.g. \"Reading 'revise' as revenue.\"). Only "
+    "ask what they meant if no sensible reading exists.\n\n"
+)
+
+
 def _clean_history(history) -> list[dict]:
     out = []
     for h in (history or [])[-MAX_HISTORY:]:
@@ -740,7 +751,7 @@ def _echo(content: list) -> tuple[list, list]:
     return echo, calls
 
 
-def answer(question: str, history, view: dict | None, cfg: dict, store, client=None):
+def answer(question: str, history, view: dict | None, cfg: dict, store, client=None, voice: bool = False):
     """Yields the events described at the top of this module."""
     question = (question or "").strip()
     if not question:
@@ -763,7 +774,7 @@ def answer(question: str, history, view: dict | None, cfg: dict, store, client=N
 
     tools = Tools(Pages(store))
     messages = _clean_history(history) + [
-        {"role": "user", "content": f"{_context_text(view)}\n\nQuestion: {question}"}
+        {"role": "user", "content": f"{_context_text(view)}\n\n{VOICE_NOTE if voice else ''}Question: {question}"}
     ]
     system = [{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}]
     fallback = False

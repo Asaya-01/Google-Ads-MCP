@@ -45,7 +45,7 @@ echo "==> [1/9] Enabling APIs"
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
   secretmanager.googleapis.com firestore.googleapis.com cloudscheduler.googleapis.com \
   bigquery.googleapis.com storage.googleapis.com monitoring.googleapis.com logging.googleapis.com \
-  sheets.googleapis.com iamcredentials.googleapis.com "${P[@]}"
+  sheets.googleapis.com iamcredentials.googleapis.com speech.googleapis.com "${P[@]}"
 
 echo "==> [2/9] Service account and roles"
 gcloud iam service-accounts describe "$SA" "${P[@]}" >/dev/null 2>&1 \
@@ -55,6 +55,10 @@ for role in roles/bigquery.dataViewer roles/bigquery.jobUser roles/datastore.use
   gcloud projects add-iam-policy-binding "$GOOGLE_PROJECT_ID" --member "serviceAccount:$SA" \
     --role "$role" --condition None "${P[@]}" >/dev/null
 done
+# Ask Claude's mic (Google Speech-to-Text); a failure here only disables voice
+gcloud projects add-iam-policy-binding "$GOOGLE_PROJECT_ID" --member "serviceAccount:$SA" \
+  --role roles/speech.client --condition None "${P[@]}" >/dev/null \
+  || echo "    (could not grant roles/speech.client; the mic falls back to the browser's speech recognition)"
 
 # Google Sheets (affiliate and CRM spends) wants its own OAuth scope, which the
 # service account's default token does not carry: the service account asks for

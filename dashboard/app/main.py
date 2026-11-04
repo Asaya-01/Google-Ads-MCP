@@ -243,7 +243,12 @@ async def ask_claude(request: Request, user: str = Depends(current_user)):
     def events():
         try:
             for ev in ask.answer(
-                body.get("question"), body.get("history"), view, cfg, store()
+                body.get("question"),
+                body.get("history"),
+                view,
+                cfg,
+                store(),
+                voice=bool(body.get("voice")),
             ):
                 yield f"data: {json.dumps(ev, default=str)}\n\n"
         except Exception as exc:  # report, never hang the browser
@@ -255,6 +260,35 @@ async def ask_claude(request: Request, user: str = Depends(current_user)):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
+
+
+@app.post("/api/transcribe")
+async def transcribe(request: Request, user: str = Depends(current_user)):
+    """Ask Claude's mic: speech to text (app/voice.py). Returns {"text"}."""
+    from . import ask, voice
+
+    vcfg = ask.config().get("voice") or {}
+    if not vcfg.get("enabled", True):
+        raise HTTPException(503, "Voice input is turned off in config.json")
+    body = await request.body()
+    if len(body) > 4_000_000:
+        raise HTTPException(413, "Recordings are limited to a minute.")
+    try:
+        data = json.loads(body)
+    except ValueError:
+        raise HTTPException(400, "Expected JSON")
+    if not isinstance(data, dict):
+        raise HTTPException(400, "Expected a JSON object")
+    if not ask.allow(f"voice:{user}", vcfg.get("per_user_per_hour", 120)):
+        raise HTTPException(429, "That's the hourly limit for voice questions.")
+    from starlette.concurrency import run_in_threadpool
+
+    try:
+        text = await run_in_threadpool(voice.transcribe, data.get("audio"), vcfg)
+    except voice.VoiceError as exc:
+        print(json.dumps({"voice": "failed", "status": exc.status}))
+        raise HTTPException(exc.status, exc.text)
+    return {"text": text}
 
 
 @app.get("/api/page/{tab}")
