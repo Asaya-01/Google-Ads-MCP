@@ -139,7 +139,7 @@
     "report_perf_sources": ["affiliate", "analyticsclouds", "cashkaro", "facebook", "facebook-featuredofferings", "facebook-sitelink", "fb", "fkm", "google", "kwe", "kwikengage", "mma", "paritycube", "paytm", "reddit", "strongmetrics", "togethr", "what''s app", "what's app", "whatsapp", "xpl", "yt"],
     "google_awareness_extra_ids": ["23901964996", "24108086802", "23468072383", "23024267442", "23034302776", "23090422518", "22592638498", "23724640711", "22921522240", "23281983102", "22560482537", "21555804458", "23194404717", "23283542125", "24394676551", "22225510513", "23578932718", "23714859960", "21094772631", "21100911986", "21101511830", "20903863669", "21692837944", "21092248028", "21094594255", "21092228801", "23178084713", "23225767160", "23225770304", "23563975416", "23563975566", "23563975665", "23563975674", "23569203536", "23569203545", "23569203563"],
     "dated_awareness": [
-      {"source": "reddit", "regex": "(^|_)traffic_campaign($|_)", "from": "2026-11-01", "note": "Reddit traffic campaigns count as awareness from 1 Nov 2026; before that every Reddit campaign counted as performance."}
+      {"source": "reddit", "regex": "(^|_)traffic_campaign($|_)", "from": "2000-01-01", "note": "Reddit traffic campaigns are awareness on every day (the team's rule since Nov 2026, applied to the whole history). Set a later 'from' to count them as performance before that date."}
     ],
     "social_name_regex": "(^|_)reach(_|$)",
     "google_sources": ["google", "youtube"],

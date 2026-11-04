@@ -50,15 +50,15 @@ def test_session_kind_follows_the_brief():
     assert kind("facebook", "MG_TOF_awareness_reach") == ("social", None)
     assert kind("facebook", "WOA_Awareness_TOF_Reach") == ("social", None)
     assert kind("facebook", "WOA_Reachout_Sales") == ("perf", None)
-    # Reddit traffic campaigns are awareness from 1 Nov 2026 only; before
-    # that every Reddit campaign counted as performance. Sales ones always do.
+    # Reddit traffic campaigns are awareness on every day, before November
+    # too; Reddit sales campaigns are always performance
     on = lambda s, c, d: rules.session_kind(s, c, aware, known, scfg, d)
     assert on("reddit", "WOA_TOF_Traffic_Campaign", "2026-11-01") == (
         "awareness",
         None,
     )
-    assert on("reddit", "WOA_TOF_Traffic_Campaign", "2026-10-31") == (
-        "perf",
+    assert on("reddit", "WOA_TOF_Traffic_Campaign", "2026-10-01") == (
+        "awareness",
         None,
     )
     assert on("reddit", "WOA_MOF_Sales", "2026-11-02") == ("perf", None)

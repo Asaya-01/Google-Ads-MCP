@@ -209,8 +209,8 @@ groups and nothing below them, because Google reports no spend per asset.
   is one of the awareness campaigns (looked up by name through the API, plus
   the ids the team listed in `sessions.google_awareness_extra_ids`, which
   covers old campaigns the API no longer returns). **Reddit**: a campaign name
-  containing "traffic" is awareness **from 1 Nov 2026** (`sessions.dated_awareness`);
-  before that every Reddit campaign counted as performance. Reddit sales
+  containing "traffic" is awareness on every day, across the whole history
+  (`sessions.dated_awareness`, the team's rule from Nov 2026 applied backwards). Reddit sales
   campaigns are always performance. Reach campaigns are social.
 - The Top Funnel campaign `WOA_Awareness_TOF_Sales_Skincare_ATC_UAS` reaches
   Shopify as `WOA_TOF_Sales_Skincare_ATC_UAS` or as its bare id, so
