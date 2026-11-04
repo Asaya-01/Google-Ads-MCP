@@ -21,10 +21,18 @@ def test_the_range_picker_files_are_inlined_without_leftover_markers():
         "range_tree.js",
         "range_basket.js",
         "range_d1.js",
+        "ask.js",
     ):
         assert "</script" not in (settings.STATIC_DIR / name).read_text(
             encoding="utf-8"
         )
+
+
+def test_ask_claude_is_inlined_and_mounted():
+    html = settings.app_fragment()
+    assert "__ASK" not in html
+    assert "function askMount()" in html and ".ask-fab" in html
+    assert "askMount();" in html and "/api/ask" in html
 
 
 def test_the_retention_files_are_inlined_without_leftover_markers():

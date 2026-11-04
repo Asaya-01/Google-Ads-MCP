@@ -229,6 +229,15 @@
     "effort": "high",
     "api_key_secret": "anthropic-api-key"
   },
+  "assistant": {
+    "enabled": true,
+    "model": "claude-opus-5-5",
+    "effort": "high",
+    "api_key_secret": "anthropic-api-key",
+    "max_turns": 14,
+    "max_tokens": 32000,
+    "questions_per_user_per_hour": 40
+  },
   "taxonomy": {
     "_note": "How campaign and ad names map to funnel stage, product and Google campaign group. See app/taxonomy.py.",
     "products": [

@@ -109,9 +109,11 @@ done
 
 echo "==> [7/9] Cloud Run service ${SERVICE}"
 # Public endpoint on purpose: the app itself enforces Google sign-in and the
-# Firestore allowlist on every page and API call.
+# Firestore allowlist on every page and API call. Ask Claude streams answers
+# that can take a few minutes and reads the page snapshots into memory, hence
+# the longer request timeout and 1 GiB.
 gcloud run deploy "$SERVICE" --image "$IMAGE" --region "$REGION" --service-account "$SA" \
-  --set-env-vars "^@@^$ENV_VARS" --allow-unauthenticated --memory 512Mi --max-instances 3 "${P[@]}"
+  --set-env-vars "^@@^$ENV_VARS" --allow-unauthenticated --memory 1Gi --timeout 900 --max-instances 3 "${P[@]}"
 
 echo "==> [8/9] Refresh job ${JOB} and schedule"
 gcloud run jobs deploy "$JOB" --image "$IMAGE" --region "$REGION" --service-account "$SA" \

@@ -372,6 +372,40 @@ The Retention tab is a rebuild of the retention artifact, on all-time data.
   regexes that also work in BigQuery) and rebuild; the Data and method panel
   lists what is left out and what is unmapped.
 
+## Ask Claude (the assistant on every tab)
+
+A floating **Ask Claude** button sits at the bottom right of every tab. It
+opens a chat: ask anything about the numbers ("why did CVR drop yesterday?",
+"split Meta spend by stage and product for 1-3 Nov", "how did the basket mix
+change against the last sale?") and Claude answers from the dashboard's own
+data, streaming as it works.
+
+- **Model**: `config.json` "assistant" (Claude Opus 5.5, effort high, adaptive
+  thinking), the same `anthropic-api-key` secret as the D-1 commentary. Refusal
+  fallbacks are on (`fallbacks: "default"`): if the main model declines a
+  question, the API re-runs it on Anthropic's recommended fallback model and
+  the answer says so.
+- **No guessing**: Claude never sees raw files. It calls tools that read the
+  page snapshots the refresh job writes (`app/ask_data.py`), and every number
+  in an answer comes from a tool. The sums are a Python port of
+  `range_engine.js` (views, missing days, rates from summed counts, per-day
+  averages for unequal periods, sale only against sale), and a test checks the
+  port against the browser engine number for number. Breakdowns rebuild the
+  dashboard's tables (channel, UTM source and campaign, landing page, product,
+  product type, basket size, Meta by campaign / ad set / ad / stage / product,
+  Google by campaign / group / product / ad group). A `calculate` tool does any
+  other arithmetic exactly.
+- **Context**: each question carries the tab, dates, comparison and
+  Performance / Awareness / All view on screen, so "these dates" means what
+  the user is looking at. Follow-up questions keep the conversation (for the
+  browser session; "New chat" clears it).
+- **Limits**: signed-in, allowlisted users only; 40 questions per person per
+  hour (`questions_per_user_per_hour`); up to 14 tool rounds per answer. The
+  service runs with a 15-minute request timeout and 1 GiB for this. Turn it
+  off with `"enabled": false`.
+- The pages hold no customer names, emails or phone numbers, so neither can
+  the answers.
+
 ## Local development
 
 ```

@@ -10,6 +10,7 @@ removing someone takes effect without a redeploy.
 
 from __future__ import annotations
 
+import json
 import time
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
@@ -214,6 +215,45 @@ def retention_census(user: str = Depends(current_user)):
         )
     return Response(
         content=_census_cache["text"], media_type="application/json"
+    )
+
+
+@app.post("/api/ask")
+async def ask_claude(request: Request, user: str = Depends(current_user)):
+    """Ask Claude: streams the answer as server-sent events (app/ask.py)."""
+    from fastapi.responses import StreamingResponse
+
+    from . import ask
+
+    cfg = ask.config()
+    if not cfg.get("enabled"):
+        raise HTTPException(404, "Ask Claude is turned off in config.json")
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, "Expected JSON")
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Expected a JSON object")
+    if not ask.allow(user, cfg.get("questions_per_user_per_hour", 40)):
+        raise HTTPException(
+            429, "That's the hourly limit for questions. Try again later."
+        )
+    view = body.get("view") if isinstance(body.get("view"), dict) else None
+
+    def events():
+        try:
+            for ev in ask.answer(
+                body.get("question"), body.get("history"), view, cfg, store()
+            ):
+                yield f"data: {json.dumps(ev, default=str)}\n\n"
+        except Exception as exc:  # report, never hang the browser
+            print(json.dumps({"ask": "failed", "error": type(exc).__name__}))
+            yield 'data: {"t": "error", "text": "Something went wrong while answering. Try again."}\n\n'
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
 
 
