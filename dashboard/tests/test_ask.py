@@ -274,3 +274,27 @@ def test_rate_limit():
     for _ in range(3):
         assert ask.allow("rl@test", 3)
     assert not ask.allow("rl@test", 3)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
+def test_one_roas_the_same_in_performance_and_all_and_absent_for_awareness():
+    dates = ["2026-10-01", "2026-10-02", "2026-10-03"]
+    D = {
+        "dates": dates, "phase": ["bau"] * 3, "reasons": [],
+        "fields": ["gmv", "perf_gmv", "awareness_gmv", "perf_all_spend", "all_spend", "aw_spend"],
+        "values": {"gmv": [500.0, 600.0, 700.0], "perf_gmv": [400.0, 500.0, 600.0], "awareness_gmv": [100.0] * 3,
+                   "perf_all_spend": [300.0] * 3, "all_spend": [400.0] * 3, "aw_spend": [100.0] * 3},
+        "na": {},
+    }
+    py = {m: Engine(D, m).window(dates)["roas"] for m in ("perf", "all", "aw")}
+    script = (
+        "const D=JSON.parse(require('fs').readFileSync(0,'utf8'));"
+        f"const mk=require('{ENGINE}');"
+        "process.stdout.write(JSON.stringify(['perf','all','aw'].map(m=>mk(D.page,m).windowOf(D.days).roas)));"
+    )
+    js = json.loads(subprocess.run(["node", "-e", script], input=json.dumps({"page": D, "days": dates}),
+                                   capture_output=True, text=True, check=True).stdout)
+    # whole-store GMV over performance spend; awareness spend never in it
+    assert py["perf"] == py["all"] == pytest.approx(1800 / 900)
+    assert py["aw"] is None and js[2] is None
+    assert js[0] == pytest.approx(2.0) and js[1] == pytest.approx(2.0)

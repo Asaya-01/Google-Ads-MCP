@@ -284,7 +284,7 @@ def test_missing_meta_is_unavailable_not_zero(built_without_meta):
     f = ctx.facts[D1]
     assert f["meta_spend"] is None and f["spend"] is None and f["mer"] is None
     assert "token" in f["na"]["meta_spend"]
-    tile = next(t for t in pages["overview"]["tiles"] if t["key"] == "mer")
+    tile = next(t for t in pages["overview"]["tiles"] if t["key"] == "roas")
     assert tile["value"] is None and tile["na"]
     assert f["google_spend"] == 25000.0  # Google is still there
 
@@ -457,23 +457,24 @@ def test_pulse_names_the_step_that_broke():
     )
 
 
-def test_pulse_roas_cards_use_sales_campaigns_only():
+def test_pulse_shows_one_roas_on_performance_spend():
     data = _with_checkout_steps(_dataset(with_meta=True))
-    pages, _ = build_all(data, CFG, ["overview"])
-    cards = {c["key"]: c for c in pages["overview"]["pulse"]["cards"]}
-    assert cards["meta_sales_roas"]["value"] == pytest.approx(3.0)
-    assert cards["google_sales_roas"]["value"] == pytest.approx(3.0)
-    assert cards["perf_roas"]["mer"] is not None
-    assert len(cards["perf_roas"]["spark"]) == 14
+    pages, ctx = build_all(data, CFG, ["overview"])
+    cards = pages["overview"]["pulse"]["cards"]
+    assert [c["key"] for c in cards] == ["roas"]
+    f = ctx.facts[D1]
+    if f.get("perf_all_spend"):
+        assert cards[0]["value"] == pytest.approx(f["gmv"] / f["perf_all_spend"])
+    else:
+        assert cards[0]["value"] is None and cards[0]["na"]
+    assert len(cards[0]["spark"]) == 14
 
 
 def test_pulse_without_meta_says_why_instead_of_a_number():
     data = _with_checkout_steps(_dataset(with_meta=False))
     pages, _ = build_all(data, CFG, ["overview"])
-    cards = {c["key"]: c for c in pages["overview"]["pulse"]["cards"]}
-    assert cards["meta_sales_roas"]["value"] is None
-    assert "token" in cards["meta_sales_roas"]["na"]
-    assert cards["google_sales_roas"]["value"] is not None
+    card = pages["overview"]["pulse"]["cards"][0]
+    assert card["value"] is None and card["na"]
 
 
 def test_days_page_holds_every_day_and_says_why_a_value_is_missing(

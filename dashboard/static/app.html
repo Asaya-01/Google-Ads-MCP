@@ -209,7 +209,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       default: return String(v);
     }
   }
-  const NEUTRAL_DELTA = new Set(["cps", "spend", "meta_spend", "google_spend", "perf_spend", "sessions", "awareness_sessions"]);
+  const NEUTRAL_DELTA = new Set(["cps", "spend", "meta_spend", "google_spend", "perf_spend", "sessions", "awareness_sessions", "reddit_spend", "crm_aff_spend", "total_spend", "perf_sessions"]);
   function deltaHtml(d, key) {
     if (d === null || d === undefined) return '<span class="flat">–</span>';
     if (Math.abs(d) < 0.00005) d = 0;
@@ -367,7 +367,8 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       <div class="psub">GoKwik funnel steps against a typical ${esc(pl.kind)} day</div>
     </article>`;
     const colours = { meta_sales_roas: "var(--series-1)", google_sales_roas: "var(--series-2)", perf_roas: "var(--accent)" };
-    const cards = pl.cards.map((c) => `<article class="pcard">
+    // no ROAS in the Awareness view
+    const cards = pl.cards.filter((c) => !(RG.mode === "aw" && c.key === "roas")).map((c) => `<article class="pcard">
       <div class="plabel">${esc(c.label)}</div>
       ${c.value === null || c.value === undefined ? `<div class="na">Data unavailable: ${esc(c.na || "not available")}</div>`
         : `<div class="hero">${esc(fmt(c.value, "x"))}</div>
@@ -483,6 +484,28 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
              <div class="foot">${deltaHtml(t[vsKey], t.key)}<span>vs ${esc(fmt(t[baseKey], t.unit, true) ?? "n/a")}</span></div>`}
       </div>`).join("")}</div></section>`
       : `<section class="card"><div class="section-head"><h2>So far today</h2></div><p class="na">Data unavailable: ${esc(p.unavailable.shopify_orders || "Shopify orders not available")}</p></section>`;
+    // the team's daily sheet, row for row: sales, performance spends, ROAS and CPS, traffic and conversion
+    const sc = p.scorecard;
+    const cmpOf = (it) => {
+      if (it.value == null) return "";
+      if (it.yesterday != null || it.typical != null || it.key === "perf_sessions" || it.key === "cvr_perf") {
+        const typ = LIVE.base === "typical", v = typ ? it.typical : it.yesterday, d = typ ? it.vs_typical : it.vs_yesterday;
+        return v == null ? `<span>no ${typ ? "typical day" : "same time yesterday"} to compare yet</span>` : `${deltaHtml(d, it.key)}<span>vs ${esc(fmt(v, it.unit, true))}</span>`;
+      }
+      if (it.ref && it.ref.value != null) {
+        if (it.ref.share !== undefined) return it.ref.share == null ? "" : `<span>${(it.ref.share * 100).toFixed(0)}% ${esc(it.ref.label)} (${esc(fmt(it.ref.value, it.unit, true))})</span>`;
+        return `${deltaHtml(it.ref.value ? it.value / it.ref.value - 1 : null, it.key)}<span>vs ${esc(it.ref.label)} ${esc(fmt(it.ref.value, it.unit))}</span>`;
+      }
+      return "";
+    };
+    const scTile = (it) => `<div class="tile sc-tile${it.key === "roas" ? " sc-hero" : ""}">
+        <div class="label">${esc(it.label)}${it.estimate ? ' <span class="chip pending">est.</span>' : ""}</div>
+        ${it.value == null ? `<div class="na">Data unavailable: ${esc(it.na)}</div>` : `<div class="value">${esc(fmt(it.value, it.unit === "int" ? "num" : it.unit))}</div><div class="foot">${cmpOf(it)}</div>`}
+        ${it.note ? `<div class="sc-note">${esc(it.note)}</div>` : ""}</div>`;
+    const scoreNote = `<p class="legend-note" style="margin:10px 0 0">Orders, GMV and sessions are the whole store: Shopify cannot split live traffic by campaign type. Spends, ROAS and CPS are performance only.${RG.mode === "all" ? " Awareness and Reach spend are in the table below, never in ROAS." : ""}</p>`;
+    const score = sc ? `<section class="card"><div class="section-head"><h2>So far today</h2><span class="sub">compared with ${esc(LIVE.base === "typical" && sh ? sh.typical_label : "yesterday")} at the same time; spends against yesterday's full day; ROAS and CPS against yesterday's final</span></div>
+      ${sc.groups.map((g) => `<div class="sc-group"><h3>${esc(g.title)}</h3>${g.note ? `<p class="sc-gnote">${esc(g.note)}</p>` : ""}<div class="tiles sc-row">${g.items.map(scTile).join("")}</div></div>`).join("")}
+      ${sc.perf_compare_note ? `<p class="legend-note">${esc(sc.perf_compare_note)}</p>` : ""}${scoreNote}</section>` : null;
     const chart = sh ? `<section class="card"><div class="section-head"><h2>Through the day</h2>
         <div class="seg" id="live-metric">${[["gmv", "GMV"], ["orders", "Orders"], ["sessions", "Sessions"]].map(([k, l]) => `<button type="button" data-m="${k}" aria-pressed="${LIVE.metric === k}">${l}</button>`).join("")}</div></div>
       ${legend([["--accent", "Today"], ["--muted", baseLabel]])}
@@ -499,7 +522,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
         ${card("CPM", t.impr ? fmt((t.spend / t.impr) * 1000, "inr") : null, "spend per 1,000 impressions")}
         ${card("CTR", t.impr ? fmt(t.clicks / t.impr, "pct") : null, "clicks / impressions")}</div></section>`;
     };
-    const cards = RG.mode === "aw" ? awCards() : `<section class="card"><div class="section-head"><h2>Returns so far today</h2><span class="sub">vs yesterday's final · ad platforms report late, so today reads low</span></div>
+    const cards = RG.mode === "aw" ? awCards() : score ? "" : `<section class="card"><div class="section-head"><h2>Returns so far today</h2><span class="sub">vs yesterday's final · ad platforms report late, so today reads low</span></div>
       <div class="pulse">${(V.cards || p.cards).map((c) => `<article class="pcard">
         <div class="plabel">${esc(c.label)}</div>
         ${c.value === null || c.value === undefined ? `<div class="na">Data unavailable: ${esc(c.na || "not available")}</div>`
@@ -538,17 +561,17 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       const vSpend = pick(t), ySpend = pick(y), vPct = vSpend != null && ySpend ? vSpend / ySpend : null;
       const rows = blk.campaigns.filter((c) => rgKeep(c.kind || c.awareness)).map((c) => ({ ...c }));
       return `<section class="card"><div class="section-head"><h2>${esc(title)}</h2>
-        <span class="sub">${kindOf ? (kindOf === "perf" ? "sales-campaign " : "awareness ") : ""}spend ${esc(fmt(vSpend, "inr", true) ?? "n/a")}${vPct == null ? "" : ` · ${(vPct * 100).toFixed(0)}% of yesterday's`}${RG.mode === "aw" ? "" : ` · sales-campaign ROAS ${esc(fmt(t.roas, "x") ?? "n/a")}`}</span></div>
+        <span class="sub">${kindOf ? (kindOf === "perf" ? "sales-campaign " : "awareness ") : ""}spend ${esc(fmt(vSpend, "inr", true) ?? "n/a")}${vPct == null ? "" : ` · ${(vPct * 100).toFixed(0)}% of yesterday's`}</span></div>
         ${table([
           { label: "Campaign", text: true, render: (r) => `${esc(r.campaign)}${r.awareness ? ' <span class="sub">Awareness, not in ROAS</span>' : r.kind === "social" ? ' <span class="sub">Social (Reach), not in ROAS</span>' : ""}` },
           { label: "Spend", render: (r) => esc(fmt(r.spend, "inr") ?? "n/a") },
           { label: "Value", render: (r) => esc(fmt(r.value, "inr") ?? "n/a") },
-          { label: "ROAS", render: (r) => r.roas === null ? '<span class="na">–</span>' : esc(fmt(r.roas, "x")) },
+          ...(RG.mode === "aw" ? [] : [{ label: "Platform ROAS", render: (r) => r.roas === null ? '<span class="na">–</span>' : esc(fmt(r.roas, "x")) }]),
         ], rows, { maxHeight: "50vh" })}</section>`;
     };
     const wholeStore = `<p class="legend-note" style="margin:6px 0 0">${RG.mode === "aw" ? "These are for the whole store." : "Whole store, awareness traffic included."} Shopify cannot split live sessions and orders by campaign type, so the day-by-day tabs are the place for that split.</p>`;
     const awOnly = `<section class="card"><div class="section-head"><h2>Awareness</h2></div><p class="na">Live sessions, orders and checkout cannot be split by campaign type, so they are not shown in this view. Below: what the awareness campaigns have spent and delivered so far today. For awareness traffic and orders, use the Overview, Daily or Marketing tabs.</p></section>`;
-    $main.innerHTML = head + (RG.mode === "aw" ? awOnly : tiles.replace("</section>", wholeStore + "</section>") + chart) + cards + breakdown + (RG.mode === "aw" ? "" : checkout) + `<div class="grid-2">${adTable("Meta campaigns today", p.meta)}${adTable("Google Ads campaigns today", p.google)}</div><section class="card">${notes(p)}</section>`;
+    $main.innerHTML = head + (RG.mode === "aw" ? awOnly : (score || tiles.replace("</section>", wholeStore + "</section>")) + chart) + cards + (RG.mode === "perf" && score ? "" : breakdown) + (RG.mode === "aw" ? "" : checkout) + `<div class="grid-2">${adTable("Meta campaigns today", p.meta)}${adTable("Google Ads campaigns today", p.google)}</div><section class="card">${notes(p)}</section>`;
     liveTick();
     document.getElementById("live-mode")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-mode]"); if (b) rgSetMode(b.dataset.mode); });
     document.getElementById("live-base")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-b]"); if (b) { LIVE.base = b.dataset.b; destroyCharts(); R.live(p); } });

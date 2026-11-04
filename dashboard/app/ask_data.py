@@ -119,6 +119,7 @@ MODES = {
 }
 
 RATE_FIELDS = [
+    "roas",
     "aov",
     "cvr",
     "atc_rate",
@@ -153,6 +154,7 @@ RATE_FIELDS = [
 # are shares and are reported in percent
 MONEY_RATES = {"aov", "sh_aov", "cps", "cps_all", "cps_ad"}
 MULTIPLE_RATES = {
+    "roas",
     "sh_roas_all",
     "perf_overall_roas",
     "sh_roas",
@@ -184,7 +186,7 @@ HEADLINE = [
     "atc_rate",
     "atc_to_ic",
     "ic_to_order",
-    "perf_roas",
+    "roas",
     "sh_roas",
 ]
 
@@ -208,6 +210,8 @@ def derive(w: dict) -> dict:
     w["sh_ic_to_order"] = ratio(g("sh_orders"), g("ic"))
     w["sh_roas"] = ratio(g("sh_sales"), g("perf_all_spend"))
     w["perf_overall_roas"] = ratio(g("gmv"), g("perf_all_spend"))
+    # the team's one ROAS: store GMV / performance spend on every channel
+    w["roas"] = ratio(g("store_gmv"), g("perf_all_spend"))
     w["address_rate"] = ratio(g("gk_address"), g("ic"))
     w["payment_rate"] = ratio(g("gk_payment"), g("gk_address"))
     w["paid_rate"] = ratio(g("gk_converted"), g("gk_payment"))
@@ -236,6 +240,14 @@ class Engine:
 
     def __init__(self, days_page: dict, mode: str = "all"):
         D = days_page
+        if "store_gmv" not in D["fields"]:
+            # the whole store's GMV, never re-pointed by a view (for ROAS)
+            D = {
+                **D,
+                "fields": D["fields"] + ["store_gmv"],
+                "values": {**D["values"], "store_gmv": D["values"].get("gmv") or [None] * len(D["dates"])},
+                "na": {**D["na"], "store_gmv": D["na"].get("gmv") or {}},
+            }
         self.dates: list[str] = D["dates"]
         self.fields: list[str] = D["fields"]
         self.at = {d: i for i, d in enumerate(self.dates)}
@@ -258,7 +270,7 @@ class Engine:
                     self.values[k] = [None] * n
                     self.na[k] = {"*": why}
                     continue
-                src = m["alias"].get(k, k)
+                src = k if k == "store_gmv" else m["alias"].get(k, k)
                 self.values[k] = D["values"].get(src) or [None] * n
                 self.na[k] = D["na"].get(src) or {}
 

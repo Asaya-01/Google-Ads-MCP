@@ -17,11 +17,11 @@ KPIS = [
     ("cvr", "Conversion (orders / sessions)", "pct"),
     ("atc_rate", "ATC rate", "pct"),
     ("spend", "Ad spend (Meta + Google)", "inr"),
-    ("mer", "MER (GMV / ad spend)", "x"),
+    ("roas", "ROAS (GMV / performance spend)", "x"),
     ("new_share", "New-customer orders", "pct"),
 ]
 
-PHASE_FIELDS = ["gmv", "orders", "sessions", "aov", "cvr", "atc_rate", "mer"]
+PHASE_FIELDS = ["gmv", "orders", "sessions", "aov", "cvr", "atc_rate", "roas"]
 
 
 def build(ctx: Context) -> dict:
@@ -73,6 +73,7 @@ def build(ctx: Context) -> dict:
                 "cvr",
                 "spend",
                 "mer",
+                "roas",
             )
         }
         for d in trend_dates
@@ -117,6 +118,7 @@ def _na_source(key: str) -> str:
         "cvr": "sessions",
         "atc_rate": "sessions",
         "mer": "spend",
+        "roas": "perf_all_spend",
     }.get(key, key)
 
 
@@ -267,30 +269,17 @@ def _pulse(ctx: Context) -> dict:
             ),
         }
 
+    # one ROAS, the team's: awareness and Reach spend are never in it
     cards = [
         card(
-            "meta_sales_roas",
-            "Meta ROAS",
-            "Sales campaigns, Meta's own attribution",
-            "meta_perf_spend",
-            ["meta_perf_value", "meta_perf_spend", "meta_spend"],
-        ),
-        card(
-            "google_sales_roas",
-            "Google Ads ROAS",
-            "Sales campaigns, Google's own attribution",
-            "google_perf_spend",
-            ["google_perf_value", "google_perf_spend", "google_spend"],
-        ),
-        card(
-            "perf_roas",
-            "Shopify ROAS",
-            "Shopify sales / sales-campaign spend",
-            "perf_spend",
-            ["perf_spend", "spend"],
+            "roas",
+            "ROAS",
+            "Shopify GMV / performance spend on every channel: Meta, Google "
+            "and Reddit sales campaigns, CRM and affiliates",
+            "perf_all_spend",
+            ["perf_all_spend", "gmv"],
         ),
     ]
-    cards[2]["mer"] = f.get("mer")
     return {
         "phase": phase,
         "kind": kind,

@@ -252,12 +252,12 @@ function trHtml(g, opts = {}) {
   list.forEach((n) => emit(n, null));
   // the whole store: Shopify GMV over all spend
   if (RG.mode !== "aw" && opts.totalRow !== false) {
-    const w = g.w, pw = g.pw, orv = w.overall_roas, opv = pw ? pw.overall_roas : null;
-    out.push(`<tr class="total"><td class="text">All channels<br><span class="sub">Shopify GMV ÷ all spend</span></td>${cols.map(([l]) => {
+    const w = g.w, pw = g.pw, orv = w.roas, opv = pw ? pw.roas : null;
+    out.push(`<tr class="total"><td class="text">All channels<br><span class="sub">ROAS: Shopify GMV ÷ performance spend${RG.mode === "all" ? " (awareness and Reach left out)" : ""}</span></td>${cols.map(([l]) => {
       if (l === "Spend") return `<td>${cell(w.all_spend, "inr", w.na.all_spend)}</td>`;
       if (l === "Δ spend") return `<td>${pw && w.all_spend != null && pw.all_spend != null ? deltaHtml(rgAvgChange(w.all_spend, w.days, pw.all_spend, pw.days), "spend") : '<span class="flat">–</span>'}</td>`;
       if (l === "Revenue (platform)") return `<td>${cell(w.gmv, "inr", w.na.gmv)}<br><span class="sub">Shopify GMV</span></td>`;
-      if (l === "ROAS") return `<td>${cell(orv, "x", rgNa(w, "overall_roas"))}${opv != null ? `<br><span class="sub">vs ${esc(fmt(opv, "x"))}</span>` : ""}</td>`;
+      if (l === "ROAS") return `<td>${cell(orv, "x", rgNa(w, "roas"))}${opv != null ? `<br><span class="sub">vs ${esc(fmt(opv, "x"))}</span>` : ""}</td>`;
       if (l === "Δ ROAS") return `<td>${orv != null && opv ? deltaHtml(orv / opv - 1, "roas") : '<span class="flat">–</span>'}</td>`;
       return "<td></td>";
     }).join("")}</tr>`);

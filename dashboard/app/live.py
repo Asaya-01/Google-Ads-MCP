@@ -161,6 +161,8 @@ def estimate_other_spend(
     gmv_now: float | None,
     t: float,
     cfg: dict,
+    targets: dict | None = None,
+    today: str | None = None,
 ) -> dict:
     """Today's spend so far on the channels that have no live source.
 
@@ -171,6 +173,9 @@ def estimate_other_spend(
                 the share of the day gone (hours so far / 24).
       per_gmv : affiliate cost follows sales, so its share of GMV on those
                 days x today's GMV so far.
+      target_per_hour: today's planned spend from the media-plan workbook x
+                the share of the day gone (Reddit); without a plan for today,
+                per_hour on the days since `reddit_history_from`.
     Returns {channel: {"value", "basis", "dates"}} and a "total"."""
     mcfg = cfg["manual_spends"]["live_estimate"]
     n = mcfg["basis_days"]
@@ -179,12 +184,13 @@ def estimate_other_spend(
         return out
     dates, phase = days["dates"], days.get("phase") or []
 
-    def pick(field: str, need_gmv: bool = False):
+    def pick(field: str, need_gmv: bool = False, since: str | None = None):
         rows = [
             i
             for i in range(len(dates))
             if days["values"][field][i] is not None
             and (not need_gmv or days["values"]["gmv"][i])
+            and (not since or dates[i] >= since)
         ]
         same = [i for i in rows if assumed and phase[i] == assumed]
         use = same if len(same) >= 3 else rows
@@ -193,14 +199,31 @@ def estimate_other_spend(
         return use, kind
 
     parts = []
+    share_of_day = min(t, 24) / 24
     for ch, field, how in (
         ("affiliate", "affiliate_spend", mcfg["affiliate"]),
         ("crm", "crm_spend", mcfg["crm"]),
         ("reddit", "reddit_spend", mcfg.get("reddit", "per_hour")),
     ):
+        if how == "target_per_hour":
+            plan = (targets or {}).get(today) if today else None
+            if plan is not None:
+                out[ch] = {
+                    "value": plan * share_of_day,
+                    "basis": f"today's plan of Rs {plan:,.0f} in the media-plan "
+                    f"sheet x {min(t, 24):.1f}/24 of the day",
+                    "dates": [today],
+                }
+                parts.append(out[ch]["value"])
+                continue
+            how = "per_hour"
         if field not in days["values"]:
             continue
-        use, kind = pick(field, need_gmv=how == "per_gmv")
+        use, kind = pick(
+            field,
+            need_gmv=how == "per_gmv",
+            since=mcfg.get("reddit_history_from") if ch == "reddit" else None,
+        )
         if len(use) < 2:
             continue
         span = f"{dates[use[0]]} to {dates[use[-1]]}"
@@ -235,6 +258,38 @@ def estimate_other_spend(
             for c in ("affiliate", "crm", "reddit")
         )
     return out
+
+
+def report_perf_sessions(
+    rows: list[dict], day: str, aware: set, known: set, cfg: dict
+) -> int:
+    """Perf. sessions as the team's sheet and the D-1 tab count them: a UTM
+    source on the team's list, with a UTM campaign, not awareness or social."""
+    from .pages.common import _report_source
+
+    allowed = {x.lower() for x in cfg["sessions"]["report_perf_sources"]}
+    n = 0
+    for r in rows:
+        kind, _ = rules.session_kind(
+            r["utm_source"], r["utm_campaign"], aware, known, cfg["sessions"], day
+        )
+        if (
+            kind == "perf"
+            and (r.get("utm_campaign") or "").strip()
+            and _report_source(r.get("utm_source"), allowed)
+        ):
+            n += r["sessions"]
+    return n
+
+
+def snap_at(snaps: dict, day: str, t: float, slack: float = 0.6):
+    """The value saved on `day` at the latest run no later than hour `t` (and
+    no more than `slack` hours before it), or None."""
+    best = None
+    for h, v in snaps.get(day) or []:
+        if h <= t + 0.02 and t - h <= slack and (best is None or h > best[0]):
+            best = (h, v)
+    return None if best is None else best[1]
 
 
 def curve(hourly: list[float], upto: int | None) -> list[float | None]:
@@ -640,7 +695,15 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
         if meta_blk.get("yesterday") and google_blk.get("yesterday")
         else None
     )
-    est = estimate_other_spend(inp.get("days_manual"), assumed, gmv_now, t, cfg)
+    est = estimate_other_spend(
+        inp.get("days_manual"),
+        assumed,
+        gmv_now,
+        t,
+        cfg,
+        targets=inp.get("reddit_targets"),
+        today=today,
+    )
     dm = inp.get("days_manual") or {}
     y_overall = None
     if yesterday in (dm.get("dates") or []):
@@ -892,6 +955,176 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
         },
     }
 
+    # -- the scorecard: the team's sheet, row for row -----------------------
+    T = {x["key"]: x for x in (shopify or {}).get("tiles", [])}
+
+    def tv(k, f="value"):
+        x = T.get(k) or {}
+        return None if x.get("na") and f == "value" else x.get(f)
+
+    def dmv(field):
+        if yesterday not in (dm.get("dates") or []):
+            return None
+        i = dm["dates"].index(yesterday)
+        return ((dm.get("values") or {}).get(field) or [None] * (i + 1))[i]
+
+    def latest(field, also=None):
+        """(date, value) of the latest day up to yesterday with `field` (and
+        `also`) filled in the sheets: they are entered with a lag."""
+        dates = dm.get("dates") or []
+        vals = (dm.get("values") or {}).get(field) or []
+        other = (dm.get("values") or {}).get(also) if also else None
+        for i in range(len(dates) - 1, -1, -1):
+            if dates[i] > yesterday or i >= len(vals):
+                continue
+            if vals[i] is not None and (other is None or (i < len(other) and other[i] is not None)):
+                return dates[i], vals[i], i
+        return None, None, None
+
+    def day_name(d):
+        return "yesterday's" if d == yesterday else dt.date.fromisoformat(d).strftime("%-d %b's")
+
+    snaps = inp.get("perf_snapshots") or {}
+    perf_now = (
+        (inp.get("perf_sessions") or {}).get("value")
+        if "perf_sessions" not in unavailable
+        else None
+    )
+    typ_d = (shopify or {}).get("typical_dates") or []
+    perf_y = snap_at(snaps, yesterday, t)
+    typ_vals = [v for v in (snap_at(snaps, d, t) for d in typ_d) if v is not None]
+    perf_typ = (
+        statistics.median(typ_vals)
+        if len(typ_vals) >= max(1, lcfg.get("min_typical_days", 2))
+        else None
+    )
+
+    def item(key, label, unit, value, na=None, yday=None, typ=None, ref=None, note=None, est=False):
+        return {
+            "key": key,
+            "label": label,
+            "unit": unit,
+            "value": value,
+            "na": None if value is not None else (na or "not available yet"),
+            "yesterday": yday,
+            "typical": typ,
+            "vs_yesterday": delta(value, yday),
+            "vs_typical": delta(value, typ),
+            "ref": ref,
+            "note": note,
+            "estimate": est,
+        }
+
+    def full_day(v_today, v_yday, field=None, on=None):
+        """Spend so far against yesterday's whole day (or the latest day the
+        sheets are filled for)."""
+        label = f"of {day_name(on)} full day" if on else "of yesterday's full day"
+        if v_yday is None and field:
+            d, v_yday, _ = latest(field)
+            if d:
+                label = f"of {day_name(d)} full day"
+        if v_yday is None:
+            return None
+        return {"label": label, "value": v_yday, "share": ratio(v_today, v_yday)}
+
+    def tile_item(key, label, unit):
+        x = T.get(key) or {}
+        return item(key, label, unit, tv(key), x.get("na") or unavailable.get("shopify_orders"),
+                    x.get("yesterday"), x.get("typical"))
+
+    meta_s, meta_y = kind_spend(meta_blk, "today", "perf"), kind_spend(meta_blk, "yesterday", "perf")
+    goog_s, goog_y = kind_spend(google_blk, "today", "perf"), kind_spend(google_blk, "yesterday", "perf")
+    red = est["reddit"] or {}
+    aff, crm = est["affiliate"] or {}, est["crm"] or {}
+    crm_aff = plus(aff.get("value"), crm.get("value"))
+    crm_aff_y = plus(dmv("affiliate_spend"), dmv("crm_spend"))
+    d_ca = yesterday
+    if crm_aff_y is None:
+        d_ca, _, i_ca = latest("affiliate_spend", "crm_spend")
+        if d_ca:
+            crm_aff_y = (dm["values"]["affiliate_spend"][i_ca] or 0) + (dm["values"]["crm_spend"][i_ca] or 0)
+    d_f, f_spend, i_f = latest("perf_all_spend", "sessions")
+    final_lbl = f"{day_name(d_f)} final" if d_f else "yesterday's final"
+    f_gmv = dm["values"]["gmv"][i_f] if d_f else None
+    f_sess = dm["values"]["sessions"][i_f] if d_f else None
+    orders_now, sess_now = tv("orders"), tv("sessions")
+    cvr_perf = ratio(orders_now, perf_now)
+    scorecard = {
+        "groups": [
+            {
+                "title": "Sales",
+                "items": [
+                    tile_item("orders", "Orders", "int"),
+                    tile_item("gmv", "GMV", "inr"),
+                    tile_item("aov", "AOV", "inr"),
+                ],
+            },
+            {
+                "title": "Performance spends",
+                "note": "Sales campaigns only. Awareness, Reach and Reddit traffic spend are never in these, or in ROAS.",
+                "items": [
+                    item("meta_spend", "Meta spends", "inr", meta_s, meta_blk.get("na"),
+                         ref=full_day(meta_s, meta_y), note="sales campaigns, from Meta's API"),
+                    item("google_spend", "Google", "inr", goog_s, google_blk.get("na"),
+                         ref=full_day(goog_s, goog_y), note="sales campaigns, from Google's API"),
+                    item("reddit_spend", "Reddit", "inr", red.get("value"),
+                         "no plan for today in the media-plan sheet and too few filled days to estimate",
+                         ref=full_day(red.get("value"), dmv("reddit_spend"), "reddit_spend"), note=red.get("basis"), est=True),
+                    item("crm_aff_spend", "CRM + Affiliates", "inr", crm_aff,
+                         "not enough filled days in the affiliate and CRM sheets to estimate",
+                         ref=full_day(crm_aff, crm_aff_y, on=d_ca),
+                         note=(f"affiliate Rs {aff['value']:,.0f} + CRM Rs {crm['value']:,.0f}, estimated"
+                               if crm_aff is not None else None), est=True),
+                    item("total_spend", "Total Spends", "inr", perf_all_t,
+                         "a spend above is missing", ref=full_day(perf_all_t, dmv("perf_all_spend"), "perf_all_spend"),
+                         note="Meta + Google + Reddit + CRM + affiliates, sales only", est=True),
+                ],
+            },
+            {
+                "title": "Returns",
+                "items": [
+                    item("roas", "ROAS", "x", ratio(gmv_now, perf_all_t), "a spend is missing",
+                         ref={"label": final_lbl, "value": ratio(f_gmv, f_spend)},
+                         note="GMV / Total Spends: performance spend only"),
+                    item("cps", "CPS", "inr2", ratio(perf_all_t, sess_now), "a spend or sessions are missing",
+                         ref={"label": final_lbl, "value": ratio(f_spend, f_sess)},
+                         note="Total Spends / Sessions"),
+                ],
+            },
+            {
+                "title": "Traffic and conversion",
+                "items": [
+                    tile_item("sessions", "Sessions", "int"),
+                    item("perf_sessions", "Perf Sessions", "int", perf_now, unavailable.get("perf_sessions"),
+                         perf_y, perf_typ,
+                         note="the team's paid, affiliate and CRM sources with a UTM campaign; awareness and Reach left out"),
+                    item("cvr", "CVR % on overall sessions", "pct", tv("cvr"),
+                         (T.get("cvr") or {}).get("na"), (T.get("cvr") or {}).get("yesterday"),
+                         (T.get("cvr") or {}).get("typical"), note="Orders / Sessions"),
+                    item("cvr_perf", "CVR % on Perf", "pct", cvr_perf, unavailable.get("perf_sessions"),
+                         ratio(tv("orders", "yesterday"), perf_y), ratio(tv("orders", "typical"), perf_typ),
+                         note="Orders / Perf Sessions"),
+                ],
+            },
+        ],
+        "perf_compare_note": (
+            None
+            if perf_y is not None
+            else "Perf Sessions are compared from the second day on: the live job saves them on every run, "
+            "because Shopify cannot split yesterday's sessions by hour and UTM."
+        ),
+    }
+
+    # say which spend is missing when the total cannot be added up
+    spend_items = scorecard["groups"][1]["items"]
+    missing = [i["label"] for i in spend_items[:-1] if i["value"] is None]
+    if missing:
+        why = f"{' and '.join(missing)} {'is' if len(missing) == 1 else 'are'} missing"
+        spend_items[-1]["na"] = why
+        for i in scorecard["groups"][2]["items"]:
+            if i["value"] is None:
+                i["na"] = why
+
     # -- sources and freshness ----------------------------------------------
     stale = lcfg["stale_minutes"]
     sources = [
@@ -959,6 +1192,7 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
         "meta": meta_blk,
         "google": google_blk,
         "cards": cards,
+        "scorecard": scorecard,
         # the All campaigns view; "views" has each campaign type
         "spend_breakdown": views["all"]["spend_breakdown"],
         "views": views,
@@ -1075,6 +1309,9 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
             "reddit_spend",
             "all_spend",
             "perf_all_spend",
+            "sessions",
+            "meta_perf_spend",
+            "google_perf_spend",
         )
         inp["days_manual"] = {
             "dates": days["dates"],
@@ -1087,14 +1324,16 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
         }
     # Google awareness campaigns by id, the same list the other tabs use
     cd = store.get_json("pages/campaign_days.json") or {}
-    inp["google_aware_ids"] = sorted(
-        {
-            str(n["id"])
-            for n in (cd.get("google") or {}).get("names", [])
-            if n.get("kind") == "awareness" or n.get("awareness")
-        }
-        | {str(i) for i in cfg["sessions"].get("google_awareness_extra_ids") or []}
-    )
+    g_names = (cd.get("google") or {}).get("names", [])
+    extra_ids = {str(i) for i in cfg["sessions"].get("google_awareness_extra_ids") or []}
+    aware_ids = {
+        str(n["id"]) for n in g_names if n.get("kind") == "awareness" or n.get("awareness")
+    } | extra_ids
+    known_ids = {str(n["id"]) for n in g_names} | extra_ids
+    inp["google_aware_ids"] = sorted(aware_ids)
+    # today's Reddit plan from the media-plan workbook (read by the refresh)
+    ms = store.get_json("cache/manual_spends.json") or {}
+    inp["reddit_targets"] = (ms.get("reddit") or {}).get("targets") or {}
     inp["phases_eff"] = {
         d: p
         for d, p in zip(days.get("dates", []), days.get("phase_eff", []))
@@ -1124,6 +1363,22 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
             today_arr["sessions_ok"] = False
             unavailable["shopify_sessions"] = f"Shopify sessions: {exc}"
         inp["today"] = today_arr
+        # Perf. sessions so far, saved on every run: Shopify cannot split
+        # yesterday's sessions by hour and UTM, so the saved runs are what
+        # today is compared with (same time yesterday, typical days)
+        snaps = store.get_json("cache/live/perf_sessions.json") or {}
+        try:
+            sd = shop.sessions_day(day, cfg["sessions"]["breakdown_limit"])
+            perf = report_perf_sessions(sd["rows"], day, aware_ids, known_ids, cfg)
+            t_now = round(now.hour + now.minute / 60, 3)
+            snaps[day] = [x for x in snaps.get(day, []) if x[0] < t_now] + [[t_now, perf]]
+            keep = sorted(snaps)[-45:]
+            snaps = {d: snaps[d] for d in keep}
+            store.put_json("cache/live/perf_sessions.json", snaps)
+            inp["perf_sessions"] = {"value": perf, "truncated": sd.get("truncated")}
+        except Exception as exc:
+            unavailable["perf_sessions"] = f"Shopify sessions by UTM: {exc}"
+        inp["perf_snapshots"] = snaps
     except Exception as exc:
         unavailable["shopify_orders"] = f"Shopify API: {exc}"
 

@@ -66,8 +66,8 @@ never as zero.
   (`Shopify_Order_Name` join). The UTM fields on `Shopify_All_orders` read
   DIRECT for almost every recent order, so they are not used.
 - **AOV** = GMV / orders. **CVR** = orders / sessions. **ATC rate** = ATC /
-  sessions. **MER** = GMV / (Meta + Google spend). **Perf ROAS** = GMV / spend on
-  non-awareness campaigns. **Landed discount** = 1 − revenue / (units × MRP),
+  sessions. **ROAS** = GMV / performance spend on every channel (see below);
+  the older MER and Perf ROAS are no longer shown. **Landed discount** = 1 − revenue / (units × MRP),
   MRP = today's Shopify compare-at price.
 - **Sale vs BAU** (used for comparisons): a day is a sale when GMV is at least
   1.6× the median of the previous 28 BAU days; between 1.3× and 1.6× it is a
@@ -272,10 +272,14 @@ account request a Sheets-scoped token for itself.
   name ("REDDIT") and its "Actual Spend" header, so a month whose columns moved
   (October's sits in AN, November's in AG) needs no setting, and the dates may be
   written "01-Oct-26" or "01-Nov-2026".
-- **Overall ROAS** = GMV / (Meta + Google + affiliate + CRM + Reddit). It stays
-  blank for a day until every part is in. The existing MER and Shopify ROAS (Perf) are
-  unchanged. Channel ROAS (affiliate, CRM flow, CRM broadcast) is each
-  channel's own revenue / its spend.
+- **ROAS**: one ROAS everywhere, the team's: GMV / performance spend on every
+  channel (`perf_all_spend`: Meta, Google and Reddit sales campaigns, CRM and
+  affiliates). Awareness and Reach spend are never in it; it is the same number
+  in the Performance and All views and does not exist in the Awareness view. It
+  stays blank for a day until every spend is in. D-1's RoAS is the same on
+  Shopify's own sales report. A campaign's or channel's own ROAS (what Meta,
+  Google, the affiliates or CRM report) appears only in the campaign and
+  channel tables.
 - **Today (live)**: Meta and Google are real. Affiliate and CRM are estimates
   from the latest filled days of the same kind (sale or BAU): CRM = a typical
   day's spend x hours so far / 24; affiliate = its share of GMV x today's GMV so
@@ -337,13 +341,23 @@ refreshes itself every 3 minutes in the browser. D-1 is untouched: the live job
   yesterday. Platforms report 15 to 60 minutes late and attribute purchases
   later, so today's ROAS reads low; spend is shown as a share of yesterday's.
   Awareness campaigns stay out of ROAS, as everywhere else.
-- **Campaign switch**: spend and returns follow Performance / Awareness / All
-  like every other tab. Performance shows sales-campaign spend only (Meta and
-  Google sales campaigns, plus the affiliate, CRM and Reddit estimates) and an
-  Overall ROAS on that spend; Awareness shows awareness spend only (Meta and
-  Google; Reddit traffic has no live source yet); All shows each platform's
-  total with its Performance, Awareness and Reach rows under it. Google
-  awareness campaigns are matched by id, the same list as the other tabs.
+- **Scorecard**: the team's daily sheet, row for row: Orders, GMV, AOV; Meta,
+  Google, Reddit and CRM + Affiliates spends (sales campaigns only) and Total
+  Spends; ROAS (GMV / Total Spends) and CPS (Total Spends / Sessions);
+  Sessions, Perf Sessions, CVR on overall sessions and CVR on Perf. Orders,
+  GMV and sessions compare with the same time yesterday or a typical day;
+  spends with yesterday's full day; ROAS and CPS with the last full day the
+  sheets are filled for. Reddit today is the day's planned spend in the
+  media-plan workbook (Target Spend, read by the refresh) times the share of
+  the day gone; affiliate follows GMV and CRM the clock, from recent days.
+  Perf Sessions use the D-1 rule on Shopify's sessions by UTM; the live job
+  saves them on every run (`cache/live/perf_sessions.json`), because Shopify
+  cannot split yesterday's sessions by hour and UTM, so the same-time
+  comparison starts the day after the first deploy.
+- **Campaign switch**: Performance and All show the scorecard (one ROAS, on
+  performance spend, in both); All also lists each platform's total with its
+  Performance, Awareness and Reach rows. Awareness shows awareness spend and
+  delivery only, with no ROAS. Google awareness campaigns are matched by id.
 - **GoKwik checkout**: the newest BigQuery load of today's rows, with its age
   on screen. For this to be useful the load must run through the day (planned
   every 30 minutes) and each load must hold the whole day so far; rows of one

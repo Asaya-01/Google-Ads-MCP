@@ -6,9 +6,7 @@ const RG_MKT = [
   ["gmv", "GMV", "inr"], ["meta_spend", "Meta spend", "inr"], ["google_spend", "Google spend", "inr"],
   ["affiliate_spend", "Affiliate spend", "inr"], ["crm_spend", "CRM spend (flow + broadcast)", "inr"], ["reddit_spend", "Reddit spend", "inr"],
   ["all_spend", "Overall spend", "inr"], ["spend", "Meta + Google spend", "inr"],
-  ["overall_roas", "Overall ROAS (GMV / all spend)", "x"], ["mer", "MER (GMV / Meta + Google)", "x"], ["perf_roas", "Shopify ROAS (Perf)", "x"],
-  ["meta_sales_roas", "Meta ROAS", "x"], ["google_sales_roas", "Google Ads ROAS", "x"],
-  ["affiliate_roas", "Affiliate ROAS", "x"], ["crm_roas", "CRM ROAS", "x"],
+  ["roas", "ROAS (GMV / performance spend)", "x"], ["cps", "CPS (spend / session)", "inr2"],
 ];
 RG_NEUTRAL.add("meta_spend"); RG_NEUTRAL.add("google_spend");
 
@@ -61,8 +59,9 @@ function rgSpendCharts() {
     options: { scales: { x: { stacked: true, grid: { display: false }, ticks: { color: css("--muted"), maxRotation: 0, autoSkipPadding: 12 } }, y: { ...axisOpts("inr"), stacked: true } } },
   }, "inr");
   const mer = document.getElementById("c-rg-mer");
-  if (!w.some((x) => x.mer != null)) { mer.parentElement.innerHTML = '<p class="na">Data unavailable: MER needs both Meta and Google spend.</p>'; return; }
-  baseChart(mer, { type: "line", data: { labels, datasets: [{ label: "MER", data: w.map((x) => x.mer), borderColor: css("--series-1"), backgroundColor: css("--series-1"), borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, spanGaps: false, tension: 0.25 }] } }, "x");
+  if (!mer) return; // no ROAS for awareness
+  if (!w.some((x) => x.roas != null)) { mer.parentElement.innerHTML = '<p class="na">Data unavailable: ROAS needs every performance spend (Meta, Google, Reddit, CRM, affiliate) for the day.</p>'; return; }
+  baseChart(mer, { type: "line", data: { labels, datasets: [{ label: "ROAS", data: w.map((x) => x.roas), borderColor: css("--series-1"), backgroundColor: css("--series-1"), borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, spanGaps: false, tension: 0.25 }] } }, "x");
 }
 R.marketing = (p) => {
   const metaNA = p.unavailable?.meta;
@@ -95,7 +94,7 @@ R.marketing = (p) => {
         <section class="card"><div class="section-head"><h2>Sales by channel</h2><span class="sub">Shopify, last click · ${vs}</span></div>${trChannelHtml(g)}</section>
         <div class="grid-2">
           <section class="card"><div class="section-head"><h2>Ad spend per day</h2>${legend([["--series-1", "Meta"], ["--series-2", "Google"]])}</div><div class="chart-box"><canvas id="c-rg-spend" aria-label="Meta and Google spend per day"></canvas></div></section>
-          <section class="card"><div class="section-head"><h2>${RG.mode === "aw" ? "Attributed ROAS per day" : "MER per day"}</h2><span class="sub">${RG.mode === "aw" ? "GMV credited to awareness / awareness spend" : "GMV / (Meta + Google spend)"}</span></div><div class="chart-box"><canvas id="c-rg-mer" aria-label="MER per day"></canvas></div></section>
+          ${RG.mode === "aw" ? "" : `<section class="card"><div class="section-head"><h2>ROAS per day</h2><span class="sub">Shopify GMV / performance spend on every channel</span></div><div class="chart-box"><canvas id="c-rg-mer" aria-label="ROAS per day"></canvas></div></section>`}
         </div>` + tail;
       const mx = () => { const m = document.getElementById("mk-matrix"); if (m) m.innerHTML = trMatrixHtml() || '<p class="na">Switch the table above to “Stage › product” to see this.</p>'; };
       trBind("mk-tree", g, { after: mx });

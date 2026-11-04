@@ -403,3 +403,61 @@ def test_spend_follows_the_campaign_type_switch():
     g = next(i for i, r in enumerate(rows) if r["label"] == "Google Ads")
     assert rows[g]["value"] == 1000 and rows[g + 1]["value"] == 700 and rows[g + 2]["value"] == 300
     assert page["google"]["today"]["roas"] == pytest.approx(2.0)  # awareness out of ROAS
+
+
+def test_reddit_today_is_the_sheets_plan_for_today_scaled_to_the_hour():
+    est = live.estimate_other_spend(manual_days(), "bau", 1e5, 12.0, CFG, targets={"2026-10-31": 8800}, today="2026-10-31")
+    assert est["reddit"]["value"] == pytest.approx(8800 * 12 / 24)
+    assert "plan" in est["reddit"]["basis"]
+    # no plan for today: only days since the block became sales-only count
+    d = manual_days()
+    d["dates"] = [f"2026-10-{i:02d}" for i in range(20, 32)][: len(d["dates"])]
+    d["values"]["reddit_spend"] = [26000.0] * len(d["dates"])
+    est = live.estimate_other_spend(d, "bau", 1e5, 12.0, CFG, targets={}, today="2026-11-04")
+    assert est["reddit"] is None  # October (all Reddit campaigns) is not a basis
+
+
+def test_perf_sessions_follow_the_d1_rule():
+    rows = [
+        {"utm_source": "facebook", "utm_campaign": "WOA_MOF_Sales", "sessions": 100},
+        {"utm_source": "facebook", "utm_campaign": "WOA_Awareness_TOF_Sales", "sessions": 50},
+        {"utm_source": "facebook", "utm_campaign": "", "sessions": 30},
+        {"utm_source": "ig", "utm_campaign": "story", "sessions": 20},
+        {"utm_source": "reddit", "utm_campaign": "WOA_traffic_campaign", "sessions": 40},
+        {"utm_source": "google", "utm_campaign": "23901960000", "sessions": 10},
+        {"utm_source": "google", "utm_campaign": "21100000000", "sessions": 5},
+    ]
+    assert live.report_perf_sessions(rows, "2026-11-04", {"23901960000"}, {"23901960000", "21100000000"}, CFG) == 105
+
+
+def test_saved_runs_give_the_same_time_yesterday():
+    snaps = {"2026-10-30": [[9.0, 10], [14.25, 100], [15.0, 120]]}
+    assert live.snap_at(snaps, "2026-10-30", 14.5) == 100
+    assert live.snap_at(snaps, "2026-10-30", 20.0) is None  # too far from any run
+    assert live.snap_at(snaps, "2026-10-29", 14.5) is None
+
+
+def test_scorecard_is_the_teams_sheet_with_one_performance_roas():
+    inp = inputs(meta_rows=ad_rows(1000, 3000), google_rows=[
+        {"date": "2026-10-31", "campaign_id": "1", "campaign_name": "WOA_Pmax_ITB", "spend": 500, "conversion_value": 900, "conversions": 1, "clicks": 1},
+    ])
+    d = manual_days()
+    n = len(d["dates"])
+    d["values"].update(reddit_spend=[7000.0] * n, perf_all_spend=[50000.0] * n, sessions=[40000] * n)
+    inp.update(days_manual=d, reddit_targets={"2026-10-31": 8800}, perf_sessions={"value": 900},
+               perf_snapshots={"2026-10-30": [[14.4, 800]]})
+    page = live.build(inp, CFG, NOW)
+    items = {i["key"]: i for g in page["scorecard"]["groups"] for i in g["items"]}
+    assert [i["label"] for g in page["scorecard"]["groups"] for i in g["items"]] == [
+        "Orders", "GMV", "AOV", "Meta spends", "Google", "Reddit", "CRM + Affiliates", "Total Spends",
+        "ROAS", "CPS", "Sessions", "Perf Sessions", "CVR % on overall sessions", "CVR % on Perf"]
+    # awareness spend (500 on Meta) is in no spend and not in ROAS
+    assert items["meta_spend"]["value"] == 1000
+    total = 1000 + 500 + items["reddit_spend"]["value"] + items["crm_aff_spend"]["value"]
+    assert items["total_spend"]["value"] == pytest.approx(total)
+    assert items["roas"]["value"] == pytest.approx(items["gmv"]["value"] / total)
+    assert items["cps"]["value"] == pytest.approx(total / items["sessions"]["value"])
+    assert items["cvr_perf"]["value"] == pytest.approx(items["orders"]["value"] / 900)
+    assert items["perf_sessions"]["yesterday"] == 800
+    # the sheets are behind: compared with the latest day they are filled for
+    assert "29 Oct" in items["roas"]["ref"]["label"]

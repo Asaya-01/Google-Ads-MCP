@@ -19,14 +19,13 @@ const RG_CMP = [
 const RG_TILES = [
   ["gmv", "GMV", "inr"], ["orders", "Orders", "int"], ["aov", "AOV", "inr"],
   ["sessions", "Sessions", "int"], ["cvr", "Conversion rate", "pct"], ["atc_rate", "Add-to-cart rate", "pct"],
-  ["spend", "Ad spend (Meta + Google)", "inr"], ["mer", "MER (GMV / ad spend)", "x"], ["perf_roas", "Shopify ROAS (Perf)", "x"],
-  ["meta_sales_roas", "Meta ROAS", "x"], ["google_sales_roas", "Google Ads ROAS", "x"], ["new_share", "New-customer orders", "pct"],
-  ["all_spend", "Overall spend (all channels)", "inr"], ["overall_roas", "Overall ROAS (GMV / all spend)", "x"],
-  ["affiliate_roas", "Affiliate ROAS", "x"], ["crm_roas", "CRM ROAS", "x"],
+  ["perf_all_spend", "Performance spend (all channels)", "inr"], ["roas", "ROAS (GMV / performance spend)", "x"], ["cps", "CPS (spend / session)", "inr2"],
+  ["new_share", "New-customer orders", "pct"],
+  ["spend", "Meta + Google spend", "inr"],
 ];
-const RG_RATES = ["cps_all", "cps_ad", "sh_roas_all", "aov", "cvr", "sh_aov", "sh_cvr", "sh_perf_cvr", "sh_ic_to_order", "sh_roas", "perf_cvr", "ic_to_order", "cps", "perf_overall_roas", "atc_rate", "mer", "perf_roas", "meta_sales_roas", "google_sales_roas", "new_share", "overall_roas", "affiliate_roas", "crm_roas", "crm_flow_roas", "crm_broadcast_roas"];
+const RG_RATES = ["roas", "cps_all", "cps_ad", "sh_roas_all", "aov", "cvr", "sh_aov", "sh_cvr", "sh_perf_cvr", "sh_ic_to_order", "sh_roas", "perf_cvr", "ic_to_order", "cps", "perf_overall_roas", "atc_rate", "mer", "perf_roas", "meta_sales_roas", "google_sales_roas", "new_share", "overall_roas", "affiliate_roas", "crm_roas", "crm_flow_roas", "crm_broadcast_roas"];
 const RG_DEP = {
-  aov: ["gmv", "orders"], cvr: ["orders", "sessions"], atc_rate: ["atc", "sessions"], mer: ["gmv", "spend"],
+  roas: ["store_gmv", "perf_all_spend"], aov: ["gmv", "orders"], cvr: ["orders", "sessions"], atc_rate: ["atc", "sessions"], mer: ["gmv", "spend"],
   perf_roas: ["gmv", "perf_spend"], meta_sales_roas: ["meta_perf_value", "meta_perf_spend"],
   google_sales_roas: ["google_perf_value", "google_perf_spend"], new_share: ["new_orders", "repeat_orders"], atc_to_ic: ["atc", "ic"], ic_to_order: ["orders", "ic"], perf_cvr: ["orders", "report_perf_sessions"], cps: ["perf_all_spend", "sessions"], cps_all: ["all_spend", "sessions"], cps_ad: ["spend", "sessions"], sh_roas_all: ["sh_sales", "all_spend"], sh_aov: ["sh_sales", "sh_orders"], sh_cvr: ["sh_orders", "sessions"], sh_perf_cvr: ["sh_orders", "report_perf_sessions"], sh_ic_to_order: ["sh_orders", "ic"], sh_roas: ["sh_sales", "perf_all_spend"], perf_overall_roas: ["gmv", "perf_all_spend"],
   overall_roas: ["gmv", "all_spend"], affiliate_roas: ["affiliate_revenue", "affiliate_spend"], crm_roas: ["crm_revenue", "crm_spend"],
@@ -103,7 +102,7 @@ const RG_MODE_NOTE = {
   aw: "Awareness campaigns only: spend, delivery and whatever sessions and orders were credited to them. Awareness is judged on reach and cost of reach, so ROAS here is attribution only.",
   all: "Everything together, so the totals tie back to Shopify.",
 };
-const RG_AW_DROP = new Set(["affiliate_spend", "crm_spend", "reddit_spend", "all_spend", "overall_roas", "affiliate_roas", "crm_roas", "perf_roas", "new_share"]);
+const RG_AW_DROP = new Set(["roas", "cps", "perf_all_spend", "affiliate_spend", "crm_spend", "reddit_spend", "all_spend", "overall_roas", "affiliate_roas", "crm_roas", "perf_roas", "new_share"]);
 const RG_AW_LABEL = {
   gmv: "GMV credited to awareness", orders: "Orders credited to awareness", sessions: "Sessions from awareness",
   spend: "Awareness spend (Meta + Google)", meta_spend: "Meta awareness spend", google_spend: "Google awareness spend",
@@ -472,7 +471,7 @@ R.daily = (p) => {
     document.getElementById("rg-slot").innerHTML = rgBar();
     rgBind();
     const e = RG.eng, days = e.rangeOf(RG.from, RG.to).filter((d) => e.phaseOf(d)).reverse();
-    const cols = p.columns.map((c) => (c.key === "date" ? { label: c.label, text: true, render: (r) => esc(dayLabel(r.date)) }
+    const cols = p.columns.filter((c) => RG.mode !== "aw" || !RG_AW_DROP.has(c.key)).map((c) => (c.key === "date" ? { label: c.label, text: true, render: (r) => esc(dayLabel(r.date)) }
       : c.key === "phase" ? { label: c.label, text: true, render: (r) => phaseChip(r.phase, r.note) } : c));
     const rows = days.map((d) => {
       const w = e.windowOf([d]);

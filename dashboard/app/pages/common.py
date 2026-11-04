@@ -110,6 +110,8 @@ def derive(f: dict) -> dict:
         google_sales_roas=r(
             f.get("google_perf_value"), f.get("google_perf_spend")
         ),
+        # the team's one ROAS: GMV over performance spend on every channel
+        roas=r(f.get("gmv"), f.get("perf_all_spend")),
         mer=r(f.get("gmv"), f.get("spend")),
         perf_roas=r(f.get("gmv"), f.get("perf_spend")),
         overall_roas=r(f.get("gmv"), f.get("all_spend")),

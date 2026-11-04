@@ -184,3 +184,14 @@ def test_dates_may_be_written_two_ways():
         "01-Nov-2026", ["%d-%b-%Y", "%d-%b-%y"]
     ) == dt.date(2026, 11, 1)
     assert sheets.parse_date("nonsense", ["%d-%b-%Y", "%d-%b-%y"]) is None
+
+
+def test_the_reddit_plan_is_read_for_every_day_of_the_month():
+    rows = _workbook(2, 31, 32, [("01-Nov-2026", "6,950"), ("02-Nov-2026", ""), ("03-Nov-2026", "")], 0)
+    assert sheets.locate_target(rows, "REDDIT") == 31
+    plan = sheets.parse_targets(rows[4:], 31, SPECS["reddit"]["date_format"])
+    # the plan covers days with no actual yet: that is what today's estimate uses
+    assert plan == {"2026-11-01": 8800, "2026-11-02": 8800, "2026-11-03": 8800}
+    merged = sheets.merge_parsed([{"days": {}, "filled_through": None, "notes": [], "targets": {"2026-10-31": 9000}},
+                                  {"days": {}, "filled_through": None, "notes": [], "targets": plan}])
+    assert merged["targets"]["2026-10-31"] == 9000 and merged["targets"]["2026-11-03"] == 8800

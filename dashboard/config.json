@@ -106,8 +106,10 @@
     "live_estimate": {
       "affiliate": "per_gmv",
       "crm": "per_hour",
-      "reddit": "per_hour",
-      "basis_days": 7
+      "reddit": "target_per_hour",
+      "reddit_history_from": "2026-11-01",
+      "basis_days": 7,
+      "note": "reddit: today's planned spend from the media-plan workbook (Target Spend in the Reddit block) x the share of the day gone; without a target, a typical day since reddit_history_from (when the block became sales campaigns only)."
     }
   },
 

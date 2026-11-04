@@ -58,6 +58,36 @@ def locate_block(rows: list[list], label: str) -> tuple[int, int] | None:
     return None
 
 
+def locate_target(rows: list[list], label: str) -> int | None:
+    """The column of a block's "Target Spend" (the plan for each day, filled
+    in for the whole month ahead), or None."""
+    want = label.strip().upper()
+    for r in range(min(len(rows), 6)):
+        for c, cell in enumerate(rows[r]):
+            if str(cell).strip().upper() != want:
+                continue
+            for hr in range(r, min(len(rows), r + 4)):
+                for k in range(c, min(c + 6, len(rows[hr]))):
+                    t = str(rows[hr][k]).lower()
+                    if "target" in t and "spend" in t:
+                        return k
+    return None
+
+
+def parse_targets(rows: list[list], col: int, date_format) -> dict[str, float]:
+    """{date: planned spend} for every dated row with a number in `col`."""
+    out: dict[str, float] = {}
+    state: dict = {}
+    for row in rows:
+        if not row or col >= len(row):
+            continue
+        day = parse_date(row[0], date_format, state)
+        v = to_number(row[col])
+        if day and v is not None:
+            out[day.isoformat()] = v
+    return out
+
+
 def col_index(letters: str) -> int:
     n = 0
     for ch in letters.upper():
@@ -182,11 +212,17 @@ def merge_parsed(parts: list[dict]) -> dict:
             if day not in days or rec["spend"] > days[day]["spend"]:
                 days[day] = rec
     last = [p["filled_through"] for p in parts if p["filled_through"]]
-    return {
+    out = {
         "days": dict(sorted(days.items())),
         "filled_through": max(last) if last else None,
         "notes": notes,
     }
+    targets: dict[str, float] = {}
+    for p in parts:
+        targets.update(p.get("targets") or {})
+    if targets:
+        out["targets"] = dict(sorted(targets.items()))
+    return out
 
 
 def apply_follow(parsed: dict[str, dict], specs: dict) -> None:
@@ -285,7 +321,14 @@ def read_workbook(sheet_id: str, spec: dict) -> dict:
         "date_col": "A",
         "columns": {"spend": col_letters(col)},
     }
-    return parse_daily(rows[header + 1 :], found_spec)
+    parsed = parse_daily(rows[header + 1 :], found_spec)
+    tcol = locate_target(rows, spec["block"])
+    if tcol is not None:
+        # the plan for each day: the live tab estimates today's spend from it
+        parsed["targets"] = parse_targets(
+            rows[header + 1 :], tcol, spec["date_format"]
+        )
+    return parsed
 
 
 def calendar_labels(rows: list[list], spec: dict) -> dict[str, str]:

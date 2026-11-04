@@ -7,7 +7,7 @@
 
 const D1_MODE_TEXT = {
   perf: "Performance: the team's D-1 sheet (whole-store sessions and revenue, performance sessions, sales-campaign spend).",
-  all: "All campaigns: as Performance, with awareness and social spend in Spends, RoAS and CPS.",
+  all: "All campaigns: as Performance. Spends, RoAS and CPS stay on performance spend: awareness and Reach spend are never in RoAS.",
   aw: "Awareness: awareness traffic only, the orders and revenue credited to it by UTM, and awareness spend.",
 };
 const D1_F = {
@@ -16,14 +16,15 @@ const D1_F = {
     ["perf_all_spend", "Spends", "inr"], ["sh_roas", "RoAS", "x"], ["cps", "CPS", "inr2"]],
   aw: [["sessions", "Awareness sessions", "int"], ["atc", "ATC", "int"], ["ic", "Checkout started (IC)", "int"], ["orders", "Orders credited", "int"], ["gmv", "Revenue credited", "inr"], ["aov", "AOV", "inr"],
     ["atc_rate", "Sessions → ATC %", "pct"], ["atc_to_ic", "ATC → IC %", "pct"], ["ic_to_order", "IC → orders %", "pct"], ["cvr", "CVR %", "pct"],
-    ["spend", "Awareness spend", "inr"], ["mer", "RoAS (credited)", "x"], ["cps_ad", "Cost / session", "inr2"]],
+    ["spend", "Awareness spend", "inr"], ["cps_ad", "Cost / session", "inr2"]],
 };
-D1_F.all = D1_F.perf.map((f) => (f[0] === "perf_all_spend" ? ["all_spend", "Spends (all)", "inr"] : f[0] === "sh_roas" ? ["sh_roas_all", "RoAS", "x"] : f[0] === "cps" ? ["cps_all", "CPS", "inr2"] : f));
+// the same sheet in the All view: RoAS is only ever on performance spend
+D1_F.all = D1_F.perf.slice();
 // the headline tiles: what management reads first
 const D1_TILES = {
   perf: ["sessions", "sh_orders", "sh_sales", "sh_aov", "sh_cvr", "perf_all_spend", "sh_roas"],
-  all: ["sessions", "sh_orders", "sh_sales", "sh_aov", "sh_cvr", "all_spend", "sh_roas_all"],
-  aw: ["sessions", "orders", "gmv", "atc_rate", "cvr", "spend", "mer"],
+  all: ["sessions", "sh_orders", "sh_sales", "sh_aov", "sh_cvr", "perf_all_spend", "sh_roas"],
+  aw: ["sessions", "orders", "gmv", "atc_rate", "cvr", "spend", "cps_ad"],
 };
 const D1 = { section: null };
 
@@ -271,27 +272,32 @@ function d1Spend(g) {
   const nc = g.cur.length, np = g.prev ? g.prev.length : 0;
   const perf = [["Meta (sales)", "meta_perf_spend", "meta_perf_value"], ["Google (sales)", "google_perf_spend", "google_perf_value"], ["Reddit", "reddit_spend", null], ["Affiliate", "affiliate_spend", "affiliate_revenue"], ["CRM (flow + broadcast)", "crm_spend", "crm_revenue"]];
   const aw = [["Meta (awareness)", "meta_aw_spend", "meta_aw_value"], ["Google (awareness)", "google_aw_spend", "google_aw_value"]];
-  const list = RG.mode === "aw" ? aw : RG.mode === "all" ? [...perf, ...aw, ["Social (Reach)", "meta_social_spend", null]] : perf;
-  const totK = RG.mode === "aw" ? ["aw_spend", "awareness_gmv"] : RG.mode === "all" ? ["all_spend", "sh_sales"] : ["perf_all_spend", "sh_sales"];
+  // one RoAS: Shopify revenue over performance spend. Awareness and Reach spend
+  // are shown for what they cost, never in RoAS, and the Awareness view has none.
+  const showRoas = RG.mode !== "aw";
+  const keep = (r) => W[r.sk] || (PW && PW[r.sk]) || W[r.sk] == null;
+  const asRows = (list) => list.map(([l, sk, vk]) => ({ l, sk, vk: showRoas ? vk : null })).filter(keep);
+  const T = RG.mode === "aw" ? { l: "Awareness total", sk: "aw_spend", vk: null, _class: "total" } : { l: "Total performance spend · RoAS on Shopify revenue", sk: "perf_all_spend", vk: "sh_sales", _class: "total" };
+  const rows = [...asRows(RG.mode === "aw" ? aw : perf), T];
+  if (RG.mode === "all") rows.push(...asRows([...aw, ["Social (Reach)", "meta_social_spend", null]]).map((r) => ({ ...r, l: r.l + " · not in RoAS", vk: null })));
   const roas = (X, sk, vk) => (X && vk && X[sk] && X[vk] != null ? X[vk] / X[sk] : null);
-  const rows = list.map(([l, sk, vk]) => ({ l, sk, vk })).filter((r) => W[r.sk] || (PW && PW[r.sk]) || W[r.sk] == null);
-  rows.push({ l: RG.mode === "aw" ? "Awareness total (revenue credited)" : "Total (Shopify revenue)", sk: totK[0], vk: totK[1], _class: "total" });
   const [hp, hc] = d1Th(g);
   const cols = [{ label: "Channel", text: true, render: (r) => esc(r.l) }];
   if (PW) cols.push({ label: `Spend · ${hp}`, render: (r) => cell(PW[r.sk], "inr", rgNa(PW, r.sk)) });
   cols.push({ label: `Spend · ${hc}`, render: (r) => cell(W[r.sk], "inr", rgNa(W, r.sk)) });
   if (PW) cols.push({ label: "Δ %", render: (r) => deltaHtml(d1Pct(W[r.sk], PW[r.sk], r.sk, "inr", nc, np), "spend") });
-  if (PW) cols.push({ label: `ROAS · ${hp}`, render: (r) => (r.vk ? cell(roas(PW, r.sk, r.vk), "x", rgNa(PW, r.vk)) : '<span class="flat" title="no revenue reported for this channel">–</span>') });
-  cols.push({ label: `ROAS · ${hc}`, render: (r) => (r.vk ? cell(roas(W, r.sk, r.vk), "x", rgNa(W, r.vk)) : '<span class="flat" title="no revenue reported for this channel">–</span>') });
-  if (PW) cols.push({ label: "Δ ROAS", render: (r) => deltaHtml(r.vk ? d1Pct(roas(W, r.sk, r.vk), roas(PW, r.sk, r.vk), "x", "x", 1, 1) : null, "roas") });
+  if (showRoas) {
+    if (PW) cols.push({ label: `ROAS · ${hp}`, render: (r) => (r.vk ? cell(roas(PW, r.sk, r.vk), "x", rgNa(PW, r.vk)) : '<span class="flat" title="not in RoAS, or no revenue reported for this channel">–</span>') });
+    cols.push({ label: `ROAS · ${hc}`, render: (r) => (r.vk ? cell(roas(W, r.sk, r.vk), "x", rgNa(W, r.vk)) : '<span class="flat" title="not in RoAS, or no revenue reported for this channel">–</span>') });
+    if (PW) cols.push({ label: "Δ ROAS", render: (r) => deltaHtml(r.vk ? d1Pct(roas(W, r.sk, r.vk), roas(PW, r.sk, r.vk), "x", "x", 1, 1) : null, "roas") });
+  }
   let s = "";
-  const T = rows[rows.length - 1];
   if (W[T.sk] != null) {
-    s = `<b>Spend ${d1Money(W[T.sk])}${PW ? `, ${d1Move(d1Pct(W[T.sk], PW?.[T.sk], "s", "inr", nc, np))}${nc !== np ? " per day" : ""}` : ""}</b>; RoAS ${PW ? `${fmt(roas(PW, T.sk, T.vk), "x") ?? "n/a"} → ` : ""}${fmt(roas(W, T.sk, T.vk), "x") ?? "n/a"}.`;
-    const ch = rows.slice(0, -1).filter((r) => PW && W[r.sk] != null && PW[r.sk] != null).map((r) => ({ ...r, d: d1Diff(W[r.sk], PW[r.sk], r.sk, "inr", nc, np) })).sort((x, y) => Math.abs(y.d) - Math.abs(x.d))[0];
+    s = `<b>${RG.mode === "aw" ? "Awareness spend" : "Performance spend"} ${d1Money(W[T.sk])}${PW ? `, ${d1Move(d1Pct(W[T.sk], PW?.[T.sk], "s", "inr", nc, np))}${nc !== np ? " per day" : ""}` : ""}</b>${showRoas ? `; RoAS ${PW ? `${fmt(roas(PW, T.sk, T.vk), "x") ?? "n/a"} → ` : ""}${fmt(roas(W, T.sk, T.vk), "x") ?? "n/a"}` : ""}.`;
+    const ch = rows.filter((r) => r !== T).filter((r) => PW && W[r.sk] != null && PW[r.sk] != null).map((r) => ({ ...r, d: d1Diff(W[r.sk], PW[r.sk], r.sk, "inr", nc, np) })).sort((x, y) => Math.abs(y.d) - Math.abs(x.d))[0];
     if (ch && ch.d) s += ` ${esc(ch.l)} moved spend the most (${d1Sign(ch.d)}${d1Money(Math.abs(ch.d))}${nc !== np ? " a day" : ""}).`;
   } else s = `Spend is not complete for these days: ${esc(rgNa(W, T.sk) || "")}.`;
-  return { html: d1Section(7, "Spend & ROAS", "each channel's own revenue over its spend; the total is Shopify revenue over all of it", s, table(cols, rows)), line: s };
+  return { html: d1Section(7, RG.mode === "aw" ? "Awareness spend" : "Spend & ROAS", RG.mode === "aw" ? "awareness campaigns: what they cost; there is no ROAS for awareness" : "RoAS is Shopify revenue over performance spend; a channel's row is its own reported revenue over its spend", s, table(cols, rows)), line: s };
 }
 
 // ---------------------------------------------------------------- detail: day by day, drill-down

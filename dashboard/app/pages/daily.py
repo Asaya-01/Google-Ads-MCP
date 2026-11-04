@@ -22,8 +22,8 @@ COLUMNS = [
     ("cvr", "CVR", "pct"),
     ("meta_spend", "Meta spend", "inr"),
     ("google_spend", "Google spend", "inr"),
-    ("mer", "MER", "x"),
-    ("perf_roas", "Perf ROAS", "x"),
+    ("perf_all_spend", "Spends", "inr"),
+    ("roas", "ROAS", "x"),
     ("new_orders", "New orders", "int"),
     ("repeat_orders", "Repeat orders", "int"),
 ]
@@ -57,8 +57,9 @@ def build(ctx: Context, days: int = 45) -> dict:
         "notes": [
             "Perf sessions = all sessions minus Awareness sessions: any campaign whose name contains "
             '"awareness" (Meta or Google; Google sessions are matched by campaign ID).',
-            "IC = GoKwik checkouts started. CVR = orders / all sessions. MER = GMV / (Meta + Google spend). "
-            "Perf ROAS = GMV / spend on non-awareness campaigns.",
+            "IC = GoKwik checkouts started. CVR = orders / all sessions. Spends = performance spend on every "
+            "channel (Meta, Google and Reddit sales campaigns, CRM, affiliates). ROAS = GMV / Spends; "
+            "awareness and Reach spend are never in it.",
             "Phase (sale / BAU) is inferred from the GMV spike against the BAU median and Meta spend scale; "
             "override any day in config.json (phases.overrides).",
         ],
