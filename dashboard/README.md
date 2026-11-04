@@ -282,6 +282,16 @@ account request a Sheets-scoped token for itself.
 
 ## Sale and BAU days
 
+**The team's calendar comes first.** The monthly media-plan workbooks (the same
+ids as `SPEND_SHEET_REDDIT`) label every day in "Target vs Achieved": the
+"Phase" column (November: BAU, Burst 1, Burst 2), else "Day Type" (October:
+BAU, "Sale (Go-live 6PM)", "Sale", "Sale (Ends 11:59PM)"). On every day a
+workbook covers, that label decides sale or BAU, and "Go-live 6PM" makes the
+day a transition day with the sale starting at 6 pm. Days no workbook covers
+fall back to the detection below. This keeps planned BAU ramps (the
+month-start "Ramp +19.2%") from being read as sales.
+
+
 Sales are found from the hour-by-hour order counts (`orders_hourly.sql`), not
 from daily totals, the way a person reads them: a sale goes live at some hour
 (usually 6 to 9 pm) and orders jump to several times their normal level for that

@@ -156,6 +156,125 @@ def campaign_kind(campaign_name: str, cfg: dict) -> str:
 
 # ---------------------------------------------------------------- phases
 
+_CLOCK = r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)"
+
+
+def _hour(m) -> int:
+    h = int(m.group(1)) % 12 + (12 if m.group(3).lower() == "pm" else 0)
+    return h + (1 if m.group(2) and int(m.group(2)) >= 30 else 0)
+
+
+def calendar_phase(label: str) -> dict | None:
+    """A day's phase from the team's calendar label: "BAU", "BAU — Ramp",
+    "Sale", "Sale (Go-live 6PM)", "Sale (Ends 11:59PM)", "BURST — Buy 2",
+    "Burst 1". None when the label says neither."""
+    t = (label or "").strip().lower()
+    if not t:
+        return None
+    if t.startswith("bau"):
+        return {
+            "phase": "bau",
+            "phase_eff": "bau",
+            "basis": f"team calendar: {label}",
+        }
+    if "sale" not in t and "burst" not in t:
+        return None
+    out = {
+        "phase": "sale",
+        "phase_eff": "sale",
+        "basis": f"team calendar: {label}",
+        "start_hour": None,
+        "end_hour": None,
+    }
+    go = re.search(r"go[- ]?live\s*(?:at\s*)?" + _CLOCK, t)
+    end = re.search(r"ends?\s*(?:at\s*)?" + _CLOCK, t)
+    if go:
+        out["start_hour"] = _hour(go)
+    if end:
+        h = _hour(end)
+        out["end_hour"] = None if h >= 24 else h
+    if out["start_hour"] or out["end_hour"] is not None:
+        live = (out["end_hour"] if out["end_hour"] is not None else 24) - (
+            out["start_hour"] or 0
+        )
+        out["phase"] = "mixed"
+        out["phase_eff"] = "sale" if live >= 12 else "bau"
+    return out
+
+
+def apply_calendar(
+    phases: dict, events: list, labels: dict
+) -> tuple[dict, list]:
+    """The team's calendar wins on every day it covers; the detected sales
+    stay for the days it does not. Sale events are rebuilt from the calendar
+    where it speaks, so "13 Oct, 6 pm → 18 Oct, midnight" follows the plan."""
+    plan = {
+        d: p
+        for d, p in ((d, calendar_phase(l)) for d, l in labels.items())
+        if p
+    }
+    if not plan:
+        return phases, events
+    out = dict(phases)
+    for d, p in plan.items():
+        base = dict(
+            out.get(d) or {"date": d, "gmv_ratio": None, "spend_ratio": None}
+        )
+        base.update(p)
+        base.setdefault("start_hour", None)
+        base.setdefault("end_hour", None)
+        out[d] = base
+    covered = set(plan)
+    kept = [
+        e
+        for e in events
+        if not any(d in covered for d in _days(e["start"][:10], e["end"][:10]))
+    ]
+    runs, cur = [], []
+    for d in sorted(plan):
+        if plan[d]["phase"] in ("sale", "mixed"):
+            if (
+                cur
+                and (
+                    dt.date.fromisoformat(d) - dt.date.fromisoformat(cur[-1])
+                ).days
+                == 1
+                and plan[cur[-1]].get("end_hour") is None
+            ):
+                cur.append(d)
+            else:
+                if cur:
+                    runs.append(cur)
+                cur = [d]
+        elif cur:
+            runs.append(cur)
+            cur = []
+    if cur:
+        runs.append(cur)
+    for r in runs:
+        a, b = plan[r[0]], plan[r[-1]]
+        sh = a.get("start_hour") or 0
+        eh = b.get("end_hour") if b.get("end_hour") is not None else 24
+        kept.append(
+            {
+                "start": f"{r[0]}T{sh:02d}:00",
+                "end": f"{r[-1]}T{eh:02d}:00",
+                "hours": (len(r) - 1) * 24 + eh - sh,
+                "uplift": None,
+                "source": "calendar",
+            }
+        )
+    kept.sort(key=lambda e: e["start"])
+    return out, kept
+
+
+def _days(a: str, b: str) -> list[str]:
+    d0, d1 = dt.date.fromisoformat(a), dt.date.fromisoformat(b)
+    return [
+        (d0 + dt.timedelta(days=i)).isoformat()
+        for i in range((d1 - d0).days + 1)
+    ]
+
 
 def detect_phases(days: list[dict], cfg: dict) -> dict[str, dict]:
     """Infer sale vs BAU per day.

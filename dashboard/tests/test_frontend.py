@@ -19,7 +19,8 @@ def test_the_range_picker_files_are_inlined_without_leftover_markers():
         "range_ui.js",
         "range_tabs.js",
         "range_tree.js",
-        "range_basket.js", "range_d1.js",
+        "range_basket.js",
+        "range_d1.js",
     ):
         assert "</script" not in (settings.STATIC_DIR / name).read_text(
             encoding="utf-8"

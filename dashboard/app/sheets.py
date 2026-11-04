@@ -288,6 +288,52 @@ def read_workbook(sheet_id: str, spec: dict) -> dict:
     return parse_daily(rows[header + 1 :], found_spec)
 
 
+def calendar_labels(rows: list[list], spec: dict) -> dict[str, str]:
+    """{date: label} from a monthly workbook: the column headed by the first
+    of spec["headers"] found ("Phase" before "Day Type"), dates in column A."""
+    head_row = col = None
+    for r in range(min(len(rows), 8)):
+        cells = [str(c).strip() for c in rows[r]]
+        for h in spec["headers"]:
+            if h in cells:
+                head_row, col = r, cells.index(h)
+                break
+        if col is not None:
+            break
+    if col is None:
+        return {}
+    out: dict[str, str] = {}
+    state: dict = {}
+    for row in rows[head_row + 1 :]:
+        if not row or col >= len(row):
+            continue
+        day = parse_date(row[0], spec["date_format"], state)
+        label = str(row[col]).strip()
+        if day and label:
+            out[day.isoformat()] = label
+    return out
+
+
+def load_calendar(cfg: dict) -> tuple[dict[str, str], str | None]:
+    """The team's sale / BAU calendar from all the monthly workbooks:
+    ({date: label}, reason it could not be read or None)."""
+    spec = cfg.get("manual_spends", {}).get("phase_plan")
+    if not spec:
+        return {}, None
+    raw = os.environ.get(spec["sheet_env"]) or ""
+    ids = [x.strip() for x in raw.split(",") if x.strip()]
+    if not ids:
+        return {}, f"no calendar workbooks set ({spec['sheet_env']})"
+    out: dict[str, str] = {}
+    errors = []
+    for i in ids:
+        try:
+            out.update(calendar_labels(fetch_rows(i, spec["tab"], 1), spec))
+        except Exception as exc:
+            errors.append(f"{type(exc).__name__}: {exc}")
+    return out, "; ".join(errors) or None
+
+
 def load_all(cfg: dict) -> tuple[dict, dict]:
     """(parsed sources, {source: reason it could not be read})."""
     specs = cfg["manual_spends"]["sources"]

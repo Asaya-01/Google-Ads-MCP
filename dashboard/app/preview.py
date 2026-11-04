@@ -26,6 +26,7 @@ KEYS = [
     "products",
     "order_slabs",
     "shopify_sales",
+    "phase_calendar",
     "funnel",
     "google_ads",
     "google_campaigns",

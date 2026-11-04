@@ -261,7 +261,7 @@
         for (const e of events) {
           const a = e.start.slice(0, 10), b = e.end.slice(0, 10);
           out.push({ id: "sale:" + a, kind: "sale", label: span2(a, b), from: a, to: b,
-            sub: `${hr(e.start)} → ${hr(e.end)} · ${count(a, b, "sale")} full sale days · ${e.uplift}× normal orders` });
+            sub: `${hr(e.start)} → ${hr(e.end)} · ${count(a, b, "sale")} full sale days · ${e.uplift == null ? "from the team calendar" : e.uplift + "× normal orders"}` });
         }
       } else {
         for (const r of sales().slice(0, 8)) out.push({ id: "sale:" + r[0], kind: "sale", label: span2(r[0], r[r.length - 1]), from: r[0], to: r[r.length - 1], sub: `${r.length} sale days` });

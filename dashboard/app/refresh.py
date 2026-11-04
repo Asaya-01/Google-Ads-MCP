@@ -252,6 +252,20 @@ def collect(
                 cached[day] = rows
         data["meta"] = cached
     data["manual_spends"] = _manual_spends(cfg, store, data["unavailable"])
+    # the team's sale / BAU calendar; the last good copy if a read fails
+    try:
+        labels, why = sheets.load_calendar(cfg)
+    except Exception as exc:  # never fail the refresh over the calendar
+        labels, why = {}, f"{type(exc).__name__}: {exc}"
+    if labels:
+        store.put_json("cache/phase_calendar.json", labels)
+    else:
+        labels = store.get_json("cache/phase_calendar.json") or {}
+    if why:
+        data["unavailable"]["phase_calendar"] = f"Sale calendar: {why}" + (
+            " (showing the last good copy)" if labels else ""
+        )
+    data["phase_calendar"] = labels
     data["google_id_names"] = _google_id_names(cfg, data, store, gsrc)
     data["reconcile"] = _reconcile(
         cfg, data, d1, d1_date, gsrc, shop, token, missing

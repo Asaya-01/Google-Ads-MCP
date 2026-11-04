@@ -96,6 +96,13 @@
         "note": "Temporary: the Reddit block of the monthly media-plan workbook (Actual Spend, sales campaigns only) until the Reddit bot loads BigQuery. The sheet has no Reddit revenue, so there is no Reddit ROAS. Traffic campaigns count as awareness."
       }
     },
+    "phase_plan": {
+      "note": "Sale and BAU days from the team's monthly calendar workbooks (the same ones as SPEND_SHEET_REDDIT): the 'Phase' column, else 'Day Type'. Days a workbook covers follow it; other days use the hourly order detection.",
+      "sheet_env": "SPEND_SHEET_REDDIT",
+      "tab": "Target vs Achieved",
+      "headers": ["Phase", "Day Type", "Day type"],
+      "date_format": ["%d-%b-%Y", "%d-%b-%y"]
+    },
     "live_estimate": {
       "affiliate": "per_gmv",
       "crm": "per_hour",

@@ -171,6 +171,13 @@ class Context:
                 cfg["phases"],
             )
             self.phase_source = "daily"
+        # The team's calendar (monthly workbooks) wins on the days it covers.
+        labels = data.get("phase_calendar") or {}
+        if labels:
+            self.phases, self.sale_events = rules.apply_calendar(
+                self.phases, self.sale_events, labels
+            )
+            self.phase_source = f"{self.phase_source} + team calendar"
         # A two-way label for code that needs one (D-1 windows, the pulse):
         # a transition day counts as the side most of its orders were on.
         self.phases_eff = {

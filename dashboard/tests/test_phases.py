@@ -137,3 +137,97 @@ def test_live_regime_spots_a_sale_going_live_and_ending():
     assert regime == "sale" and ratio > 3
     early = dt.datetime(2026, 11, 1, 1, 0, tzinfo=live.IST)
     assert live.live_regime(surge, base, phases, early, PCFG) == (None, None)
+
+
+def test_the_team_calendar_labels_read_as_phases():
+    from app.rules import calendar_phase as cp
+
+    assert cp("BAU")["phase"] == "bau"
+    assert cp("BAU — Ramp +19.2%")["phase"] == "bau"
+    assert cp("BAU (App Early Access)")["phase"] == "bau"
+    assert cp("Sale")["phase"] == "sale"
+    assert cp("Burst 1")["phase"] == "sale"
+    assert cp("BURST — Buy 2 @ 699")["phase"] == "sale"
+    go = cp("Sale (Go-live 6PM)")
+    assert go["phase"] == "mixed" and go["start_hour"] == 18
+    assert go["phase_eff"] == "bau"  # live for 6 of the 24 hours
+    assert cp("Sale (Ends 11:59PM)")["phase"] == "sale"  # a full sale day
+    early = cp("Sale (Ends 2PM)")
+    assert early["phase"] == "mixed" and early["end_hour"] == 14
+    assert cp("") is None and cp("Holiday") is None
+
+
+def test_the_calendar_wins_where_it_speaks_and_rebuilds_the_sales():
+    from app.rules import apply_calendar
+
+    detected = {
+        "2026-11-01": {"phase": "sale", "phase_eff": "sale", "basis": "x"},
+        "2026-11-02": {"phase": "mixed", "phase_eff": "bau", "basis": "x"},
+        "2026-11-20": {"phase": "bau", "phase_eff": "bau", "basis": "x"},
+    }
+    events = [
+        {
+            "start": "2026-10-31T19:00",
+            "end": "2026-11-02T10:00",
+            "hours": 39,
+            "uplift": 2.3,
+        },
+        {
+            "start": "2026-12-05T18:00",
+            "end": "2026-12-06T24:00",
+            "hours": 30,
+            "uplift": 2.5,
+        },
+    ]
+    labels = {
+        "2026-11-01": "BAU — Ramp +19.2%",
+        "2026-11-02": "BAU — Ramp +19.2%",
+        "2026-10-13": "Sale (Go-live 6PM)",
+        "2026-10-14": "Sale",
+        "2026-10-18": "Sale (Ends 11:59PM)",
+        "2026-10-15": "Sale",
+        "2026-10-16": "Sale",
+        "2026-10-17": "Sale",
+    }
+    phases, evs = apply_calendar(detected, events, labels)
+    assert phases["2026-11-01"]["phase"] == "bau"
+    assert phases["2026-11-02"]["phase"] == "bau"
+    assert phases["2026-11-20"]["basis"] == "x"  # not in the calendar: kept
+    assert phases["2026-10-13"]["phase"] == "mixed"
+    # the detected 31 Oct - 2 Nov "sale" is gone; the December one stays
+    starts = [e["start"] for e in evs]
+    assert "2026-10-31T19:00" not in starts and "2026-12-05T18:00" in starts
+    oct_sale = next(e for e in evs if e["start"].startswith("2026-10-13"))
+    assert oct_sale["start"] == "2026-10-13T18:00"
+    assert oct_sale["end"] == "2026-10-18T24:00"
+
+
+def test_calendar_labels_come_from_the_phase_column_first():
+    from app import sheets, settings
+
+    spec = settings.config()["manual_spends"]["phase_plan"]
+    nov = [
+        ["ASAYA — NOVEMBER 2026"],
+        [],
+        ["", "", "", "", "Shopify"],
+        ["Date", "Day", "Day type", "Phase"],
+        ["01-Nov-2026", "Sun", "BAU — Ramp +19.2%", "BAU"],
+        ["13-Nov-2026", "Fri", "BURST — Buy 2 @ 699", "Burst 1"],
+        ["NOVEMBER TOTAL"],
+    ]
+    assert sheets.calendar_labels(nov, spec) == {
+        "2026-11-01": "BAU",
+        "2026-11-13": "Burst 1",
+    }
+    octo = [
+        ["TARGET vs ACHIEVED — OCTOBER 2026"],
+        ["", "", "OVERALL"],
+        ["MTD"],
+        ["Date", "Day Type", "Target Spends"],
+        ["13-Oct-26", "Sale (Go-live 6PM)", "₹1"],
+        ["19-Oct-26", "BAU", "₹1"],
+    ]
+    assert sheets.calendar_labels(octo, spec) == {
+        "2026-10-13": "Sale (Go-live 6PM)",
+        "2026-10-19": "BAU",
+    }
