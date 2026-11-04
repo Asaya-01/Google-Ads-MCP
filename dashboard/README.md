@@ -410,6 +410,13 @@ data, streaming as it works.
   Performance / Awareness / All view on screen, so "these dates" means what
   the user is looking at. Follow-up questions keep the conversation (for the
   browser session; "New chat" clears it).
+- **Voice**: press and hold the mic next to Ask, speak, let go to send. The
+  words appear in the box as you speak; Esc while holding cancels, and a quick
+  tap only shows a hint. Speech becomes text in the browser's own speech
+  recognition (Chrome, Edge, Safari on desktop and iPhone; Indian English), so
+  Chrome and Edge send the audio to Google's speech service and Safari to
+  Apple's; the dashboard
+  never receives audio. Firefox has no speech recognition, so it shows no mic.
 - **Limits**: signed-in, allowlisted users only; 40 questions per person per
   hour (`questions_per_user_per_hour`); up to 14 tool rounds per answer. The
   service runs with a 15-minute request timeout and 1 GiB for this. Turn it

@@ -105,6 +105,8 @@ function askRender(scroll) {
   send.textContent = ASK.busy ? "Stop" : "Ask";
   send.classList.toggle("stop", ASK.busy);
   send.setAttribute("aria-label", ASK.busy ? "Stop answering" : "Send question");
+  const mic = ASK.el.querySelector(".ask-mic");
+  if (mic) mic.disabled = ASK.busy;
 }
 
 function askToggle(open) {
@@ -162,6 +164,84 @@ async function askSend(q) {
   askSave(); askRender();
 }
 
+// ------------------------------------------------------------ hold to talk
+/* Press and hold the mic, speak, let go: the question is sent. Speech is
+   turned into text by the browser's own speech recognition (Chrome, Edge,
+   Safari), in Indian English; the words appear in the box as you speak.
+   Esc while holding, or a quick tap, sends nothing. Browsers without speech
+   recognition (Firefox) do not show the button. */
+const ASK_SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+const ASK_MIC_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5"/></svg>';
+const MIC = { holding: false, started: 0, base: "", finals: "", sess: "", interim: "", err: null, cancel: false, tap: false, rec: null, stop: () => {} };
+const MIC_MIN_MS = 350; // shorter than this is a tap, not a hold
+
+function askMicSetup(el, ta, grow) {
+  const btn = el.querySelector(".ask-mic"), note = el.querySelector(".ask-note"), noteText = note.textContent;
+  if (!ASK_SR) { btn.hidden = true; return; }
+  const say = (msg) => { note.textContent = msg; note.classList.add("warn"); };
+  const reset = () => { note.textContent = noteText; note.classList.remove("warn"); };
+  const show = () => { ta.value = [MIC.base, (MIC.finals + MIC.sess + MIC.interim).trim()].filter(Boolean).join(" "); grow(); ta.scrollTop = ta.scrollHeight; };
+
+  function listen() {
+    const r = new ASK_SR();
+    r.lang = "en-IN"; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
+    MIC.rec = r; MIC.sess = ""; MIC.interim = ""; MIC.err = null;
+    r.onresult = (ev) => {
+      let f = "", it = "";
+      for (let i = 0; i < ev.results.length; i++) { const t = ev.results[i][0].transcript; if (ev.results[i].isFinal) f += t; else it += t; }
+      MIC.sess = f; MIC.interim = it; show();
+    };
+    r.onerror = (ev) => { MIC.err = ev.error; };
+    r.onend = () => {
+      MIC.finals += MIC.sess + MIC.interim; MIC.sess = ""; MIC.interim = "";
+      // browsers end a session after a pause; keep listening while held
+      if (MIC.holding && (!MIC.err || MIC.err === "no-speech")) { MIC.finals += " "; try { listen(); return; } catch (e) { /* fall through */ } }
+      finish();
+    };
+    r.start();
+  }
+  function start() {
+    if (ASK.busy || MIC.holding) return;
+    reset();
+    Object.assign(MIC, { holding: true, started: Date.now(), base: ta.value.trim(), finals: "", cancel: false, tap: false });
+    btn.classList.add("rec"); btn.setAttribute("aria-pressed", "true");
+    note.textContent = "Listening… let go to send · Esc to cancel";
+    try { listen(); } catch (e) { MIC.err = "start"; MIC.holding = false; finish(); }
+  }
+  function stop(cancel) {
+    if (!MIC.holding) return;
+    MIC.holding = false;
+    MIC.tap = Date.now() - MIC.started < MIC_MIN_MS;
+    MIC.cancel = !!cancel || MIC.tap;
+    try { if (MIC.cancel) MIC.rec.abort(); else MIC.rec.stop(); } catch (e) { finish(); }
+  }
+  function finish() {
+    btn.classList.remove("rec"); btn.setAttribute("aria-pressed", "false");
+    const text = MIC.finals.replace(/\s+/g, " ").trim();
+    if (MIC.err === "not-allowed" || MIC.err === "service-not-allowed") { ta.value = MIC.base; say("Microphone access is blocked. Allow the microphone for this site in the browser's settings, then hold the mic again."); }
+    else if (MIC.tap) { ta.value = MIC.base; say("Press and hold the mic while you speak, then let go to send."); }
+    else if (MIC.cancel) { ta.value = MIC.base; reset(); }
+    else if (!text) { ta.value = MIC.base; say(MIC.err === "network" ? "Speech recognition needs an internet connection." : MIC.err === "audio-capture" ? "No microphone was found." : "Didn't catch that. Hold the mic and speak again."); }
+    else { show(); reset(); el.querySelector("form").requestSubmit(); }
+    grow();
+  }
+  MIC.stop = stop;
+  btn.addEventListener("pointerdown", (ev) => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+    try { btn.setPointerCapture(ev.pointerId); } catch (e) { /* not capturable */ }
+    start();
+  });
+  btn.addEventListener("pointerup", () => stop(false));
+  btn.addEventListener("pointercancel", () => stop(true));
+  btn.addEventListener("lostpointercapture", () => stop(false));
+  btn.addEventListener("contextmenu", (ev) => ev.preventDefault());
+  // keyboard: hold Space or Enter on the button
+  btn.addEventListener("keydown", (ev) => { if ((ev.key === " " || ev.key === "Enter") && !ev.repeat) { ev.preventDefault(); start(); } });
+  btn.addEventListener("keyup", (ev) => { if (ev.key === " " || ev.key === "Enter") { ev.preventDefault(); stop(false); } });
+  window.addEventListener("blur", () => stop(true));
+}
+
 function askMount() {
   if (ASK.el) return;
   askLoad();
@@ -175,14 +255,15 @@ function askMount() {
       <button type="button" class="ask-iconbtn x" data-act="close" aria-label="Close">×</button></div>
     <div class="ask-ctx"></div>
     <div class="ask-log" aria-live="polite"></div>
-    <div class="ask-foot"><form class="ask-form"><textarea rows="1" placeholder="Ask about any number on the dashboard…" aria-label="Your question" maxlength="2000"></textarea><button type="submit" class="ask-send">Ask</button></form>
-      <p class="ask-note">Uses the tab, dates and view you're on. Enter to send, Shift+Enter for a new line.</p></div>`;
+    <div class="ask-foot"><form class="ask-form"><textarea rows="1" placeholder="Ask about any number on the dashboard…" aria-label="Your question" maxlength="2000"></textarea><button type="button" class="ask-mic" aria-label="Press and hold to ask by voice" aria-pressed="false" title="Press and hold to talk">${ASK_MIC_ICON}</button><button type="submit" class="ask-send">Ask</button></form>
+      <p class="ask-note">Uses the tab, dates and view you're on. Enter to send${ASK_SR ? ", or press and hold the mic to speak" : ", Shift+Enter for a new line"}.</p></div>`;
   document.body.append(fab, el);
   ASK.el = el; ASK.fab = fab;
   fab.addEventListener("click", () => askToggle(true));
   const ta = el.querySelector("textarea");
   const grow = () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px"; };
   ta.addEventListener("input", grow);
+  askMicSetup(el, ta, grow);
   ta.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); el.querySelector("form").requestSubmit(); } });
   el.querySelector("form").addEventListener("submit", (ev) => {
     ev.preventDefault();
@@ -196,7 +277,11 @@ function askMount() {
     else if (b.dataset.act === "new") { if (ASK.ctrl) ASK.ctrl.abort(); ASK.log = []; askSave(); askRender(); ta.focus(); }
     else if (b.dataset.q) askSend(b.dataset.q);
   });
-  el.addEventListener("keydown", (ev) => { if (ev.key === "Escape") askToggle(false); });
+  el.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape") return;
+    if (MIC.holding) { ev.preventDefault(); MIC.stop(true); return; } // Esc cancels a recording first
+    askToggle(false);
+  });
   // the context line follows the tab, dates and view
   window.addEventListener("hashchange", () => { if (ASK.open) setTimeout(() => askRender(false), 50); });
 }

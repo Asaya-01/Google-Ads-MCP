@@ -71,6 +71,15 @@ main { padding-bottom: 88px; }
 .ask-form textarea { flex: 1; resize: none; min-height: 42px; max-height: 160px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
   background: var(--bg); color: var(--ink); font: 14px/1.4 var(--font-body); }
 .ask-form textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+.ask-mic { flex: none; width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); color: var(--ink-2); cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.ask-mic svg { width: 19px; height: 19px; }
+.ask-mic:hover { color: var(--accent); border-color: var(--accent); }
+.ask-mic:disabled { opacity: 0.45; cursor: default; }
+.ask-mic.rec { background: var(--bad); border-color: var(--bad); color: #fff; animation: ask-rec 1.4s ease-out infinite; }
+@keyframes ask-rec { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--bad) 45%, transparent); } 100% { box-shadow: 0 0 0 12px transparent; } }
+@media (prefers-reduced-motion: reduce) { .ask-mic.rec { animation: none; } }
+.ask-note.warn { color: var(--bad); }
 .ask-send { border: 0; border-radius: 10px; background: var(--accent); color: var(--surface); font: 600 13px/1 var(--font-body); padding: 0 14px; height: 42px; cursor: pointer; }
 .ask-send:disabled { opacity: 0.45; cursor: default; }
 .ask-send.stop { background: var(--ink-2); }
