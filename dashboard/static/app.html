@@ -43,7 +43,7 @@
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
 h1, h2, h3 { font-family: var(--font-display); font-weight: 700; margin: 0; text-wrap: balance; color: var(--head); }
-h2 { font-size: 19px; font-weight: 600; letter-spacing: -0.005em; }
+h2 { font-size: 17px; font-weight: 650; letter-spacing: -0.005em; }
 h3 { font-size: 14px; font-weight: 600; }
 a { color: var(--accent); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
@@ -62,11 +62,13 @@ nav.tabs a:hover { color: var(--ink); }
 .theme-toggle:hover { border-color: var(--accent); color: var(--ink); }
 .meta-line { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
 
-main { padding-block: 24px 56px; display: grid; gap: 22px; }
-section.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: clamp(16px, 1.6vw, 26px); display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; align-content: start; }
+main { padding-block: 16px 48px; display: grid; gap: 16px; }
+section.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: clamp(14px, 1.2vw, 20px); display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; align-content: start; }
 .section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 16px; }
 .sub { color: var(--muted); font-size: 12px; }
-.grid-2 { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); }
+.grid-2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); }
+/* a card left alone on a row of a two-column grid takes the whole row (set by fillGrids) */
+.grid-2 > .solo, .d1-grid > .solo { grid-column: 1 / -1; }
 
 .status { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); white-space: nowrap; }
@@ -101,21 +103,24 @@ section.card { background: var(--surface); border: 1px solid var(--line); border
 .steps .steprow:last-child { border-bottom: 0; }
 .steps .steprow .sub { text-align: right; }
 
-.tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 168px), 1fr)); }
-.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 4px; align-content: start; }
-.tile .label { color: var(--ink-2); font-size: 12px; overflow-wrap: anywhere; }
-.tile .value { font-family: var(--font-display); font-size: clamp(19px, 1.7vw, 24px); font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
+.tiles { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 3px; align-content: start; }
+.tile .label { color: var(--ink-2); font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.tile .value { font-family: var(--font-display); font-size: clamp(18px, 1.45vw, 22px); font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
 .tile .foot { font-size: 12px; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; }
 .na { color: var(--muted); font-size: 12px; }
-.tile .na { font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.tile .na { font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 .up { color: var(--good); }
 .down { color: var(--bad); }
 .flat { color: var(--ink-2); }
 
-.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
-table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
-th, td { padding: 9px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
-th { position: sticky; top: 0; z-index: 1; background: var(--surface); color: var(--ink-2); font-weight: 600; font-size: 12px; line-height: 1.25; vertical-align: bottom; white-space: normal; min-width: 64px; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+/* a table of two or three columns is as wide as its content, not the screen */
+.table-wrap.fit { width: fit-content; max-width: 100%; min-width: min(100%, 440px); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+tbody tr:last-child td { border-bottom: 0; }
+th { position: sticky; top: 0; z-index: 1; background: color-mix(in srgb, var(--accent-wash) 35%, var(--surface)); color: var(--ink-2); font-weight: 600; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; line-height: 1.25; vertical-align: bottom; white-space: normal; min-width: 64px; }
 th:first-child, td:first-child, td.text, th.text { text-align: left; }
 td.text { white-space: normal; overflow-wrap: anywhere; min-width: 96px; max-width: 360px; }
 tbody tr:hover td { background: color-mix(in srgb, var(--accent-wash) 60%, transparent); }
@@ -123,8 +128,9 @@ tr.total td { font-weight: 600; border-top: 2px solid var(--axis); }
 tr.delta td { font-weight: 600; }
 tr.group td { background: var(--accent-wash); color: var(--ink-2); font-size: 12px; font-weight: 600; text-align: left; }
 td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(--muted); }
-.legend-note { font-size: 12px; color: var(--muted); }
-.live-ctl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.legend-note { font-size: 12px; color: var(--muted); margin: 0; line-height: 1.45; }
+.live-ctls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 28px; margin-top: 10px; }
+.live-ctl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
 .chart-box { position: relative; height: 240px; }
 .chart-legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); }
@@ -183,10 +189,36 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       if (wrap.scrollWidth > wrap.clientWidth + 1) t.classList.add("pin-first");
     }
   }
+  // a card alone on a row of a two-column grid spans the row, so no half row stays empty
+  function fillGrids() {
+    for (const grid of $main.querySelectorAll(".grid-2, .d1-grid")) {
+      const kids = [...grid.children].filter((k) => k.offsetParent !== null);
+      kids.forEach((k) => k.classList.remove("solo"));
+      const rows = new Map();
+      for (const k of kids) (rows.get(k.offsetTop) || rows.set(k.offsetTop, []).get(k.offsetTop)).push(k);
+      const cols = getComputedStyle(grid).gridTemplateColumns.split(" ").length;
+      if (cols < 2) continue;
+      for (const row of rows.values()) if (row.length === 1 && !row[0].classList.contains("wide")) row[0].classList.add("solo");
+    }
+    // KPI tiles in even rows: 11 tiles that fit 8 a row become 6 + 5, not 8 + 3
+    for (const t of $main.querySelectorAll(".tiles")) {
+      t.style.gridTemplateColumns = "";
+      const n = t.children.length, w = t.clientWidth, last = t.lastElementChild;
+      if (last) last.style.gridColumn = "";
+      if (!w || n < 2) continue;
+      const fit = Math.max(1, Math.floor((w + 10) / (150 + 10)));
+      if (n <= fit) continue;
+      const cols = Math.ceil(n / Math.ceil(n / fit));
+      t.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+      // two to a row (phones): an odd last tile takes the whole row
+      if (cols === 2 && n % 2) last.style.gridColumn = "1 / -1";
+    }
+  }
   let fitQueued = false;
-  const queueFit = () => { if (!fitQueued) { fitQueued = true; requestAnimationFrame(() => { fitQueued = false; fitTables(); }); } };
+  const queueFit = () => { if (!fitQueued) { fitQueued = true; requestAnimationFrame(() => { fitQueued = false; fillGrids(); fitTables(); }); } };
   new MutationObserver(queueFit).observe($main, { childList: true, subtree: true });
   window.addEventListener("resize", queueFit);
+  $main.addEventListener("toggle", queueFit, true);
 
   // ------------------------------------------------------------ formatting
   const inGroup = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
@@ -323,7 +355,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       if (c.render) return `<td class="${c.text ? "text" : ""}">${c.render(r)}</td>`;
       return `<td>${cell(r[c.key], c.unit, r.na?.[c.key])}</td>`;
     }).join("")}</tr>`).join("");
-    return `<div class="table-wrap" ${opts.maxHeight ? `style="max-height:${opts.maxHeight}"` : ""}><table><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${columns.length}" class="text na">No rows for this period.</td></tr>`}</tbody></table></div>`;
+    return `<div class="table-wrap${columns.length <= 3 && !opts.full ? " fit" : ""}" ${opts.maxHeight ? `style="max-height:${opts.maxHeight}"` : ""}><table><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${columns.length}" class="text na">No rows for this period.</td></tr>`}</tbody></table></div>`;
   }
 
   // ------------------------------------------------------------ tabs
@@ -473,9 +505,9 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
         <span class="sub">updated <span id="live-age"></span> · refreshes itself every ${Math.round((p.refresh_seconds || 180) / 60)} min · D-1 stays on the other tabs</span></div>
       <div class="banner" id="live-stale" hidden>This view is more than 30 minutes old, so the live refresh may be failing. The numbers below are the last good ones.</div>
       <div class="status" aria-label="Data sources and freshness">${chips}</div>
-      <div class="live-ctl"><span class="sub">Campaigns</span><div class="seg" id="live-mode" role="group" aria-label="Campaign type">${RG_MODES.map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${RG.mode === k}">${l}</button>`).join("")}</div></div>
+      <div class="live-ctls"><div class="live-ctl"><span class="sub">Campaigns</span><div class="seg" id="live-mode" role="group" aria-label="Campaign type">${RG_MODES.map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${RG.mode === k}">${l}</button>`).join("")}</div></div>
       ${sh ? `<div class="live-ctl"><span class="sub">Compare today so far with</span>
-        <div class="seg" id="live-base"><button type="button" data-b="typical" aria-pressed="${LIVE.base === "typical"}">${esc(sh.typical_label)}</button><button type="button" data-b="yesterday" aria-pressed="${LIVE.base === "yesterday"}">Yesterday, same time</button></div></div>` : ""}
+        <div class="seg" id="live-base"><button type="button" data-b="typical" aria-pressed="${LIVE.base === "typical"}">${esc(sh.typical_label)}</button><button type="button" data-b="yesterday" aria-pressed="${LIVE.base === "yesterday"}">Yesterday, same time</button></div></div>` : ""}</div>
     </section>`;
     const tiles = sh ? `<section class="card"><div class="section-head"><h2>So far today</h2><span class="sub">each figure compared at the same time of day</span></div>
       <div class="tiles">${sh.tiles.map((t) => `<div class="tile">

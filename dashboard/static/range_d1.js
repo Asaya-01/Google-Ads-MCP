@@ -58,11 +58,17 @@ const d1PP = (d) => (d == null ? "n/a" : `${d >= 0 ? "+" : "−"}${Math.abs(d * 
 const d1Money = (v) => (v == null ? "n/a" : fmt(v, "inr", true));
 const d1N = (v) => (v == null ? "n/a" : fmt(Math.round(v), "int"));
 
-function d1Section(n, title, sub, insight, body, id) {
+/* A section: title, its table, then what the table says. `wide` sections
+   (tables of more than six columns) take the full row of the D-1 grid; the
+   rest pair up two to a row. */
+function d1InsightHtml(insight) {
   const pts = (Array.isArray(insight) ? insight : [insight]).filter(Boolean);
-  return `<section class="card d1-sec" ${id ? `id="${id}"` : ""}>
-    <div class="section-head"><h2><span class="d1-n">${n}</span> ${esc(title)}</h2>${sub ? `<span class="sub">${sub}</span>` : ""}</div>
-    ${body}${pts.length ? `<div class="d1-insight"><div class="d1-ins-h">What this says</div><ul>${pts.map((x) => `<li>${x}</li>`).join("")}</ul></div>` : ""}</section>`;
+  return pts.length ? `<div class="d1-insight"><div class="d1-ins-h">What this says</div><ul>${pts.map((x) => `<li>${x}</li>`).join("")}</ul></div>` : "";
+}
+function d1Section(n, title, sub, insight, body, id, wide) {
+  return `<section class="card d1-sec${wide ? " wide" : ""}" ${id ? `id="${id}"` : ""}>
+    <div class="section-head"><h2>${esc(title)}</h2>${sub ? `<span class="sub">${sub}</span>` : ""}</div>
+    ${body}${d1InsightHtml(insight)}</section>`;
 }
 // spends estimated for days the team's sheets have not reached yet
 const D1_EST_KEYS = ["affiliate_spend", "crm_flow_spend", "crm_broadcast_spend", "reddit_spend"];
@@ -75,7 +81,7 @@ function d1EstNote(W) {
   return `Includes <b>estimated</b> ${keys.map((k) => D1_EST_NAMES[k]).join(", ")} spend for ${rgListDays(days)}, because the sheets are not filled yet; the next refresh after they are replaces it.`;
 }
 const d1Verb = (x) => (x >= 0 ? "added" : "cost");
-const d1Th = (g) => [g.prev && g.prev.length ? (g.prevSpan ? rgSpan(g.prevSpan[0], g.prevSpan[1]) : "Comparison") : null, g.curSpan ? rgSpan(g.curSpan[0], g.curSpan[1]) : "Selected"];
+const d1Th = (g) => [g.prev && g.prev.length ? (g.prevSpan ? rgSpanShort(g.prevSpan[0], g.prevSpan[1]) : "Comparison") : null, g.curSpan ? rgSpanShort(g.curSpan[0], g.curSpan[1]) : "Selected"];
 
 // ---------------------------------------------------------------- 1 · overview
 function d1Overview(g) {
@@ -83,7 +89,7 @@ function d1Overview(g) {
   const byKey = Object.fromEntries(F.map((f) => [f[0], f]));
   const tiles = (D1_TILES[RG.mode] || D1_TILES.perf).map((k) => byKey[k] || [k, k, "int"]).map(([k, l, u]) => {
     const v = w[k], ch = pw ? g.change(k) : null;
-    if (v == null) return `<div class="tile"><div class="label">${esc(l)}</div><div class="na">Data unavailable: ${esc(rgNa(w, k) || "not available")}</div></div>`;
+    if (v == null) return `<div class="tile"><div class="label">${esc(l)}</div><div class="na" title="${esc(rgNa(w, k) || "not available")}">Data unavailable: ${esc(rgNa(w, k) || "not available")}</div></div>`;
     const est = rgEstFor(k, w);
     return `<div class="tile"><div class="label">${esc(l)}${est ? ` <span class="chip pending" title="${esc(est)}">est.</span>` : ""}</div><div class="value">${esc(fmt(v, u, true))}</div><div class="foot">${pw ? `${deltaHtml(ch, RG_NEUTRAL.has(k) || /spend|cps/.test(k) ? "spend" : k)}<span>vs ${esc(fmt(pw[k], u, true) ?? "n/a")}</span>` : "<span>no comparison</span>"}</div>${est ? `<div class="foot sub" title="${esc(est)}">${esc(rgEstShort(w))}</div>` : ""}</div>`;
   }).join("");
@@ -109,9 +115,10 @@ function d1Overview(g) {
       s += Math.abs(dc) < 0.0005 ? ` Conversion held at ${fmt(w[conv], "pct")}.` : ` Conversion moved ${d1PP(dc)} (${fmt(pw[conv], "pct")} → ${fmt(w[conv], "pct")}).`;
     }
   }
-  const body = `<div class="tiles">${tiles}</div>${statusStrip()}${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}<h3 class="d1-h3">Metric comparison</h3>${tbl}
-    <p class="legend-note">${esc(D1_MODE_TEXT[RG.mode] || "")}${RG.mode === "aw" ? "" : " Orders and Revenue are Shopify's own Sales report; Spends are all channels on sales campaigns; RoAS is revenue ÷ Spends; CPS is Spends ÷ overall sessions."}${nc !== np && pw ? " The periods differ in length, so changes compare per-day averages." : ""}</p>`;
-  return { html: d1Section(1, "Overview", esc(rgVsText(g, "cur")) + (pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""), [s, ...d1MoreOverview(g, rk, ok, ak)], body), line: s };
+  const note = `<p class="legend-note">${esc(D1_MODE_TEXT[RG.mode] || "")}${RG.mode === "aw" ? "" : " Orders and Revenue are Shopify's own Sales report; Spends are all channels on sales campaigns; RoAS is revenue ÷ Spends; CPS is Spends ÷ overall sessions."}${nc !== np && pw ? " The periods differ in length, so changes compare per-day averages." : ""}</p>`;
+  const body = `<div class="tiles d1-kpis">${tiles}</div>${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}
+    <div class="d1-ov"><div class="d1-ov-t">${tbl}</div><aside class="d1-ov-a">${d1InsightHtml([s, ...d1MoreOverview(g, rk, ok, ak)])}${note}</aside></div>`;
+  return { html: d1Section(1, "Overview", esc(rgVsText(g, "cur")) + (pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""), [], body, null, true), line: s };
 }
 
 // ---------------------------------------------------------------- 2 · traffic
@@ -143,7 +150,8 @@ function d1Traffic(g) {
   cols.push({ label: `Sessions · ${hc}`, render: (r) => esc(d1N(r.a.sessions)) });
   if (hasP) cols.push({ label: nc !== np ? "Δ / day" : "Δ", render: (r) => d1Abs(r.dS, "int") }, { label: "Δ %", render: (r) => deltaHtml(r.pS, "sessions") });
   cols.push({ label: "Share", render: (r) => esc(tot.s ? `${((r.a.sessions / tot.s) * 100).toFixed(1)}%` : "–") });
-  cols.push({ label: "Orders", render: (r) => esc(d1N(r.a.orders)) + (hasP ? `<br><span class="sub">${deltaHtml(r.pO, "orders")}</span>` : "") });
+  cols.push({ label: "Orders", render: (r) => esc(d1N(r.a.orders)) });
+  if (hasP) cols.push({ label: "Orders Δ %", render: (r) => deltaHtml(r.pO, "orders") });
   cols.push({ label: "CVR", render: (r) => (r.a.sessions && r.a.orders <= r.a.sessions ? esc(fmt(r.a.orders / r.a.sessions, "pct")) : '<span class="flat" title="more orders than visits: the two are tagged differently, so no rate">–</span>') });
   let s = "";
   if (hasP && rows.length) {
@@ -156,7 +164,7 @@ function d1Traffic(g) {
     if (oc != null) s += ` Orders credited to them ${d1Move(oc)}.`;
   } else if (rows.length) s = `<b>${esc(rows[0].name)}</b> brought the most sessions (${d1N(rows[0].a.sessions)}, ${((rows[0].a.sessions / tot.s) * 100).toFixed(0)}% of all).`;
   const note = RG.mode === "all" ? "" : `<p class="legend-note">${RG.mode === "aw" ? "Awareness campaigns only." : "Everything that is not awareness or social."} Orders are the ones each channel is credited with by UTM.</p>`;
-  return { html: d1Section(2, "Traffic by channel", "", [s, ...d1MoreTraffic(rows, nc, np, hasP)], table(cols, rows) + note), line: s };
+  return { html: d1Section(2, "Traffic by channel", "", [s, ...d1MoreTraffic(rows, nc, np, hasP)], table(cols, rows, { full: true }) + note, null, cols.length > 6), line: s };
 }
 
 // ---------------------------------------------------------------- 3 · checkout funnel
@@ -184,7 +192,7 @@ function d1Funnel(g) {
       ? `<b>The biggest leak is ${esc(worst.from)} → ${esc(worst.l)}</b>: ${fmt(worst.pr, "pct")} → ${fmt(worst.r, "pct")} (${d1PP(worst.r - worst.pr)}).${best.r - best.pr > 0 ? ` ${esc(best.from)} → ${esc(best.l)} improved the most (${d1PP(best.r - best.pr)}).` : ""}`
       : `<b>Every step held or improved</b>; the most at ${esc(best.from)} → ${esc(best.l)} (${d1PP(best.r - best.pr)}).`;
   } else if (rows[4].r != null) s = `<b>${fmt(rows[4].r, "pct")} of payment-step visitors ordered.</b>`;
-  return { html: d1Section(3, "Checkout funnel", "add to cart through to order, GoKwik for the checkout steps", [s, ...d1MoreFunnel(g, rows)], table(cols, rows)), line: s };
+  return { html: d1Section(3, "Checkout funnel", "add to cart through to order, GoKwik for the checkout steps", [s, ...d1MoreFunnel(g, rows)], table(cols, rows, { full: true }), null, cols.length > 6), line: s };
 }
 
 // ---------------------------------------------------------------- 4 · revenue, AOV and basket
@@ -213,7 +221,7 @@ function d1Basket(g) {
     const up = shift[0], down = shift[shift.length - 1];
     s = `<b>AOV ${d1Money(aov)}, ${d1Move(paov ? aov / paov - 1 : null)}</b> (from ${d1Money(paov)}). ` + (Math.abs(up.mix - up.pmix) < 0.01 ? "The basket mix barely moved (no basket size changed its revenue share by 1 pp or more)." : `${esc(up.l)} gained the most revenue share (${d1PP(up.mix - up.pmix)})${down !== up && down.mix - down.pmix < 0 ? `, at the expense of ${esc(down.l.toLowerCase())} (${d1PP(down.mix - down.pmix)})` : ""}.`);
   } else if (aov != null) s = `<b>AOV ${d1Money(aov)}</b>; ${rows.length ? `${esc(rows[0].l.toLowerCase())} baskets brought ${((rows[0].mix || 0) * 100).toFixed(0)}% of revenue` : ""}.`;
-  return { html: d1Section(4, "Revenue & AOV", "basket mix · whole store · items exclude freebies, merch, books and gummies", [s, ...d1MoreBasket(rows, tc, tp)], table(cols, rows)), line: s, whole: true };
+  return { html: d1Section(4, "Revenue & AOV", "basket mix · whole store · items exclude freebies, merch, books and gummies", [s, ...d1MoreBasket(rows, tc, tp)], table(cols, rows, { full: true }), null, cols.length > 6), line: s, whole: true };
 }
 
 // ---------------------------------------------------------------- 5 · products
@@ -245,7 +253,7 @@ function d1Products(g) {
     if (rise.dR > 0) bits.push(`<b>${esc(rise.name)}</b> grew the most (${rise.b.r ? d1P(rise.pR) : "new"}, +${d1Money(rise.dR)}${nc !== np ? " a day" : ""})`);
     s = bits.join("; ") + (bits.length ? "." : "");
   } else if (rows.length) s = `<b>${esc(rows[0].name)}</b> was the top seller (${d1Money(rows[0].a.r)}).`;
-  return { html: d1Section(5, "Products", "top 12 by revenue · whole store", [s, ...d1MoreProducts(all, nc, np, hasP)], table(cols, rows)), line: s, whole: true };
+  return { html: d1Section(5, "Products", "top 12 by revenue · whole store", [s, ...d1MoreProducts(all, nc, np, hasP)], table(cols, rows, { full: true }), null, cols.length > 6), line: s, whole: true };
 }
 
 // ---------------------------------------------------------------- 6 · new vs repeat
@@ -276,7 +284,7 @@ function d1Retention(g) {
     const who = pn != null && pr != null ? (pn < 0 && pr >= 0 ? "<b>The change is a new-customer story</b>: " : pr < 0 && pn >= 0 ? "<b>The change is a repeat-customer story</b>: " : "") : "";
     s = `${who}${who ? "new" : "New"}-customer orders ${d1Move(pn)}, repeat orders ${d1Move(pr)}${nc !== np ? " (per day)" : ""}; repeat customers placed ${fmt(val(W, "rep_share"), "pct")} of orders (was ${fmt(val(PW, "rep_share"), "pct")}).`;
   } else s = `<b>${fmt(val(W, "rep_share"), "pct")} of orders were from repeat customers.</b>`;
-  return { html: d1Section(6, "New vs repeat customers", "whole store · a customer's first valid order is new", [s, ...d1MoreRetention(W, PW, nc, np)], table(cols, R.map(([k, l, u]) => ({ k, l, u })))), line: s, whole: true };
+  return { html: d1Section(6, "New vs repeat customers", "whole store · a customer's first valid order is new", [s, ...d1MoreRetention(W, PW, nc, np)], table(cols, R.map(([k, l, u]) => ({ k, l, u })), { full: true }), null, cols.length > 6), line: s, whole: true };
 }
 
 // ---------------------------------------------------------------- 7 · spend and ROAS
@@ -310,7 +318,7 @@ function d1Spend(g) {
     const ch = rows.filter((r) => r !== T).filter((r) => PW && W[r.sk] != null && PW[r.sk] != null).map((r) => ({ ...r, d: d1Diff(W[r.sk], PW[r.sk], r.sk, "inr", nc, np) })).sort((x, y) => Math.abs(y.d) - Math.abs(x.d))[0];
     if (ch && ch.d) s += ` ${esc(ch.l)} moved spend the most (${d1Sign(ch.d)}${d1Money(Math.abs(ch.d))}${nc !== np ? " a day" : ""}).`;
   } else s = `<b>Spend is not complete for these days</b>, so there is no RoAS: ${esc(rgNa(W, T.sk) || "")}.`;
-  return { html: d1Section(7, RG.mode === "aw" ? "Awareness spend" : "Spend & ROAS", RG.mode === "aw" ? "awareness campaigns: what they cost; there is no ROAS for awareness" : "RoAS is Shopify revenue over performance spend; a channel's row is its own reported revenue over its spend", [s, ...d1MoreSpend(W, PW, rows, T, roas, nc, np), RG.mode === "aw" ? "" : d1EstNote(W)], table(cols, rows)), line: s };
+  return { html: d1Section(7, RG.mode === "aw" ? "Awareness spend" : "Spend & ROAS", RG.mode === "aw" ? "awareness campaigns: what they cost; there is no ROAS for awareness" : "RoAS is Shopify revenue over performance spend; a channel's row is its own reported revenue over its spend", [s, ...d1MoreSpend(W, PW, rows, T, roas, nc, np), RG.mode === "aw" ? "" : d1EstNote(W)], table(cols, rows, { full: true }), null, cols.length > 6), line: s };
 }
 
 // ---------------------------------------------------------------- detail: day by day, drill-down
@@ -519,10 +527,11 @@ R.d1 = (p) => {
       const parts = [d1Overview(g), d1Traffic(g), d1Funnel(g), d1Basket(g), d1Products(g), d1Retention(g), d1Spend(g)];
       // no summary: each section ends with what its table says. The sale /
       // BAU switch and the transition-day note sit above the first section.
-      const lead = cmp.groups.length > 1 || cmp.mixed.length ? `<div class="d1-lead">${ctl}
+      const lead = `<div class="d1-lead">${ctl}
         ${cmp.groups.length > 1 ? `<span class="sub">These dates hold both sale and BAU days; this report covers the ${g.phase === "sale" ? "sale" : "BAU"} days.</span>` : ""}
-        ${cmp.mixed.length ? `<span class="sub">${cmp.mixed.length} transition day${cmp.mixed.length === 1 ? "" : "s"} (${esc(rgListDays(cmp.mixed))}) left out: a sale went live or ended.</span>` : ""}</div>` : "";
-      const sections = parts.map((x, i) => x.html.replace('<section class="card d1-sec"', `<section class="card d1-sec" id="d1-s${i + 1}"`)).join("");
+        ${cmp.mixed.length ? `<span class="sub">${cmp.mixed.length} transition day${cmp.mixed.length === 1 ? "" : "s"} (${esc(rgListDays(cmp.mixed))}) left out: a sale went live or ended.</span>` : ""}
+        <div class="d1-health">${statusStrip()}</div></div>`;
+      const sections = `<div class="d1-grid">${parts.map((x) => x.html).join("")}</div>`;
       const detail = `
         <details class="card rg-all"><summary>Day by day · every metric for every day</summary>${d1DayTable(g, e)}</details>
         <section class="card"><div class="section-head"><h2>Drill-down</h2><span class="sub">explore any dimension for these dates · current, then comparison · Δ${g.prev && g.prev.length && g.prev.length !== g.cur.length ? " (per day)" : ""}</span></div>

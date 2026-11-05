@@ -35,6 +35,12 @@ const RG_NEUTRAL = new Set(["spend", "sessions", "all_spend", "affiliate_spend",
 const rgNa = (w, k) => w.na[k] || (RG_DEP[k] || []).map((d) => w.na[d]).find(Boolean) || null;
 const rgFmtDay = (s, year) => new Date(s + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(year ? { year: "numeric" } : {}), timeZone: "UTC" });
 const rgSpan = (a, b) => (a === b ? rgFmtDay(a, true) : `${rgFmtDay(a)} – ${rgFmtDay(b, true)}`);
+// a table header's span: "17–21 Oct", "28 Sep – 4 Oct"; the year only when the two differ
+const rgSpanShort = (a, b) => {
+  if (a === b) return rgFmtDay(a);
+  if (a.slice(0, 4) !== b.slice(0, 4)) return `${rgFmtDay(a, true)} – ${rgFmtDay(b, true)}`;
+  return a.slice(0, 7) === b.slice(0, 7) ? `${+a.slice(8)}–${rgFmtDay(b)}` : `${rgFmtDay(a)} – ${rgFmtDay(b)}`;
+};
 const rgMonthName = (y, m) => new Date(Date.UTC(y, m, 1)).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
 
 async function rgEnsure() {
@@ -356,7 +362,7 @@ function rgTile(k, label, unit, g) {
         <div class="foot sub" title="${esc(rgNa(w, k) || "")}">${part.ok} of ${part.of} days · ${esc(rgListDays(part.missing))} not entered yet</div></div>`;
     }
   }
-  if (v === null || v === undefined) return `<div class="tile"><div class="label">${esc(label)}</div><div class="na">Data unavailable: ${esc(na || "not available")}</div></div>`;
+  if (v === null || v === undefined) return `<div class="tile"><div class="label">${esc(label)}</div><div class="na" title="${esc(na || "not available")}">Data unavailable: ${esc(na || "not available")}</div></div>`;
   const ch = g.change(k);
   const count = !RG_RATES.includes(k);
   const prior = pw ? pw[k] : null;
@@ -387,13 +393,10 @@ function rgEstFor(k, w) {
 function rgGroupHtml(g, mixed, tiles, title) {
   tiles = rgAdapt(tiles || RG_TILES);
   const nm = g.phase === "sale" ? "Sale days" : "BAU days";
-  const cmpTxt = g.prevSpan ? `${rgSpan(g.prevSpan[0], g.prevSpan[1])}${g.pw.days !== g.prev.length ? "" : ""}` : "";
-  return `<section class="card">
-    <div class="section-head"><h2>${phaseChip(g.phase)} ${nm}</h2><span class="chip">${esc((RG_MODES.find((m) => m[0] === RG.mode) || [])[1])}</span></div>
-    <div class="rg-pair">
-      <div><span class="rg-k">This period</span>${esc(rgVsText(g, "cur"))}</div>
-      ${g.pw ? `<div><span class="rg-k">Compared with</span>${esc(rgVsText(g, "prev"))}</div>` : ""}
-    </div>
+  // one quiet line: the dates are already in the bar above
+  const span = `${esc(rgVsText(g, "cur"))}${g.pw ? ` <span class="rg-dim">vs</span> ${esc(rgVsText(g, "prev"))}` : ""}`;
+  return `<section class="card rg-group">
+    <div class="section-head"><h2>${phaseChip(g.phase)} ${nm}</h2><span class="sub">${span}</span></div>
     ${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}
     <div class="tiles">${tiles.map(([k, l, u]) => rgTile(k, l, u, g)).join("")}</div>
     ${g.pw && g.pw.days !== g.w.days ? `<p class="legend-note">Changes compare per-day averages, because the two periods are not the same length.</p>` : ""}
