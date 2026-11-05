@@ -22,6 +22,16 @@ def day_arrays(orders=2, aov=800, sessions=100, atc=6):
     }
 
 
+def so_far(arrays, t):
+    """Today as Shopify returns it at time t: full hours, the current hour
+    holding only the minutes so far, nothing after."""
+    h = int(t)
+    out = {}
+    for k, v in arrays.items():
+        out[k] = [x if i < h else (x * (t - h) if i == h else 0) for i, x in enumerate(v)]
+    return out
+
+
 def inputs(**kw):
     base = {
         "2026-10-30": day_arrays(orders=2),  # yesterday (Friday)
@@ -29,7 +39,7 @@ def inputs(**kw):
         "2026-10-17": day_arrays(orders=4),
         "2026-10-10": day_arrays(orders=6),
     }
-    today = day_arrays(orders=3)
+    today = so_far(day_arrays(orders=3), 14.5)
     inp = {
         "base": base,
         "phases": {
@@ -114,6 +124,15 @@ def test_orders_so_far_are_read_against_the_same_time_not_the_full_day():
     assert t["vs_yesterday"] == pytest.approx(0.5)
     assert t["typical"] == pytest.approx(3 * 14.5)  # median of 2 and 4
     assert t["vs_typical"] == pytest.approx(0.0)
+
+
+def test_todays_current_hour_is_not_cut_twice():
+    """The current hour's bucket already holds only the minutes so far; the
+    tiles must count all of it (a bug read only half of it at :30)."""
+    today = so_far(day_arrays(orders=4), 14.5)  # 14 full hours, then 2 in 14:00-14:30
+    page = live.build(inputs(today=today), CFG, NOW)
+    assert tile(page, "orders")["value"] == pytest.approx(4 * 14 + 2)
+    assert tile(page, "gmv")["value"] == pytest.approx((4 * 14 + 2) * 800)
 
 
 def test_mixed_phases_are_flagged_when_too_few_match():

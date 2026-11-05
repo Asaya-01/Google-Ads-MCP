@@ -492,7 +492,12 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
             )
         yday = base.get(yesterday)
         typ_days = [base[d] for d in typ_dates]
-        now_m = metrics_at(today_arr, t)
+        # Today's hourly buckets stop at "now": the current hour's bucket
+        # already holds only the minutes so far, so today is its whole array.
+        # (Spreading the current hour, as cum_at does, is only right for the
+        # complete baseline days; doing it to today counted that hour twice
+        # short.)
+        now_m = metrics_at(today_arr, 24)
         yday_m = metrics_at(yday, t) if yday else None
         typ_m = typical_at(typ_days, t) if typ_days else None
         tiles = []
