@@ -406,8 +406,8 @@ def test_spend_follows_the_campaign_type_switch():
 
 
 def test_reddit_today_is_the_sheets_plan_for_today_scaled_to_the_hour():
-    est = live.estimate_other_spend(manual_days(), "bau", 1e5, 12.0, CFG, targets={"2026-10-31": 8800}, today="2026-10-31")
-    assert est["reddit"]["value"] == pytest.approx(8800 * 12 / 24)
+    est = live.estimate_other_spend(manual_days(), "bau", 1e5, 12.0, CFG, targets={"2026-10-31": 5000}, today="2026-10-31")
+    assert est["reddit"]["value"] == pytest.approx(5000 * 12 / 24)
     assert "plan" in est["reddit"]["basis"]
     # no plan for today: only days since the block became sales-only count
     d = manual_days()
@@ -444,7 +444,7 @@ def test_scorecard_is_the_teams_sheet_with_one_performance_roas():
     d = manual_days()
     n = len(d["dates"])
     d["values"].update(reddit_spend=[7000.0] * n, perf_all_spend=[50000.0] * n, sessions=[40000] * n)
-    inp.update(days_manual=d, reddit_targets={"2026-10-31": 8800}, perf_sessions={"value": 900},
+    inp.update(days_manual=d, reddit_targets={"2026-10-31": 5000}, perf_sessions={"value": 900},
                perf_snapshots={"2026-10-30": [[14.4, 800]]})
     page = live.build(inp, CFG, NOW)
     items = {i["key"]: i for g in page["scorecard"]["groups"] for i in g["items"]}
@@ -461,3 +461,25 @@ def test_scorecard_is_the_teams_sheet_with_one_performance_roas():
     assert items["perf_sessions"]["yesterday"] == 800
     # the sheets are behind: compared with the latest day they are filled for
     assert "29 Oct" in items["roas"]["ref"]["label"]
+
+
+def test_sales_by_hour_is_shopifys_report_in_ist_hours():
+    from app.shopify import Shopify
+
+    shop = Shopify.__new__(Shopify)
+    seen = {}
+
+    def fake(q):
+        seen["q"] = q
+        return [
+            {"hour": "2026-11-03T18:30:00Z", "orders": "10", "total_sales": "8000.00"},  # 00:00 IST 4 Nov
+            {"hour": "2026-11-04T17:30:00Z", "orders": "12", "total_sales": "9600.50"},  # 23:00 IST
+            {"hour": "2026-11-04T18:30:00Z", "orders": "5", "total_sales": "100"},  # 5 Nov: dropped
+        ]
+
+    shop.shopifyql = fake
+    out = shop.sales_hourly("2026-11-04", "2026-11-04", ["ASAYAINF", "ASAYASS"])
+    assert list(out) == ["2026-11-04"]
+    assert out["2026-11-04"]["orders"][0] == 10 and out["2026-11-04"]["orders"][23] == 12
+    assert out["2026-11-04"]["gmv"][23] == pytest.approx(9600.50)
+    assert "FROM sales" in seen["q"] and "NOT CONTAINS 'ASAYAINF'" in seen["q"]

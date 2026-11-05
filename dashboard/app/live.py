@@ -1214,6 +1214,9 @@ def _shop(cfg: dict) -> Shopify:
     return Shopify(scfg["store"], scfg["api_version"], cid, sec)
 
 
+SALES_LOGIC = "shopify-sales-report"
+
+
 def baseline(
     cfg: dict, store, shop: Shopify, now: dt.datetime, notes: dict
 ) -> dict:
@@ -1229,6 +1232,9 @@ def baseline(
         d = today - dt.timedelta(days=7 * w)
         wanted.add(d.isoformat())
     cache = store.get_json("cache/live/baseline.json") or {"days": {}}
+    # days built before the switch to Shopify's sales report are rebuilt
+    if cache.get("logic") != SALES_LOGIC:
+        cache = {"days": {}}
     days = cache.get("days", {})
     first_run_today = cache.get("built") != today.isoformat()
     todo = [
@@ -1236,7 +1242,18 @@ def baseline(
         for d in sorted(wanted)
         if d not in days or (first_run_today and d == yesterday.isoformat())
     ]
+    names = [n for n in cfg["orders"]["exclude_name_regex"].split("|") if n]
+    sales = None
     if todo:
+        try:
+            # Shopify's own Sales report, hour by hour: the D-1 numbers
+            sales = shop.sales_hourly(todo[0], yesterday.isoformat(), names)
+        except Exception as exc:
+            notes["baseline_sales"] = (
+                "Shopify's sales report by hour could not be read, so past "
+                f"days use orders without cancellations instead: {exc}"
+            )
+    if todo and sales is None:
         rows = bq.run(
             "orders_hourly",
             start_date=dt.date.fromisoformat(todo[0]),
@@ -1268,6 +1285,8 @@ def baseline(
                     "Yesterday's orders could not be read from Shopify, so "
                     f"the BigQuery copy is used and may be incomplete: {exc}"
                 )
+    if todo:
+        by_day = sales if sales is not None else by_day
         for d in todo:
             day = by_day.get(d)
             if not day:
@@ -1282,7 +1301,13 @@ def baseline(
             days[d] = {**day, "sessions": s, "atc": a}
     keep = {d: v for d, v in days.items() if d in wanted}
     store.put_json(
-        "cache/live/baseline.json", {"built": today.isoformat(), "days": keep}
+        "cache/live/baseline.json",
+        {
+            "built": today.isoformat(),
+            # only days read from the sales report count as built with it
+            "logic": SALES_LOGIC if (not todo or sales is not None) else None,
+            "days": keep,
+        },
     )
     return keep
 
@@ -1313,15 +1338,17 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
             "meta_perf_spend",
             "google_perf_spend",
         )
+        vals = days.get("values") or {}
         inp["days_manual"] = {
             "dates": days["dates"],
             "phase": days.get("phase") or [],
             "values": {
-                k: (days.get("values") or {}).get(k)
-                or [None] * len(days["dates"])
-                for k in keep
+                k: vals.get(k) or [None] * len(days["dates"]) for k in keep
             },
         }
+        # GMV is Shopify's Total sales, as on D-1 (ROAS, the affiliate share)
+        if vals.get("sh_sales"):
+            inp["days_manual"]["values"]["gmv"] = vals["sh_sales"]
     # Google awareness campaigns by id, the same list the other tabs use
     cd = store.get_json("pages/campaign_days.json") or {}
     g_names = (cd.get("google") or {}).get("names", [])
@@ -1344,12 +1371,26 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
     try:
         shop = _shop(cfg)
         inp["base"] = baseline(cfg, store, shop, now, notes)
-        orders = shop.orders_between(
-            f"{day}T00:00:00+05:30", f"{tomorrow}T00:00:00+05:30"
-        )
-        counts, gmv = order_hours(
-            orders, day, cfg["orders"]["exclude_name_regex"]
-        )
+        names = [n for n in cfg["orders"]["exclude_name_regex"].split("|") if n]
+        try:
+            # Orders and Total sales as Shopify's Sales report counts them:
+            # the same numbers as the D-1 tab and the team's sheet
+            sh = shop.sales_hourly(day, day, names).get(day) or {
+                "orders": [0] * 24,
+                "gmv": [0.0] * 24,
+            }
+            counts, gmv = sh["orders"], sh["gmv"]
+        except Exception as exc:
+            notes["today_sales"] = (
+                "Shopify's sales report could not be read, so today counts "
+                f"orders without cancellations instead: {exc}"
+            )
+            orders = shop.orders_between(
+                f"{day}T00:00:00+05:30", f"{tomorrow}T00:00:00+05:30"
+            )
+            counts, gmv = order_hours(
+                orders, day, cfg["orders"]["exclude_name_regex"]
+            )
         today_arr = {
             "orders": counts,
             "gmv": gmv,

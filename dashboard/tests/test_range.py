@@ -203,6 +203,12 @@ MODE_FIELDS = [
     "awareness_gmv",
     "new_orders",
     "affiliate_spend",
+    "report_perf_sessions",
+    "sh_orders",
+    "sh_sales",
+    "spend",
+    "perf_spend",
+    "perf_all_spend",
 ]
 
 
@@ -217,15 +223,21 @@ def mode_page():
         "values": {
             "sessions": col(100),
             "perf_sessions": col(80),
+            "report_perf_sessions": col(60),
             "awareness_sessions": col(20),
             "orders": col(10),
+            "sh_orders": col(11),
             "perf_orders": col(9),
             "awareness_orders": col(1),
             "gmv": col(8000),
+            "sh_sales": col(7900),
             "perf_gmv": col(7500),
             "awareness_gmv": col(500),
             "new_orders": col(6),
             "affiliate_spend": col(100),
+            "spend": col(1000),
+            "perf_spend": col(800),
+            "perf_all_spend": col(900),
         },
         "na": {},
         "reasons": [],
@@ -233,24 +245,26 @@ def mode_page():
 
 
 @node
-def test_performance_and_awareness_are_separate_views_of_the_same_days():
+def test_every_view_uses_the_d1_logic():
     out = run_mode(
         mode_page(),
         "const f=(m)=>{const e=E(D,m);const w=e.windowOf(e.dates);"
-        "return {s:w.sessions,o:w.orders,g:w.gmv,aov:w.aov,new:w.new_orders,"
-        "aff:w.affiliate_spend,why:w.na.new_orders};};"
+        "return {s:w.sessions,ps:w.perf_sessions,o:w.orders,g:w.gmv,aov:w.aov,new:w.new_orders,"
+        "aff:w.affiliate_spend,sp:w.spend,roas:w.roas};};"
         "return {all:f('all'),perf:f('perf'),aw:f('aw')};",
     )
-    assert out["all"]["s"] == 400 and out["all"]["g"] == 32000
-    assert out["perf"]["s"] == 320 and out["perf"]["g"] == 30000
-    assert out["aw"]["s"] == 80 and out["aw"]["g"] == 2000
-    assert out["perf"]["aov"] == pytest.approx(30000 / 36)
-    # the two views add up to the whole
-    assert out["perf"]["g"] + out["aw"]["g"] == out["all"]["g"]
-    # fields that cannot be split say so instead of showing a number
-    assert out["perf"]["new"] is None and "not split" in out["perf"]["why"]
-    assert out["aw"]["aff"] is None
-    assert out["perf"]["aff"] == 400
+    # Performance and All: the whole store, Shopify's Orders and Total sales,
+    # the team's Perf sessions; they differ only in spend
+    for m in ("all", "perf"):
+        assert out[m]["s"] == 400 and out[m]["ps"] == 240
+        assert out[m]["o"] == 44 and out[m]["g"] == 31600
+        assert out[m]["aov"] == pytest.approx(31600 / 44)
+        assert out[m]["new"] == 24 and out[m]["aff"] == 400
+        assert out[m]["roas"] == pytest.approx(31600 / 3600)
+    assert out["all"]["sp"] == 4000 and out["perf"]["sp"] == 3200
+    # Awareness: awareness traffic and what is credited to it, no ROAS
+    assert out["aw"]["s"] == 80 and out["aw"]["o"] == 4 and out["aw"]["g"] == 2000
+    assert out["aw"]["aff"] is None and out["aw"]["roas"] is None
 
 
 def run_mode(page, body):

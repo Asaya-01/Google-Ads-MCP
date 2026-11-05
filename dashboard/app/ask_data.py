@@ -62,21 +62,28 @@ def pct_change(c, p):
 # --------------------------------------------------------------------- views
 
 GK = ["ic", "gk_converted", "gk_address", "gk_payment"]
+# The D-1 tab's logic for every view (static/range_engine.js MODES): the
+# Performance and All views are the whole store with Shopify's own Orders and
+# Total sales and the team's Perf sessions, differing only in spend;
+# Awareness is awareness traffic and what is credited to it.
+STORE = {
+    "orders": "sh_orders",
+    "gmv": "sh_sales",
+    "store_gmv": "sh_sales",
+    "perf_sessions": "report_perf_sessions",
+}
 MODES = {
+    "all": {"alias": dict(STORE), "blank": set(), "why": ""},
     "perf": {
         "alias": {
-            "sessions": "perf_sessions",
-            "atc": "perf_atc",
-            "orders": "perf_orders",
-            "gmv": "perf_gmv",
+            **STORE,
             "meta_spend": "meta_perf_spend",
             "google_spend": "google_perf_spend",
             "spend": "perf_spend",
             "all_spend": "perf_all_spend",
-            **{k: "perf_" + k for k in GK},
         },
-        "blank": {"new_orders", "repeat_orders", "new_gmv", "repeat_gmv"},
-        "why": "not split by campaign type",
+        "blank": set(),
+        "why": "",
     },
     "aw": {
         "alias": {
@@ -113,6 +120,9 @@ MODES = {
             "reddit_spend",
             "other_spend",
             "perf_all_spend",
+            "sh_orders",
+            "sh_sales",
+            "report_perf_sessions",
         },
         "why": "not an awareness channel, or not split by campaign type",
     },
@@ -257,22 +267,22 @@ class Engine:
         self.phase_source = D.get("phase_source")
         self.reasons = list(D.get("reasons") or [])
         self.mode = mode
-        m = MODES.get(mode)
-        if not m:
-            self.values, self.na = D["values"], D["na"]
-        else:
+        m = MODES.get(mode) or MODES["all"]
+        if m["why"]:
             self.reasons.append(m["why"])
-            why = len(self.reasons) - 1
-            n = len(self.dates)
-            self.values, self.na = {}, {}
-            for k in self.fields:
-                if k in m["blank"]:
-                    self.values[k] = [None] * n
-                    self.na[k] = {"*": why}
-                    continue
-                src = k if k == "store_gmv" else m["alias"].get(k, k)
-                self.values[k] = D["values"].get(src) or [None] * n
-                self.na[k] = D["na"].get(src) or {}
+        why = len(self.reasons) - 1
+        n = len(self.dates)
+        self.values, self.na = {}, {}
+        for k in self.fields:
+            if k in m["blank"]:
+                self.values[k] = [None] * n
+                self.na[k] = {"*": why}
+                continue
+            # a field the data does not have (an older page) keeps its own values
+            alias = m["alias"].get(k)
+            src = alias if alias and D["values"].get(alias) is not None else k
+            self.values[k] = D["values"].get(src) or [None] * n
+            self.na[k] = D["na"].get(src) or {}
 
     @property
     def first(self) -> str:

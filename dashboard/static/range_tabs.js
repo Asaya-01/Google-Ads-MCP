@@ -218,7 +218,7 @@ R.products = (p) => {
       const [prodTbl, catTbl, n] = rgProductTables(pd, g);
       const all = new Set(c.all);
       host.innerHTML = `
-        <section class="card"><div class="section-head"><h2>Products</h2>${ctl}<span class="sub">${n} products · ${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""} · excluded product types left out</span></div>
+        <section class="card"><div class="section-head"><h2>Products</h2>${ctl}<span class="sub">${n} products · ${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""} · excluded product types left out · product revenue is item sales of the orders placed; the headline Total sales also counts cancellations and returns, as on D-1</span></div>
           ${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}${prodTbl}</section>
         <section class="card"><div class="section-head"><h2>Categories</h2></div>${catTbl}</section>
         <section class="card"><div class="section-head"><h2>Basket size</h2><span class="sub">orders by number of items · ${esc(rgVsText(g, "cur"))}${g.pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""}</span></div>${bkHtml(g)}</section>

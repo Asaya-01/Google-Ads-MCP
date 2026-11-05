@@ -114,6 +114,31 @@ class Shopify:
                 }
         return out
 
+    def sales_hourly(
+        self, since: str, until: str, exclude_names: list[str]
+    ) -> dict[str, dict]:
+        """Shopify's Sales report (Orders and Total sales, as on D-1) for each
+        IST hour of the days since..until: {date: {"orders": [24], "gmv": [24]}}."""
+        cond = " AND ".join(
+            f"order_name NOT CONTAINS '{n}'" for n in exclude_names
+        )
+        rows = self.shopifyql(
+            "FROM sales SHOW orders, total_sales TIMESERIES hour "
+            + (f"WHERE {cond} " if cond else "")
+            + f"SINCE {since} UNTIL {until}"
+        )
+        out: dict[str, dict] = {}
+        for r in rows:
+            at = dt.datetime.fromisoformat(
+                str(r["hour"]).replace("Z", "+00:00")
+            ).astimezone(IST)
+            d = out.setdefault(
+                at.date().isoformat(), {"orders": [0] * 24, "gmv": [0.0] * 24}
+            )
+            d["orders"][at.hour] = _int(r.get("orders"))
+            d["gmv"][at.hour] = float(r.get("total_sales") or 0)
+        return {k: v for k, v in out.items() if since <= k <= until}
+
     def orders_count(self, day: str) -> int:
         """Shopify's own count of orders created on one IST day (test orders
         excluded), used to check the BigQuery copy is complete."""

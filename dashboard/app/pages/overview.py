@@ -119,6 +119,8 @@ def _na_source(key: str) -> str:
         "atc_rate": "sessions",
         "mer": "spend",
         "roas": "perf_all_spend",
+        "orders": "sh_orders",
+        "gmv": "sh_sales",
     }.get(key, key)
 
 
@@ -274,10 +276,10 @@ def _pulse(ctx: Context) -> dict:
         card(
             "roas",
             "ROAS",
-            "Shopify GMV / performance spend on every channel: Meta, Google "
-            "and Reddit sales campaigns, CRM and affiliates",
+            "Shopify's Total sales / performance spend on every channel: "
+            "Meta, Google and Reddit sales campaigns, CRM and affiliates",
             "perf_all_spend",
-            ["perf_all_spend", "gmv"],
+            ["perf_all_spend", "sh_sales"],
         ),
     ]
     return {

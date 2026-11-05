@@ -10,7 +10,9 @@ const BK_LABEL = (n, top) => (n === 0 ? "Gifts or merch only" : n >= top ? `${to
 
 function bkSum(p, days) {
   const set = new Set(days || []), m = new Map();
-  for (const [d, slab, orders, units, sales] of p.rows) {
+  // sales are the orders' own value (total price), so a basket's AOV is real
+  for (const [d, slab, orders, units, items, gmv] of p.rows) {
+    const sales = gmv == null ? items : gmv;
     if (!set.has(d)) continue;
     const a = m.get(slab) || m.set(slab, { orders: 0, units: 0, sales: 0 }).get(slab);
     a.orders += orders; a.units += units; a.sales += sales;
@@ -51,12 +53,20 @@ function bkHtml(g) {
     { label: "Sales", render: (r) => esc(fmt(r.a.sales, "inr")) },
     { label: "Share of sales", render: (r) => `${pc(r.ss)}${r.ssp != null ? `<br><span class="sub">vs ${esc((r.ssp * 100).toFixed(1))}% · ${pp(r.ss, r.ssp)}</span>` : ""}` },
     { label: "AOV", render: (r) => (r.aov == null ? '<span class="na">–</span>' : esc(fmt(r.aov, "inr")) + (r.paov != null ? `<br><span class="sub">vs ${esc(fmt(r.paov, "inr"))}</span>` : "")) },
-    { label: "Items", render: (r) => esc(fmt(r.a.units, "int")) },
+    { label: "Items", render: (r) => (r.a.units == null ? '<span class="flat">–</span>' : esc(fmt(r.a.units, "int"))) },
   ];
-  const total = { label: "All orders", _class: "total", a: tc, so: 1, sp: tp ? 1 : null, ss: 1, ssp: tp ? 1 : null, aov: tc.orders ? tc.sales / tc.orders : null, paov: tp && tp.orders ? tp.sales / tp.orders : null,
+  const total = { label: "All orders placed", _class: "total", a: tc, so: 1, sp: tp ? 1 : null, ss: 1, ssp: tp ? 1 : null, aov: tc.orders ? tc.sales / tc.orders : null, paov: tp && tp.orders ? tp.sales / tp.orders : null,
     b: tp, dOrders: tp && tp.orders ? rgAvgChange(tc.orders, nCur, tp.orders, nPrev) : null };
+  // reconcile to the headline: Shopify's own Orders and Total sales (as on D-1)
+  const recon = [];
+  const days = (g.cur || []).filter((d) => have.has(d));
+  const W = days.length ? (RG.engAll || (RG.engAll = createRangeEngine(RG.raw, "all"))).windowOf(days) : null;
+  if (W && W.orders != null && W.gmv != null) {
+    recon.push({ label: "Cancelled orders and returns (Shopify's report)", _adj: true, a: { orders: W.orders - tc.orders, units: null, sales: W.gmv - tc.sales }, so: null, ss: null, aov: null, b: null, dOrders: null });
+    recon.push({ label: "Total (Shopify's report, as on D-1)", _class: "total", a: { orders: W.orders, units: null, sales: W.gmv }, so: null, ss: null, aov: W.orders ? W.gmv / W.orders : null, b: null, dOrders: null });
+  }
   const warn = [missCur.length ? `Basket data is missing for ${rgListDays(missCur)}, which are left out.` : "", g.prev && missPrev.length ? `Comparison days without basket data (${rgListDays(missPrev)}) are left out too.` : ""].filter(Boolean).join(" ");
   const note = RG.mode === "all" ? "" : `<p class="legend-note">Basket size is for the whole store: orders cannot be split by campaign type here.</p>`;
-  return (warn ? `<div class="banner">${esc(warn)}</div>` : "") + table(cols, [...rows, total]) +
-    `<p class="legend-note">A basket counts the items bought, leaving out freebies, merch, books and gummies, and orders that are tests, cancelled, samples or influencer orders. Share of orders is how many of the day's orders held that many items; the “vs” line is the comparison period. Sales are the item sales of those orders.</p>${note}`;
+  return (warn ? `<div class="banner">${esc(warn)}</div>` : "") + table(cols, [...rows, total, ...recon]) +
+    `<p class="legend-note">A basket counts the items bought, leaving out freebies, merch, books and gummies, and orders that are tests, cancelled, samples or influencer orders. Share of orders is how many of the day's orders held that many items; the “vs” line is the comparison period. Sales are those orders' value. The last two rows tie the table to Shopify's own Orders and Total sales, the numbers on D-1 and every headline: Shopify still counts cancelled orders as orders and takes returns off Total sales.</p>${note}`;
 }

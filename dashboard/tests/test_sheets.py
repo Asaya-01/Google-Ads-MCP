@@ -89,7 +89,7 @@ def test_the_broadcast_sheet_is_filled_through_the_day_the_flow_sheet_is():
 
 def test_the_reddit_block_reads_spend_only_and_stops_at_the_last_filled_day():
     pad = [""] * 32  # columns A..AF
-    row = lambda d, spend: [d, "Sun", "BAU", "BAU", *[""] * 27, "8,800", spend]
+    row = lambda d, spend: [d, "Sun", "BAU", "BAU", *[""] * 27, "5,000", spend]
     rows = [
         row("01-Nov-2026", "6,950"),
         row("02-Nov-2026", "7,263"),
@@ -143,7 +143,7 @@ def _workbook(label_row, label_col, actual_col, days, fmt):
     )
     for d, spend in days:
         row = list(blank)
-        row[0], row[label_col], row[actual_col] = d, "8,800", spend
+        row[0], row[label_col], row[actual_col] = d, "5,000", spend
         rows.append(row)
     rows.append(["NOVEMBER TOTAL"] + [""] * (width - 1))
     return rows
@@ -191,7 +191,7 @@ def test_the_reddit_plan_is_read_for_every_day_of_the_month():
     assert sheets.locate_target(rows, "REDDIT") == 31
     plan = sheets.parse_targets(rows[4:], 31, SPECS["reddit"]["date_format"])
     # the plan covers days with no actual yet: that is what today's estimate uses
-    assert plan == {"2026-11-01": 8800, "2026-11-02": 8800, "2026-11-03": 8800}
+    assert plan == {"2026-11-01": 5000, "2026-11-02": 5000, "2026-11-03": 5000}
     merged = sheets.merge_parsed([{"days": {}, "filled_through": None, "notes": [], "targets": {"2026-10-31": 9000}},
                                   {"days": {}, "filled_through": None, "notes": [], "targets": plan}])
-    assert merged["targets"]["2026-10-31"] == 9000 and merged["targets"]["2026-11-03"] == 8800
+    assert merged["targets"]["2026-10-31"] == 9000 and merged["targets"]["2026-11-03"] == 5000

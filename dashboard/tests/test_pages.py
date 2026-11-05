@@ -54,6 +54,11 @@ def _dataset(with_meta: bool):
     for d in days:
         boost = 2.4 if d in sale else 1.0
         orders = int(500 * boost)
+        # Shopify's own report: cancelled orders still count, returns come off
+        data.setdefault("shopify_sales", {})[d] = {
+            "orders": orders + 3,
+            "sales": orders * 800.0 - 1500.0,
+        }
         data["orders_daily"].append(
             {
                 "date": d,
@@ -464,7 +469,7 @@ def test_pulse_shows_one_roas_on_performance_spend():
     assert [c["key"] for c in cards] == ["roas"]
     f = ctx.facts[D1]
     if f.get("perf_all_spend"):
-        assert cards[0]["value"] == pytest.approx(f["gmv"] / f["perf_all_spend"])
+        assert cards[0]["value"] == pytest.approx(f["sh_sales"] / f["perf_all_spend"])
     else:
         assert cards[0]["value"] is None and cards[0]["na"]
     assert len(cards[0]["spark"]) == 14

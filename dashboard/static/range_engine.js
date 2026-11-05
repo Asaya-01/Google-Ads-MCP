@@ -32,22 +32,26 @@
   const ratio = (a, b) => (a == null || b == null || b === 0 ? null : a / b);
   const pctChange = (c, p) => (c == null || p == null || p === 0 ? null : (c - p) / p);
 
-  /* Performance and Awareness as two separate views of the same days. A view
-     points each headline field at its split counterpart, so everything built on
-     the engine (tiles, tables, charts, comparisons) reads one kind of campaign
-     and nothing else: Performance is every campaign not named "awareness",
-     Awareness is the ones that are. Fields with no such split (new vs repeat,
-     and the affiliate and CRM spends for Awareness) say so instead of showing a
-     number that belongs to something else. */
+  /* The three views, with the D-1 tab's logic everywhere, so every tab shows
+     the same numbers:
+     - Performance and All: the whole store, as the team's D-1 sheet reads it.
+       Orders and GMV are Shopify's own Sales report (Orders and Total sales:
+       cancelled orders still count as orders, Total sales nets off returns),
+       sessions, add-to-carts and checkouts are the whole store's, and Perf
+       sessions are the team's rule. ROAS is Total sales over performance
+       spend. The two views differ only in spend: Performance shows sales
+       campaigns, All every campaign.
+     - Awareness: awareness traffic and the orders and GMV credited to it.
+     Fields with no such split say so instead of showing a number that belongs
+     to something else. */
   const GK = ["ic", "gk_converted", "gk_address", "gk_payment"];
+  const STORE = { orders: "sh_orders", gmv: "sh_sales", store_gmv: "sh_sales", perf_sessions: "report_perf_sessions" };
   const MODES = {
+    all: { alias: { ...STORE }, blank: {}, why: "" },
     perf: {
-      alias: Object.assign(
-        { sessions: "perf_sessions", atc: "perf_atc", orders: "perf_orders", gmv: "perf_gmv",
-          meta_spend: "meta_perf_spend", google_spend: "google_perf_spend", spend: "perf_spend", all_spend: "perf_all_spend" },
-        ...GK.map((k) => ({ [k]: "perf_" + k }))),
-      blank: { new_orders: 1, repeat_orders: 1, new_gmv: 1, repeat_gmv: 1 },
-      why: "not split by campaign type",
+      alias: { ...STORE, meta_spend: "meta_perf_spend", google_spend: "google_perf_spend", spend: "perf_spend", all_spend: "perf_all_spend" },
+      blank: {},
+      why: "",
     },
     aw: {
       alias: Object.assign(
@@ -57,11 +61,12 @@
           meta_perf_value: "meta_aw_value", google_perf_spend: "google_aw_spend", google_perf_value: "google_aw_value" },
         ...GK.map((k) => ({ [k]: "awareness_" + k }))),
       blank: { new_orders: 1, repeat_orders: 1, new_gmv: 1, repeat_gmv: 1, affiliate_spend: 1, affiliate_revenue: 1, crm_flow_spend: 1,
-        crm_flow_revenue: 1, crm_broadcast_spend: 1, crm_broadcast_revenue: 1, crm_spend: 1, crm_revenue: 1, reddit_spend: 1, other_spend: 1, perf_all_spend: 1 },
+        crm_flow_revenue: 1, crm_broadcast_spend: 1, crm_broadcast_revenue: 1, crm_spend: 1, crm_revenue: 1, reddit_spend: 1, other_spend: 1, perf_all_spend: 1,
+        sh_orders: 1, sh_sales: 1, report_perf_sessions: 1 },
       why: "not an awareness channel, or not split by campaign type",
     },
   };
-  /* ROAS, the one the team reads: the whole store's GMV over the performance
+  /* ROAS, the one the team reads: Shopify's Total sales over the performance
      spend of every channel (Meta, Google and Reddit sales campaigns, CRM,
      affiliates). Awareness and Reach spend are never in it, and it is the
      same number in the Performance and All views. */
@@ -71,13 +76,13 @@
   }
   function applyMode(D, mode) {
     D = withStore(D);
-    const m = MODES[mode];
-    if (!m) return D; // "all": the data as it is
+    const m = MODES[mode] || MODES.all;
     const n = D.dates.length, values = {}, na = {};
-    const reasons = D.reasons.concat([m.why]), why = reasons.length - 1;
+    const reasons = m.why ? D.reasons.concat([m.why]) : D.reasons, why = reasons.length - 1;
     for (const k of D.fields) {
       if (m.blank[k]) { values[k] = new Array(n).fill(null); na[k] = { "*": why }; continue; }
-      const src = k === "store_gmv" ? "store_gmv" : m.alias[k] || k;
+      // a field the data does not have yet (an older page) keeps its own values
+      const src = m.alias[k] && D.values[m.alias[k]] ? m.alias[k] : k;
       values[k] = D.values[src] || new Array(n).fill(null);
       na[k] = D.na[src] || {};
     }

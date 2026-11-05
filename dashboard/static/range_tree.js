@@ -374,15 +374,33 @@ function trChannelHtml(g) {
   const pc = (v) => (v == null ? '<span class="na">–</span>' : esc(fmt(v, "pct")));
   const cols = [
     { label: "Channel (UTM, last click)", text: true, render: (r) => esc(r.label) },
-    { label: "Sessions", render: (r) => esc(fmt(r.s, "int")) }, { label: "Δ sessions", render: (r) => (g.pw ? deltaHtml(r.dS, "sessions") : '<span class="flat">–</span>') },
+    { label: "Sessions", render: (r) => (r.s == null ? '<span class="flat">–</span>' : esc(fmt(r.s, "int"))) }, { label: "Δ sessions", render: (r) => (g.pw && r.dS !== undefined ? deltaHtml(r.dS, "sessions") : '<span class="flat">–</span>') },
     { label: "Orders", render: (r) => esc(fmt(Math.round(r.o), "int")) },
-    { label: "GMV", render: (r) => esc(fmt(r.gmv, "inr")) }, { label: "Δ GMV", render: (r) => (g.pw ? deltaHtml(r.dG, "gmv") : '<span class="flat">–</span>') },
+    { label: "GMV", render: (r) => esc(fmt(r.gmv, "inr")) }, { label: "Δ GMV", render: (r) => (g.pw && r.dG !== undefined ? deltaHtml(r.dG, "gmv") : '<span class="flat">–</span>') },
     { label: "Share of GMV", render: (r) => pc(r.share) },
     { label: "Conversion", render: (r) => pc(r.cvr) + (r.pcvr != null ? `<br><span class="sub">vs ${esc(fmt(r.pcvr, "pct"))}</span>` : "") },
   ];
   const tot = { label: "All channels", s: totS, o: [...C.values()].reduce((t, a) => t + a[2], 0), gmv: totG, share: totG ? 1 : null, _class: "total" };
+  /* Reconcile to the headline (Shopify's own Orders and Total sales, as on
+     D-1): the channels count orders as placed; Shopify's report also counts
+     cancelled orders and nets off returns. In the Performance view the
+     awareness and Reach visits are a row of their own, so the table adds up
+     to the whole store like every other tab. */
+  const extra = [];
+  if (RG.mode !== "aw" && g.w && g.w.orders != null && g.w.gmv != null) {
+    if (RG.mode === "perf") {
+      let o = 0, gm = 0, s = 0;
+      const set = new Set(g.cur || []);
+      for (const r of p.rows) if (set.has(r[0]) && r[2] !== want) { s += r[3]; o += r[5]; gm += r[6]; }
+      if (o || gm || s) extra.push({ label: "Awareness and Reach visits", s, o, gmv: gm, share: null, cvr: null });
+    }
+    const placedO = tot.o + extra.reduce((t, r) => t + r.o, 0), placedG = tot.gmv + extra.reduce((t, r) => t + r.gmv, 0);
+    extra.push({ label: "Cancelled orders and returns (Shopify's report)", s: null, o: g.w.orders - placedO, gmv: g.w.gmv - placedG, share: null, cvr: null, _adj: true });
+    tot.label = "Total (Shopify's report, as on D-1)"; tot.o = g.w.orders; tot.gmv = g.w.gmv;
+    tot.s = totS + extra.reduce((t, r) => t + (r.s || 0), 0);
+  }
   tot.cvr = tot.s ? tot.o / tot.s : null;
   const note = [missS.length ? `Sessions are missing for ${rgListDays(missS)}.` : "", missO.length ? `Orders by channel are missing for ${rgListDays(missO)}.` : ""].filter(Boolean).join(" ");
-  return (note ? `<div class="banner">Data unavailable: ${esc(note)}</div>` : "") + table(cols, [...rows, tot], { maxHeight: "60vh" }) +
+  return (note ? `<div class="banner">Data unavailable: ${esc(note)}</div>` : "") + table(cols, [...rows, ...extra, tot], { maxHeight: "60vh" }) +
     `<p class="legend-note">Orders and GMV as Shopify credits them, by the UTM of the visit that converted, so organic and direct are here too. This will not match what Meta and Google report for themselves (the next table).</p>`;
 }
