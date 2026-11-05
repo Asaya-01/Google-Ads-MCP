@@ -46,4 +46,10 @@ def build(ctx: Context) -> dict:
         "values": values,
         "na": na,
         "reasons": reasons,
+        # spends estimated because the sheet has not reached the day yet
+        "estimated": {
+            d: ctx.facts[d]["estimated"]
+            for d in dates
+            if ctx.facts[d].get("estimated")
+        },
     }

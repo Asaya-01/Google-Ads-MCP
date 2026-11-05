@@ -318,6 +318,26 @@ did not step up at launch. A date can still be forced in `phases.overrides`
 
 ## Date ranges
 
+The date bar is one slim strip pinned under the tabs while you scroll: the
+Performance / Awareness / All switch, the date and comparison pickers, and one
+line saying what the dates hold and what they are compared with.
+
+**Spends while the sheets catch up.** Affiliate, CRM and Reddit spends come
+from sheets filled by hand a day or two late. A day after a sheet's last filled
+day (up to `manual_spends.estimate_days`, 7, back from D-1) gets an estimate so
+Spends, ROAS and CPS are not blank: affiliate at its recent share of Shopify's
+sales, CRM as a typical recent day of the same kind (sale or BAU), Reddit as the
+day's plan in the media-plan workbook. Every tile and insight built on one says
+"est." with the days; the next refresh after the sheet is filled replaces it.
+
+**D-1** has no summary block: each section ends with "What this says", worked
+out from its table. Revenue is split into orders x AOV, orders into sessions x
+conversion (how many orders traffic and conversion each added or cost), the
+biggest checkout leak is priced in orders and rupees, AOV is split into basket
+mix and price within a basket size, product moves are shown as a share of the
+total change, and spend is set against revenue to explain the RoAS move. The
+written commentary is off (`commentary.enabled`); Ask Claude answers questions.
+
 Overview, Daily, Marketing, Products and D-1 share one date picker and one
 comparison menu (Shopify style). Sale days are only ever compared with sale
 days, and BAU days with BAU days: a mixed range is split into a BAU block and a

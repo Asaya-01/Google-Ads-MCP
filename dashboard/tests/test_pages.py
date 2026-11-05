@@ -872,3 +872,39 @@ def test_drill_days_cover_every_dimension_and_add_up(built_without_meta):
     assert all(r[4] <= r[3] for r in p["channel"]["rows"])
     # awareness rows never count as perf sessions
     assert all(r[4] == 0 for r in p["campaign"]["rows"] if r[2] == 1)
+
+
+def test_days_the_sheets_have_not_reached_get_labelled_estimates(built_without_meta):
+    from app.pages.common import Context
+
+    _, ctx = built_without_meta
+    days = sorted(ctx.facts)
+    filled = days[:-1]  # the sheets stop one day short of D-1
+    data = dict(ctx.data)
+    full = lambda s: {"days": {d: {"spend": s, "revenue": 0.0} for d in filled}, "filled_through": filled[-1]}
+    data["manual_spends"] = {
+        "sources": {
+            "affiliate": full(100.0),
+            "crm_flow": full(50.0),
+            "crm_broadcast": full(0.0),
+            "reddit": {**full(7000.0), "targets": {days[-1]: 5000.0}},
+        },
+        "failed": {},
+        "stale": {},
+    }
+    c2 = Context(data, ctx.cfg)
+    late = c2.facts[days[-1]]
+    assert sorted(late["estimated"]) == ["affiliate_spend", "crm_broadcast_spend", "crm_flow_spend", "reddit_spend"]
+    assert late["crm_flow_spend"] == 50.0 and late["crm_broadcast_spend"] == 0.0
+    assert late["reddit_spend"] == 5000.0  # the day's plan in the media-plan workbook
+    # affiliate follows its recent share of Shopify's sales
+    assert late["affiliate_spend"] > 0
+    assert late["other_spend"] == pytest.approx(late["affiliate_spend"] + 50.0 + 0.0 + 5000.0)
+    assert "other_spend" not in late["na"]
+    if late.get("perf_spend") is not None:
+        assert late["perf_all_spend"] is not None and late["roas"] is not None
+    # filled days are never estimated
+    assert "estimated" not in c2.facts[filled[-1]]
+    # the days page says which spends are estimates
+    from app.pages import days as days_page
+    assert days_page.build(c2)["estimated"][days[-1]]

@@ -7,6 +7,8 @@ facts["na"]; it is never shown as zero.
 
 from __future__ import annotations
 
+import statistics
+
 import datetime as dt
 from collections import defaultdict
 
@@ -153,6 +155,7 @@ class Context:
         self.order_rows = self._classify_utm_rows(
             data.get("order_attribution", [])
         )
+        self._skip: dict[str, set] = {}
         self.facts = self._build_facts()
         self.sale_events: list[dict] = []
         hourly = data.get("orders_hourly") or []
@@ -187,6 +190,8 @@ class Context:
             d: {**p, "phase": p.get("phase_eff", p["phase"])}
             for d, p in self.phases.items()
         }
+        # the newest days the sheets have not reached yet: estimated, labelled
+        self._estimate_unfilled()
         for d, f in self.facts.items():
             p = self.phases.get(d)
             f["phase"] = p["phase"] if p else None
@@ -634,7 +639,10 @@ class Context:
                 if "revenue" in spec["columns"]:
                     f[f"{name}_revenue"] = rec["revenue"]
         # the affiliate sheet's names are "affiliate"; CRM is flow + broadcast
+        self._skip[day] = skip
+        self._spend_totals(f, skip)
 
+    def _spend_totals(self, f: dict, skip: set) -> None:
         def total(out: str, parts: list[str]) -> None:
             parts = [p for p in parts if p not in skip]
             vals = [f.get(p) for p in parts]
@@ -643,12 +651,87 @@ class Context:
                 f["na"][out] = "; ".join(
                     sorted({f["na"][p] for p in parts if p in f["na"]})
                 )
+            else:
+                f["na"].pop(out, None)
 
         total("crm_spend", ["crm_flow_spend", "crm_broadcast_spend"])
         total("crm_revenue", ["crm_flow_revenue", "crm_broadcast_revenue"])
         total("other_spend", ["affiliate_spend", "crm_spend", "reddit_spend"])
         total("all_spend", ["spend", "other_spend"])
         total("perf_all_spend", ["perf_spend", "other_spend"])
+
+    def _estimate_unfilled(self) -> None:
+        """The sheets are filled by hand a day or two late, which left Spends
+        and ROAS blank for the newest days. A day after a sheet's last filled
+        day (up to `estimate_days` back from D-1) gets an estimate, the same
+        way the Today tab estimates: affiliate as its recent share of Shopify
+        sales, CRM as a typical recent day of the same kind (sale or BAU),
+        Reddit as the day's plan in the media-plan workbook. Estimated fields
+        are listed per day (f["estimated"]) so every tab can say so; the next
+        refresh after the sheet is filled replaces them."""
+        mcfg = self.cfg.get("manual_spends", {})
+        lcfg = mcfg.get("live_estimate", {})
+        max_days = mcfg.get("estimate_days", 7)
+        n_basis = lcfg.get("basis_days", 7)
+        sources = (self.data.get("manual_spends") or {}).get("sources") or {}
+        dates = sorted(self.facts)
+        phase = lambda d: (self.phases.get(d) or {}).get(
+            "phase_eff", (self.phases.get(d) or {}).get("phase")
+        )
+        sales = lambda d: self.facts[d].get("sh_sales") or self.facts[d].get("gmv")
+        touched: set[str] = set()
+        for name, how in (
+            ("affiliate", "per_gmv"),
+            ("crm_flow", "per_day"),
+            ("crm_broadcast", "per_day"),
+            ("reddit", "plan"),
+        ):
+            src = sources.get(name)
+            field = f"{name}_spend"
+            if not src or not src.get("filled_through"):
+                continue
+            ft = src["filled_through"]
+            gap = [d for d in dates if ft < d <= self.d1]
+            if not gap or len(gap) > max_days:
+                continue
+            since = lcfg.get("reddit_history_from") if name == "reddit" else None
+            filled = [
+                d
+                for d in dates
+                if d <= ft
+                and self.facts[d].get(field) is not None
+                and (not since or d >= since)
+            ]
+            for d in gap:
+                f = self.facts[d]
+                if f.get(field) is not None:
+                    continue
+                value = None
+                if how == "plan":
+                    value = (src.get("targets") or {}).get(d)
+                    how_d = "per_day" if value is None else "plan"
+                else:
+                    how_d = how
+                if value is None:
+                    same = [x for x in filled if phase(x) == phase(d)]
+                    basis = (same if len(same) >= 3 else filled)[-n_basis:]
+                    if len(basis) < 2:
+                        continue
+                    if how_d == "per_gmv":
+                        tot = sum(sales(x) or 0 for x in basis)
+                        if not tot or not sales(d):
+                            continue
+                        value = sum(self.facts[x][field] for x in basis) / tot * sales(d)
+                    else:
+                        value = statistics.median(self.facts[x][field] for x in basis)
+                f[field] = round(value, 2)
+                f["na"].pop(field, None)
+                f.setdefault("estimated", []).append(field)
+                touched.add(d)
+        for d in touched:
+            f = self.facts[d]
+            self._spend_totals(f, self._skip.get(d, set()))
+            derive(f)
 
     # ------------------------------------------------------------ windows
 

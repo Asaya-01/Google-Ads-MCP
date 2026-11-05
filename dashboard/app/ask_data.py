@@ -264,6 +264,7 @@ class Engine:
         self.phase = D.get("phase") or [None] * len(self.dates)
         self.phase_note = D.get("phase_note") or [None] * len(self.dates)
         self.events = D.get("events") or []
+        self.estimated = D.get("estimated") or {}
         self.phase_source = D.get("phase_source")
         self.reasons = list(D.get("reasons") or [])
         self.mode = mode
@@ -305,6 +306,13 @@ class Engine:
 
     def window(self, days: list[str]) -> dict:
         w: dict = {"days": len(days), "na": {}}
+        # spends estimated because a sheet has not reached the day yet
+        est: dict[str, list] = {}
+        for d in days:
+            for f in self.estimated.get(d) or []:
+                est.setdefault(f, []).append(d)
+        if est:
+            w["estimated"] = est
         for k in self.fields:
             total, miss = 0, None
             for d in days:
@@ -459,6 +467,10 @@ def rate_out(key: str, v):
 
 def window_out(w: dict, fields: list[str]) -> dict:
     out: dict = {"days": w["days"]}
+    if w.get("estimated"):
+        out["estimated_spends"] = {
+            k: v for k, v in w["estimated"].items()
+        }
     for k in fields:
         if k in RATE_FIELDS:
             out[k] = rate_out(k, w.get(k))

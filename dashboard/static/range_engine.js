@@ -135,7 +135,9 @@
     /* Sum of the counts over `list` (dates). Days outside the data count as
        missing, with a reason. */
     function windowOf(list) {
-      const w = { days: list.length, na: {} };
+      const w = { days: list.length, na: {}, est: {} };
+      // spends estimated because a sheet has not reached the day yet: {field: [days]}
+      for (const d of list) for (const f of (D.estimated && D.estimated[d]) || []) (w.est[f] = w.est[f] || []).push(d);
       for (const k of FIELDS) {
         let sum = 0, miss = null;
         for (const d of list) {

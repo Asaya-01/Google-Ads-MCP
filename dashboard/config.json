@@ -103,6 +103,8 @@
       "headers": ["Phase", "Day Type", "Day type"],
       "date_format": ["%d-%b-%Y", "%d-%b-%y"]
     },
+    "estimate_days": 7,
+    "estimate_note": "Days after a sheet's last filled day, up to estimate_days back from D-1, get an estimated spend (labelled est. on every tab) so Spends and ROAS are not blank while the sheets catch up: affiliate from its recent share of Shopify sales, CRM from a typical recent day of the same kind, Reddit from the day's plan in the media-plan workbook.",
     "live_estimate": {
       "affiliate": "per_gmv",
       "crm": "per_hour",
@@ -226,7 +228,8 @@
   },
 
   "commentary": {
-    "enabled": true,
+    "note": "The D-1 written commentary is no longer shown (each section now ends with what its table says, and Ask Claude answers questions), so the refresh does not pay for it.",
+    "enabled": false,
     "model": "claude-opus-5-5",
     "effort": "high",
     "api_key_secret": "anthropic-api-key"

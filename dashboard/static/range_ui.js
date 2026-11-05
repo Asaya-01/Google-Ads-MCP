@@ -126,20 +126,27 @@ function rgSetMode(m) {
 }
 
 // ---------------------------------------------------------------- the bar
+/* The date bar: one slim strip pinned under the tabs (#rg-slot is sticky),
+   so the dates and the view stay in sight while you scroll. The view switch,
+   the two pickers, then one line of context: what the dates hold and what
+   they are compared with (sale with sale, BAU with BAU). */
 function rgBar() {
   const e = RG.eng, c = e.compare(RG.from, RG.to, RG.cmp);
-  const n = e.diffDays(RG.from, RG.to) + 1;
-  const mix = [...c.groups.map((g) => `${g.cur.length} ${g.phase === "sale" ? "sale" : "BAU"}`), ...(c.mixed.length ? [`${c.mixed.length} transition`] : [])].join(" · ");
-  return `<section class="card rg-barcard" id="rg-bar">
-    <div class="rg-wrap">
-      <div class="rg-modebar">${RG.tab === "products" ? '<span class="rg-modenote">Whole store: product sales cannot be split by campaign type, so there is no Performance / Awareness switch here.</span>' : `<div class="seg rg-mode" id="rg-mode" role="group" aria-label="Campaign type">${RG_MODES.map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${RG.mode === k}">${l}</button>`).join("")}</div>`}</div>
+  const cnt = (n, w) => `${n} ${w} day${n === 1 ? "" : "s"}`;
+  const cur = [...c.groups.map((g) => cnt(g.cur.length, g.phase === "sale" ? "sale" : "BAU")), ...(c.mixed.length ? [cnt(c.mixed.length, "transition")] : [])].join(" + ");
+  const vs = RG.cmp.mode === "none" ? "" : c.groups.map((g) => (g.prev && g.prev.length ? `${g.phase === "sale" ? "sale" : "BAU"}: ${rgListDays(g.prev)}` : `${g.phase === "sale" ? "sale" : "BAU"}: nothing to compare`)).join(" · ");
+  const info = `<span class="rg-info" title="Sale days are only compared with sale days, BAU with BAU. Transition days (a sale went live or ended) sit out of both."><b>${esc(rgSpan(RG.from, RG.to))}</b> <span class="rg-dim">${esc(cur)}</span>${vs ? ` <span class="rg-dim">vs</span> <b>${esc(vs)}</b>` : ""}</span>`;
+  const mode = RG.tab === "products"
+    ? '<span class="rg-modenote" title="Product sales cannot be split by campaign type, so there is no Performance / Awareness switch here.">Whole store</span>'
+    : `<div class="seg rg-mode" id="rg-mode" role="group" aria-label="Campaign type">${RG_MODES.map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${RG.mode === k}">${l}</button>`).join("")}</div>`;
+  return `<section class="rg-barcard" id="rg-bar"><div class="rg-wrap rg-line">
+      ${mode}
       <div class="rg-chips">
         <button type="button" class="rg-chip" id="rg-open-main" aria-haspopup="dialog" aria-expanded="${RG.pop === "main"}"><span aria-hidden="true">▦</span> ${esc(rgRangeLabel())} <span aria-hidden="true" class="rg-caret">▾</span></button>
-        <span class="rg-vs">compared to</span>
+        <span class="rg-vs">vs</span>
         <button type="button" class="rg-chip alt" id="rg-open-cmp" aria-haspopup="dialog" aria-expanded="${RG.pop === "cmp"}"><span aria-hidden="true">⇄</span> ${esc(rgCmpLabel())} <span aria-hidden="true" class="rg-caret">▾</span></button>
       </div>
-      ${RG.cmp.mode === "none" ? "" : `<div class="rg-with"><strong>Compared with</strong>${c.groups.map((g) => `<div>${phaseChip(g.phase)} ${g.prev && g.prev.length ? esc(rgVsText(g, "prev")) : '<span class="na">nothing to compare with in that period</span>'}</div>`).join("")}</div>`}
-      <div class="rg-sum"><strong>${esc(rgSpan(RG.from, RG.to))}</strong> · ${n} day${n === 1 ? "" : "s"}${mix ? ` (${esc(mix)})` : ""}${RG.cmp.mode === "none" ? "" : ` · sale days are compared with sale days, BAU with BAU`}</div>
+      ${info}
       ${RG.pop ? rgPopover() : ""}
     </div></section>`;
 }
@@ -357,7 +364,25 @@ function rgTile(k, label, unit, g) {
     ? `${deltaHtml(ch, RG_NEUTRAL.has(k) ? "spend" : k)}<span>vs ${esc(prior == null ? "n/a" : fmt(prior, unit, true))}</span>`
     : `<span>${g.prev === null ? "no comparison" : "no comparison data"}</span>`;
   const perDay = count && w.days > 1 ? `<div class="foot sub">${esc(fmt(v / w.days, unit, true))} a day</div>` : "";
-  return `<div class="tile"><div class="label">${esc(label)}</div><div class="value">${esc(fmt(v, unit, true))}</div><div class="foot">${foot}</div>${perDay}</div>`;
+  const est = rgEstFor(k, w);
+  return `<div class="tile"><div class="label">${esc(label)}${est ? ` <span class="chip pending" title="${esc(est)}">est.</span>` : ""}</div><div class="value">${esc(fmt(v, unit, true))}</div><div class="foot">${foot}</div>${perDay}${est ? `<div class="foot sub" title="${esc(est)}">${esc(rgEstShort(w))}</div>` : ""}</div>`;
+}
+/* Spends the sheets have not reached yet are estimated (server side); a tile
+   built on them says so. */
+const RG_EST_FIELDS = { affiliate_spend: "affiliate", crm_flow_spend: "CRM flow", crm_broadcast_spend: "CRM broadcast", reddit_spend: "Reddit" };
+const RG_EST_USES = { affiliate_spend: ["affiliate_spend"], crm_spend: ["crm_flow_spend", "crm_broadcast_spend"], reddit_spend: ["reddit_spend"] };
+function rgEstShort(w) {
+  const days = [...new Set(Object.keys(RG_EST_FIELDS).flatMap((f) => (w.est && w.est[f]) || []))].sort();
+  return `${rgListDays(days)} estimated`;
+}
+function rgEstFor(k, w) {
+  if (!w || !w.est) return "";
+  const parts = RG_EST_USES[k] || (["other_spend", "all_spend", "perf_all_spend", "roas", "sh_roas", "cps", "cps_all", "perf_overall_roas", "overall_roas"].includes(k) ? Object.keys(RG_EST_FIELDS) : null);
+  if (!parts) return "";
+  const hit = parts.filter((f) => w.est[f] && w.est[f].length);
+  if (!hit.length) return "";
+  const days = [...new Set(hit.flatMap((f) => w.est[f]))].sort();
+  return `Estimated ${hit.map((f) => RG_EST_FIELDS[f]).join(", ")} spend for ${rgListDays(days)}: the sheets are not filled yet`;
 }
 function rgGroupHtml(g, mixed, tiles, title) {
   tiles = rgAdapt(tiles || RG_TILES);

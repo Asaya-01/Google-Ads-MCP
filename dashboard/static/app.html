@@ -650,6 +650,13 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     show();
   }
 
+  // the date bar pins itself just under the header, whatever height the header wraps to
+  const headerEl = document.querySelector(".bar");
+  if (headerEl) {
+    const setBarH = () => document.documentElement.style.setProperty("--bar-h", headerEl.getBoundingClientRect().height + "px");
+    setBarH();
+    if (window.ResizeObserver) new ResizeObserver(setBarH).observe(headerEl);
+  }
   window.addEventListener("hashchange", show);
   const rerender = () => { if (state.tab && state.pages[state.tab]) { destroyCharts(); R[state.tab](state.pages[state.tab]); } };
   const themeBtn = document.getElementById("theme-toggle");

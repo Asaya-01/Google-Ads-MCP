@@ -59,7 +59,7 @@ def test_python_engine_matches_range_engine_js(store, mode):
         "const D=JSON.parse(require('fs').readFileSync(0,'utf8'));"
         f"const E=require('{ENGINE}')(D.page, D.mode);"
         "const out=D.cases.map(([a,b,c])=>E.compare(a,b,c).groups.map(g=>"
-        "({phase:g.phase,cur:g.cur,prev:g.prev,w:g.w,pw:g.pw,ch:Object.fromEntries(Object.keys(g.w).filter(k=>k!=='na'&&k!=='days').map(k=>[k,g.change(k)]))})));"
+        "({phase:g.phase,cur:g.cur,prev:g.prev,w:g.w,pw:g.pw,ch:Object.fromEntries(Object.keys(g.w).filter(k=>k!=='na'&&k!=='days'&&k!=='est').map(k=>[k,g.change(k)]))})));"
         "process.stdout.write(JSON.stringify(out));"
     )
     res = subprocess.run(
@@ -77,7 +77,7 @@ def test_python_engine_matches_range_engine_js(store, mode):
         for pg, jg in zip(py, jgroups):
             assert pg["cur"] == jg["cur"] and (pg["prev"] or []) == (jg["prev"] or [])
             for k, v in jg["w"].items():
-                if k in ("na", "days"):
+                if k in ("na", "days", "est"):
                     continue
                 assert pg["w"][k] == pytest.approx(v, abs=1e-9) if v is not None else pg["w"][k] is None, k
             for k, v in jg["ch"].items():
