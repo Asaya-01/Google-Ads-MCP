@@ -56,6 +56,7 @@ SYSTEM = """You are "Ask Claude", the analyst built into Asaya's internal D2C da
 - Answer the question asked, first, in one or two sentences with the key number; then the supporting detail. Be direct, like a sharp Head of D2C talking to the founder.
 
 # The dashboard's rules (follow them; the tools already do)
+- Two exclusions hold everywhere: ASAYASS and ASAYAINF orders are never counted, and free gifts, merch, books and gummies never count as items, units, quantities or products (the tools already leave them out; never add them back).
 - Every tab follows the D-1 tab's logic, and so must you. Views: "perf" (Performance, the default) and "all" are the whole store as the team's D-1 sheet reads it: `orders` and `gmv` ARE Shopify's own Sales report (Orders and Total sales: cancelled orders still count as orders, Total sales nets off returns processed that day), sessions / atc / ic are the whole store's, and `perf_sessions` is the team's Perf. sessions rule. The two views differ only in spend: perf shows sales-campaign spend, all every campaign. "aw" (Awareness) is awareness traffic and the orders and GMV credited to it. Use the view the user is on unless the question names another.
 - Questions about states, cities, or products in a place: use the `region` tool (Shopify's Sales report by shipping address, the same numbers as D-1). Items and basket size there leave out gifts and merch; rank AOV or basket size only among places with 20+ orders.
 - Breakdowns (channel, source, campaign, product, basket size, new vs repeat) count orders as placed (cancelled orders left out, returns not subtracted), so they add up to slightly less or more than the headline; the difference is Shopify's cancellations and returns. Say so when a breakdown total is compared with the headline.
@@ -229,8 +230,8 @@ TOOLS = [
         "The Region tab: Shopify's Sales report (the D-1 numbers) by the shipping address. "
         "level=state gives every state of India; level=city gives the cities of `state` (or "
         "of all India); level=product gives the products bought in `city`, else `state`, else "
-        "all India. Each row: revenue (Total sales), orders, AOV, quantity_ordered (Shopify's, "
-        "gifts included), items and basket_size (items per order, gifts and merch left out), "
+        "all India. Each row: revenue (Total sales), orders, AOV, items and basket_size (items per "
+        "order; gifts, merch, books and gummies are never counted, and gift products never appear), "
         "share of the place's revenue, and with a comparison window the change (counts on "
         "per-day averages). Also returns the place's own totals. Place names can be spelled "
         "loosely (Bangalore, Bengaluru, MH, Tamil Nadu).",
@@ -243,7 +244,7 @@ TOOLS = [
             "phase": PHASE,
             "compare_start": _s("Comparison window start (same phase filter), or empty string for none."),
             "compare_end": _s("Comparison window end, or empty string."),
-            "sort_by": _s("revenue, orders, aov_rs, quantity_ordered, items, basket_size or revenue_change_pct; empty for revenue."),
+            "sort_by": _s("revenue, orders, aov_rs, items, basket_size or revenue_change_pct; empty for revenue."),
             "limit": {"type": "integer", "description": "Rows to return, 1 to 60."},
         },
     ),
@@ -680,8 +681,8 @@ class Tools:
 
         def rows(ds):
             if level == "product":
-                return {k: {**rd.metrics({**v, "paid_days": set()}, None), "gift_or_merch": v["gift"],
-                            "items": None, "basket_size": round(v["qty"] / v["orders"], 4) if v["orders"] else None}
+                return {k: {**rd.metrics({**v, "paid_days": set()}, None),
+                            "items": v["qty"], "basket_size": round(v["qty"] / v["orders"], 4) if v["orders"] else None}
                         for k, v in rd.products(set(ds), state_i, cities).items()}
             if level == "state":
                 m = rd.places(set(ds), "state")
@@ -694,7 +695,7 @@ class Tools:
         nc, np_ = len(cur), len(prev or [])
         R, PR = rows(cur), rows(prev) if prev else {}
         T, PT = total(cur), total(prev) if prev else None
-        tot_rev = sum(r["revenue"] for r in R.values() if not r.get("gift_or_merch")) or None
+        tot_rev = sum(r["revenue"] for r in R.values()) or None
 
         def change(x, y, k):
             if x is None or y in (None, 0):
@@ -705,7 +706,7 @@ class Tools:
 
         out_rows = []
         for name, r in R.items():
-            row = {"name": name, **r, "share_of_revenue_pct": round(r["revenue"] / tot_rev * 100, 2) if tot_rev and not r.get("gift_or_merch") else None}
+            row = {"name": name, **r, "share_of_revenue_pct": round(r["revenue"] / tot_rev * 100, 2) if tot_rev else None}
             if prev is not None:
                 pr = PR.get(name)
                 row["comparison"] = pr
@@ -717,7 +718,7 @@ class Tools:
             out_rows.append(row)
         key = sort_by or "revenue"
         if out_rows and key not in out_rows[0]:
-            raise ToolError("sort_by must be one of revenue, orders, aov_rs, quantity_ordered, items, basket_size, revenue_change_pct")
+            raise ToolError("sort_by must be one of revenue, orders, aov_rs, items, basket_size, revenue_change_pct")
         out_rows.sort(key=lambda r: -(r.get(key) if r.get(key) is not None else float("-inf")))
         limit = max(1, min(int(limit or 25), 60))
         notes = []
@@ -727,7 +728,7 @@ class Tools:
         if level != "product":
             notes.append(f"rows marked few_orders have under {REGION_MIN_ORDERS} orders: do not rank them on AOV or basket size")
         if level == "product":
-            notes.append("for a product, aov_rs is its revenue per order that had it and basket_size its units per such order; quantity includes gifts")
+            notes.append("for a product, aov_rs is its revenue per order that had it, items its units and basket_size its units per such order")
         out = {
             "place": scope,
             "level": level,

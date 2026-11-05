@@ -143,8 +143,8 @@ def build_tab(ctx: Context) -> dict:
         "Orders, Revenue (Total sales) and Quantity ordered are Shopify's own Sales report, the same numbers as "
         "the D-1 tab, by the shipping address. Cancelled orders still count as orders and returns come off Total "
         "sales on the day they are processed, exactly as on D-1.",
-        "Items (and basket size, items per order) count what was bought: free gifts, merch, books and gummies are "
-        "left out, as on the Products tab. Quantity ordered is Shopify's figure, gifts included.",
+        "Items, quantities and basket size (items per order) count what was bought: free gifts, merch, books and "
+        "gummies are always left out, as on every tab. ASAYASS and ASAYAINF orders are never counted.",
         "For a product, AOV is its revenue per order that had it, and basket size is its units per such order.",
         "Ladakh is shown with Jammu & Kashmir (one outline on the map); Dadra & Nagar Haveli and Daman & Diu is one "
         "territory with two shapes. City spellings are merged (Bangalore, Bengaluru: Bengaluru).",

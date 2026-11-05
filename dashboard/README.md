@@ -43,6 +43,18 @@ never as zero.
 
 ## Metric rules (as implemented)
 
+- **Two exclusions on every tab, always** (keep them in anything new):
+  1. **ASAYASS and ASAYAINF orders never count** (`orders.exclude_name_regex`):
+     not in orders, revenue, quantities or any breakdown, whether the number
+     comes from BigQuery (every orders query filters on it), Shopify's sales
+     report (`order_name NOT CONTAINS` on every ShopifyQL pull, Today and
+     Region included) or the live Admin API.
+  2. **Free gifts, merch, books and gummies never count as items**
+     (`freebies.exclude_product_types`): units, items, quantities, basket size
+     and product tables leave them out on Products, D-1, Region, Retention and
+     in Ask Claude; gift products never appear as rows. Revenue stays Shopify's
+     Total sales so it matches D-1; gift and merch lines carry about 0.1% of it.
+
 - **Valid order**: `test = FALSE`, `cancelled_at IS NULL`, name not matching
   `ASAYASS|ASAYAINF`, on the latest version of each order. Date = IST date of
   `created_at`. Used for every order metric.

@@ -346,7 +346,18 @@ def test_region_tool_states_cities_products(region_tools):
     p = _rg(tools, d, level="product", city="Bengaluru")
     assert p["place"] == "Bengaluru"
     names = {r["name"]: r for r in p["rows"]}
-    assert names["Roll-On"]["revenue"] == 18000.0 and names["Gift"]["gift_or_merch"] is True
+    assert names["Roll-On"]["revenue"] == 18000.0 and names["Roll-On"]["items"] == 22
+    assert "Gift" not in names  # gifts and merch never appear
     assert names["Roll-On"]["share_of_revenue_pct"] == pytest.approx(60.0)
+    assert all("quantity_ordered" not in r for r in s["rows"] + c["rows"] + p["rows"])
     with pytest.raises(ask.ToolError):
         _rg(tools, d, level="city", state="Atlantis")
+
+
+def test_gifts_and_merch_never_count_in_product_types(tools):
+    out = tools.run(
+        "breakdown",
+        {"dimension": "product_type", "start": "2026-10-01", "end": "2026-10-28", "phase": "any", "view": "all", "compare_start": "", "compare_end": "", "sort_by": "", "name_contains": "", "limit": 60},
+    )
+    excluded = {t.lower() for t in settings.config()["freebies"]["exclude_product_types"]}
+    assert out["rows"] and all(r["name"].lower() not in excluded for r in out["rows"])

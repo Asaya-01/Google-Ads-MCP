@@ -10,7 +10,7 @@
    compared with sale days, BAU with BAU, like every other tab.
    Inlined after range_d1.js, inside the dashboard closure. */
 
-const RGN = { metric: "sales", state: null, city: null, sort: { k: "sales", d: -1 }, psort: { k: "sales", d: -1 }, gifts: false, allRows: false, sku: {}, vb: null, anim: 0 };
+const RGN = { metric: "sales", state: null, city: null, sort: { k: "sales", d: -1 }, psort: { k: "sales", d: -1 }, allRows: false, sku: {}, vb: null, anim: 0 };
 const RGN_METRICS = [["sales", "Revenue"], ["orders", "Orders"], ["aov", "AOV"], ["paid", "Items"], ["basket", "Basket size"]];
 const RGN_RATE = new Set(["aov", "basket", "share"]);
 const RGN_MIN_ORDERS = 20; // a place needs this many orders before its AOV or basket size is ranked
@@ -125,7 +125,7 @@ function rgnFocusBox(svg, si) {
 }
 
 // ---------------------------------------------------------------- pieces
-function rgnTiles(a, b, nc, np, noA, noB, giftsQty) {
+function rgnTiles(a, b, nc, np, noA, noB) {
   const t = (k, label, sub) => {
     const v = rgnVal(a, k, noA), ch = b ? rgnChange(k, a, b, nc, np, noA, noB) : null;
     const why = v == null && (k === "paid" || k === "basket") ? "product detail fills in over the next refreshes" : "no orders";
@@ -135,7 +135,7 @@ function rgnTiles(a, b, nc, np, noA, noB, giftsQty) {
       ${sub ? `<div class="foot sub">${sub}</div>` : ""}</div>`;
   };
   const per = a && a.orders && nc > 1 ? `${esc(rgnFmt(a.sales / nc, "sales", true))} a day` : "";
-  return `<div class="rgn-tiles">${t("sales", "Revenue", per)}${t("orders", "Orders")}${t("aov", "AOV")}${t("paid", "Items", giftsQty ? `+ ${esc(fmt(Math.round(giftsQty), "int"))} gifts &amp; merch` : "")}${t("basket", "Basket size", "items per order")}</div>`;
+  return `<div class="rgn-tiles">${t("sales", "Revenue", per)}${t("orders", "Orders")}${t("aov", "AOV")}${t("paid", "Items", "gifts &amp; merch left out")}${t("basket", "Basket size", "items per order")}</div>`;
 }
 function rgnRank(list, k, total) {
   // ranked bars of the top places by the chosen metric
@@ -243,10 +243,7 @@ R.region = (p) => {
       });
       const bins = rgnClasses(vals);
 
-      // gifts and merch bought with the orders in scope (for the Items tile)
       const prodNow = rgnProducts(cur, { state: RGN.state, city: RGN.city, key: skey });
-      let gifts = 0;
-      for (const [pi, a] of prodNow) if (P.products[pi].gift) gifts += a.qty;
 
       // the places under the scope: states (All India) or cities (a state)
       const child = RGN.state == null ? "states" : "cities";
@@ -284,11 +281,11 @@ R.region = (p) => {
         const b = prodPrev ? prodPrev.get(pi) : null, pr = P.products[pi];
         return { p: pi, name: pr.name, gift: pr.gift, type: pr.type, sales: a.sales, orders: a.orders, qty: a.qty, aov: a.orders ? a.sales / a.orders : null, upo: a.orders ? a.qty / a.orders : null,
           dSales: b && b.sales ? (a.sales / nc) / (b.sales / np) - 1 : null, dAbs: b ? a.sales / nc - b.sales / np : null, bOrders: b ? b.orders : 0 };
-      }).filter((r) => RGN.gifts || !r.gift);
+      }).filter((r) => !r.gift); // gifts, merch, books and gummies never count, as everywhere
       const prodTot = prodRows.filter((r) => !r.gift).reduce((t, r) => t + r.sales, 0);
       prodRows.forEach((r) => (r.share = prodTot ? r.sales / prodTot : null));
       const prodCols = [
-        { k: "name", label: "Product", text: true, render: (r) => `${esc(r.name)}${r.gift ? ' <span class="chip">gift / merch</span>' : ""}` },
+        { k: "name", label: "Product", text: true, render: (r) => esc(r.name) },
         { k: "sales", label: "Revenue", render: (r) => esc(fmt(r.sales, "inr")) },
         { k: "dSales", label: np ? (nc !== np ? "Δ / day" : "Δ") : "Δ", render: (r) => rgnDelta(r.dSales, "gmv") },
         { k: "share", label: "Share", render: (r) => `<span class="rgn-share"><i style="width:${Math.max(2, Math.round((r.share || 0) * 48))}px"></i>${esc(rgnFmt(r.share, "share"))}</span>` },
@@ -319,7 +316,7 @@ R.region = (p) => {
             <div class="rgn-left">${rgnMapHtml(p.map, vals, bins)}</div>
             <div class="rgn-right">
               <div class="rgn-scope"><h2>${esc(scopeName)}</h2>${shareOfIndia}<span class="sub">${esc(rgVsText(g, "cur"))}${np ? ` · vs ${esc(rgVsText(g, "prev"))}` : ""}</span></div>
-              ${rgnTiles(aScope, bScope, nc, np, A.noSku, B ? B.noSku : null, gifts)}
+              ${rgnTiles(aScope, bScope, nc, np, A.noSku, B ? B.noSku : null)}
               <h3 class="rgn-h3">Top ${child} by ${esc(RGN_METRICS.find((m) => m[0] === k)[1].toLowerCase())}</h3>
               ${rgnRank(rankList, k, RGN_RATE.has(k) ? null : scopeTotal)}
             </div>
@@ -331,8 +328,7 @@ R.region = (p) => {
           ${rgnInsightBox(rgnPlaceInsights(placeRows, scopeTotal, RGN.state == null ? "India" : P.states[RGN.state].name, child, rgnVal(RGN.state == null ? A.all : A.st.get(RGN.state), "aov")))}
         </section>
         <section class="card">
-          <div class="section-head"><h2>Products · ${esc(scopeName)}</h2>
-            <label class="rgn-check"><input type="checkbox" id="rgn-gifts" ${RGN.gifts ? "checked" : ""}> Show gifts &amp; merch</label></div>
+          <div class="section-head"><h2>Products · ${esc(scopeName)}</h2><span class="sub">gifts, merch, books and gummies left out</span></div>
           ${prodNote}${rgnSortable(prodCols, prodRows, RGN.psort, "products", () => "")}
           <p class="legend-note">A product's AOV is its revenue per order that had it; its basket size is its units per such order.</p>
           ${rgnInsightBox(rgnProductInsights(prodRows, prodTot, scopeName, RGN.state != null ? natShare : null))}
@@ -368,7 +364,6 @@ function rgnBind(host, draw) {
     if (b.dataset.st !== undefined) return openState(+b.dataset.st);
     if (b.dataset.ci !== undefined) return openCity(+b.dataset.ci);
   });
-  host.addEventListener("change", (ev) => { if (ev.target.id === "rgn-gifts") { RGN.gifts = ev.target.checked; draw(); } });
   host.addEventListener("keydown", (ev) => {
     if ((ev.key === "Enter" || ev.key === " ") && ev.target.matches("path[data-s], tr[data-st], tr[data-ci]")) { ev.preventDefault(); ev.target.dispatchEvent(new MouseEvent("click", { bubbles: true })); }
   });

@@ -669,9 +669,9 @@ class Breakdowns:
         for d, ti, dropped, lines, units, rev in p.get("type_rows") or []:
             if d not in days:
                 continue
-            key = (p["types"][ti] or "(blank)") + (
-                " (left out of product tables)" if dropped else ""
-            )
+            if dropped:  # gifts, merch, books, gummies: never counted anywhere
+                continue
+            key = p["types"][ti] or "(blank)"
             a = out.setdefault(key, {"lines": 0, "units": 0, "revenue": 0.0})
             a["lines"] += lines
             a["units"] += units
@@ -959,7 +959,9 @@ class RegionData:
             if p["dates"][di] not in days or not pick(r):
                 continue
             prod = p["products"][pi]
-            a = out.setdefault(prod["name"], {"orders": 0, "sales": 0.0, "qty": 0, "gift": prod["gift"]})
+            if prod["gift"]:  # gifts, merch, books and gummies never count
+                continue
+            a = out.setdefault(prod["name"], {"orders": 0, "sales": 0.0, "qty": 0})
             a["orders"] += o
             a["sales"] += s
             a["qty"] += q
@@ -972,7 +974,6 @@ class RegionData:
             "revenue": round(a["sales"], 2),
             "orders": a["orders"],
             "aov_rs": round(a["sales"] / a["orders"], 2) if a["orders"] else None,
-            "quantity_ordered": a["qty"],
             "items": a["paid"] if full and "paid" in a else None,
             "basket_size": round(a["paid"] / a["orders"], 4) if full and "paid" in a and a["orders"] else None,
         }
