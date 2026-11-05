@@ -869,3 +869,110 @@ class Breakdowns:
         for a in out.values():
             a.update(_ad_rates(a))
         return out, None
+
+
+# ------------------------------------------------------------------ region
+REGION_MIN_ORDERS = 20
+
+
+class RegionData:
+    """The Region tab's numbers for Ask Claude: Shopify's Sales report (the
+    D-1 numbers) by the shipping address's state and city, and by product, with
+    the tab's definitions (items and basket size leave out gifts and merch; a
+    product's AOV is its revenue per order that had it)."""
+
+    def __init__(self, pages: Pages):
+        self.pages = pages
+
+    def page(self):
+        p = self.pages.get("region_days")
+        if not p or not p.get("rows"):
+            return None
+        return p
+
+    # place names as people say them: "Bangalore", "MH", "tamil nadu"
+    def find_state(self, name: str):
+        from .pages.region import STATE_ALIASES, _norm
+
+        p = self.page()
+        n = (name or "").strip()
+        if not n:
+            return None
+        keys = [s["key"] for s in p["states"]]
+        k = n.lower() if n.lower() in keys else STATE_ALIASES.get(_norm(n))
+        if not k:
+            hits = [s["key"] for s in p["states"] if _norm(n) in _norm(s["name"])]
+            k = hits[0] if len(hits) == 1 else None
+        return keys.index(k) if k in keys else None
+
+    def find_city(self, name: str, state_i=None):
+        from .pages.region import city_key, city_show
+
+        p = self.page()
+        n = (name or "").strip()
+        if not n:
+            return []
+        want = city_show(city_key(n)).lower()
+        exact = [i for i, c in enumerate(p["cities"]) if c["name"].lower() == want and (state_i is None or c["s"] == state_i)]
+        if exact:
+            return exact
+        return [i for i, c in enumerate(p["cities"]) if want in c["name"].lower() and (state_i is None or c["s"] == state_i)]
+
+    def places(self, days: set[str], level: str, state_i=None, cities=None):
+        """{name: {orders, sales, qty, paid, paid_days}} by state or city."""
+        p = self.page()
+        sku = set(p.get("sku_days") or [])
+        out: dict[str, dict] = {}
+        for di, ci, o, s, q, paid in p["rows"]:
+            d = p["dates"][di]
+            if d not in days:
+                continue
+            c = p["cities"][ci]
+            if state_i is not None and c["s"] != state_i:
+                continue
+            if cities is not None and ci not in cities:
+                continue
+            key = p["states"][c["s"]]["name"] if level == "state" else (
+                c["name"] if state_i is not None else f"{c['name']} ({p['states'][c['s']]['name']})"
+            )
+            a = out.setdefault(key, {"orders": 0, "sales": 0.0, "qty": 0, "paid": 0, "paid_days": set()})
+            a["orders"] += o
+            a["sales"] += s
+            a["qty"] += q
+            if paid is not None and d in sku:
+                a["paid"] += paid
+                a["paid_days"].add(d)
+        return out
+
+    def products(self, days: set[str], state_i=None, cities=None):
+        p = self.page()
+        if cities:
+            key = p["states"][p["cities"][next(iter(cities))]["s"]]["key"]
+            rows = (self.pages.get(f"region_sku/{key}") or {}).get("rows") or []
+            pick = lambda r: r[1] in cities
+        else:
+            rows = (self.pages.get("region_sku/all") or {}).get("rows") or []
+            pick = lambda r: state_i is None or r[1] == state_i
+        out: dict[str, dict] = {}
+        for r in rows:
+            di, _, pi, o, s, q = r
+            if p["dates"][di] not in days or not pick(r):
+                continue
+            prod = p["products"][pi]
+            a = out.setdefault(prod["name"], {"orders": 0, "sales": 0.0, "qty": 0, "gift": prod["gift"]})
+            a["orders"] += o
+            a["sales"] += s
+            a["qty"] += q
+        return out
+
+    @staticmethod
+    def metrics(a: dict, n_days_with_detail_needed: int | None = None) -> dict:
+        full = n_days_with_detail_needed is None or len(a.get("paid_days", ())) == n_days_with_detail_needed
+        return {
+            "revenue": round(a["sales"], 2),
+            "orders": a["orders"],
+            "aov_rs": round(a["sales"] / a["orders"], 2) if a["orders"] else None,
+            "quantity_ordered": a["qty"],
+            "items": a["paid"] if full and "paid" in a else None,
+            "basket_size": round(a["paid"] / a["orders"], 4) if full and "paid" in a and a["orders"] else None,
+        }

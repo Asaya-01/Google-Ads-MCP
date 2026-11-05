@@ -57,6 +57,7 @@ SYSTEM = """You are "Ask Claude", the analyst built into Asaya's internal D2C da
 
 # The dashboard's rules (follow them; the tools already do)
 - Every tab follows the D-1 tab's logic, and so must you. Views: "perf" (Performance, the default) and "all" are the whole store as the team's D-1 sheet reads it: `orders` and `gmv` ARE Shopify's own Sales report (Orders and Total sales: cancelled orders still count as orders, Total sales nets off returns processed that day), sessions / atc / ic are the whole store's, and `perf_sessions` is the team's Perf. sessions rule. The two views differ only in spend: perf shows sales-campaign spend, all every campaign. "aw" (Awareness) is awareness traffic and the orders and GMV credited to it. Use the view the user is on unless the question names another.
+- Questions about states, cities, or products in a place: use the `region` tool (Shopify's Sales report by shipping address, the same numbers as D-1). Items and basket size there leave out gifts and merch; rank AOV or basket size only among places with 20+ orders.
 - Breakdowns (channel, source, campaign, product, basket size, new vs repeat) count orders as placed (cancelled orders left out, returns not subtracted), so they add up to slightly less or more than the headline; the difference is Shopify's cancellations and returns. Say so when a breakdown total is compared with the headline.
 - Sale days are compared only with sale days, BAU with BAU. Transition days (a sale went live or ended that day) sit out of both sides. The sale/BAU label of each day comes from the team's media-plan calendar where it exists, else from hour-by-hour order detection. Never compare a sale period with a BAU period as if like for like; if the user asks to, show it but say plainly it is not like for like.
 - When two periods differ in length, counts are compared on per-day averages; rates are compared directly. Rates are always recomputed from summed counts, never averaged across days.
@@ -222,6 +223,29 @@ TOOLS = [
         "checkout against yesterday and a typical day at the same hour, and today's ad "
         "spend. Refreshed every few minutes; whole store.",
         {},
+    ),
+    _tool(
+        "region",
+        "The Region tab: Shopify's Sales report (the D-1 numbers) by the shipping address. "
+        "level=state gives every state of India; level=city gives the cities of `state` (or "
+        "of all India); level=product gives the products bought in `city`, else `state`, else "
+        "all India. Each row: revenue (Total sales), orders, AOV, quantity_ordered (Shopify's, "
+        "gifts included), items and basket_size (items per order, gifts and merch left out), "
+        "share of the place's revenue, and with a comparison window the change (counts on "
+        "per-day averages). Also returns the place's own totals. Place names can be spelled "
+        "loosely (Bangalore, Bengaluru, MH, Tamil Nadu).",
+        {
+            "level": _s("What the rows are.", enum=["state", "city", "product"]),
+            "state": _s("A state or its code (Maharashtra, MH), or empty for all India."),
+            "city": _s("A city (Mumbai, Bengaluru), or empty."),
+            "start": _s(DATE),
+            "end": _s(DATE),
+            "phase": PHASE,
+            "compare_start": _s("Comparison window start (same phase filter), or empty string for none."),
+            "compare_end": _s("Comparison window end, or empty string."),
+            "sort_by": _s("revenue, orders, aov_rs, quantity_ordered, items, basket_size or revenue_change_pct; empty for revenue."),
+            "limit": {"type": "integer", "description": "Rows to return, 1 to 60."},
+        },
     ),
     _tool(
         "calculate",
@@ -609,6 +633,122 @@ class Tools:
 
         return strip(p)
 
+    def region(self, level, state, city, start, end, phase, compare_start, compare_end, sort_by, limit):
+        from .ask_data import REGION_MIN_ORDERS, RegionData
+
+        rd = RegionData(self.pages)
+        P = rd.page()
+        if P is None:
+            raise ToolError("Data unavailable: the Region data has not been pulled from Shopify yet")
+        if level not in ("state", "city", "product"):
+            raise ToolError("level must be state, city or product")
+        eng = self.engine("all")
+        a, b = self._span(eng, start, end)
+        in_r = lambda ds: [d for d in ds if P["from"] <= d <= P["to"]]
+        cur = in_r(self._phase_days(eng, a, b, phase))
+        prev = None
+        if compare_start or compare_end:
+            ca, cb = self._span(eng, compare_start or compare_end, compare_end or compare_start)
+            prev = in_r(self._phase_days(eng, ca, cb, phase))
+        if not cur:
+            raise ToolError(f"Data unavailable: Region data covers {P['from']}..{P['to']}, and none of those days are in {a}..{b} ({phase})")
+        state_i = rd.find_state(state) if state else None
+        if state and state_i is None:
+            raise ToolError(f"no state matches {state!r}; use a state's name or code, e.g. " + ", ".join(s["name"] for s in P["states"][:6]))
+        cities = None
+        if city:
+            hits = rd.find_city(city, state_i)
+            names = sorted({P["cities"][i]["name"] + " (" + P["states"][P["cities"][i]["s"]]["name"] + ")" for i in hits})
+            if not hits:
+                raise ToolError(f"no city matches {city!r}" + (f" in {P['states'][state_i]['name']}" if state_i is not None else ""))
+            if len(names) > 1:
+                raise ToolError(f"{city!r} matches several places: {', '.join(names[:8])}; name the state too")
+            cities = set(hits)
+            state_i = P["cities"][hits[0]]["s"]
+        sku = set(P.get("sku_days") or [])
+        need = lambda ds: len(ds) if set(ds) <= sku else -1  # items and basket only with product detail for every day
+        scope = (P["cities"][next(iter(cities))]["name"] if cities else P["states"][state_i]["name"] if state_i is not None else "India")
+
+        def total(ds):
+            m = rd.places(set(ds), "state", state_i, cities)
+            t = {"orders": 0, "sales": 0.0, "qty": 0, "paid": 0, "paid_days": set()}
+            for x in m.values():
+                for k in ("orders", "sales", "qty", "paid"):
+                    t[k] += x[k]
+                t["paid_days"] |= x["paid_days"]
+            return rd.metrics(t, need(ds))
+
+        def rows(ds):
+            if level == "product":
+                return {k: {**rd.metrics({**v, "paid_days": set()}, None), "gift_or_merch": v["gift"],
+                            "items": None, "basket_size": round(v["qty"] / v["orders"], 4) if v["orders"] else None}
+                        for k, v in rd.products(set(ds), state_i, cities).items()}
+            if level == "state":
+                m = rd.places(set(ds), "state")
+                if state_i is not None:  # one state asked for: just that row
+                    m = {k: v for k, v in m.items() if k == P["states"][state_i]["name"]}
+            else:
+                m = rd.places(set(ds), "city", state_i, cities)
+            return {k: rd.metrics(v, need(ds)) for k, v in m.items()}
+
+        nc, np_ = len(cur), len(prev or [])
+        R, PR = rows(cur), rows(prev) if prev else {}
+        T, PT = total(cur), total(prev) if prev else None
+        tot_rev = sum(r["revenue"] for r in R.values() if not r.get("gift_or_merch")) or None
+
+        def change(x, y, k):
+            if x is None or y in (None, 0):
+                return None
+            if k in ("aov_rs", "basket_size"):
+                return round((x / y - 1) * 100, 2)
+            return round(((x / nc) / (y / np_) - 1) * 100, 2) if nc and np_ else None
+
+        out_rows = []
+        for name, r in R.items():
+            row = {"name": name, **r, "share_of_revenue_pct": round(r["revenue"] / tot_rev * 100, 2) if tot_rev and not r.get("gift_or_merch") else None}
+            if prev is not None:
+                pr = PR.get(name)
+                row["comparison"] = pr
+                row["revenue_change_pct"] = change(r["revenue"], pr and pr["revenue"], "revenue")
+                row["orders_change_pct"] = change(r["orders"], pr and pr["orders"], "orders")
+                row["aov_change_pct"] = change(r["aov_rs"], pr and pr["aov_rs"], "aov_rs")
+            if r["orders"] < REGION_MIN_ORDERS:
+                row["few_orders"] = True
+            out_rows.append(row)
+        key = sort_by or "revenue"
+        if out_rows and key not in out_rows[0]:
+            raise ToolError("sort_by must be one of revenue, orders, aov_rs, quantity_ordered, items, basket_size, revenue_change_pct")
+        out_rows.sort(key=lambda r: -(r.get(key) if r.get(key) is not None else float("-inf")))
+        limit = max(1, min(int(limit or 25), 60))
+        notes = []
+        miss = [d for d in cur if d not in sku]
+        if miss:
+            notes.append(f"product detail is missing for {span_text(miss)} (it backfills over the next refreshes): items, basket size and the product rows leave those days out")
+        if level != "product":
+            notes.append(f"rows marked few_orders have under {REGION_MIN_ORDERS} orders: do not rank them on AOV or basket size")
+        if level == "product":
+            notes.append("for a product, aov_rs is its revenue per order that had it and basket_size its units per such order; quantity includes gifts")
+        out = {
+            "place": scope,
+            "level": level,
+            "days": span_text(cur),
+            "n_days": nc,
+            "place_total": T,
+            "rows_total": len(out_rows),
+            "rows": out_rows[:limit],
+            "sorted_by": key,
+            "notes": notes,
+        }
+        if prev is not None:
+            out.update(
+                comparison_days=span_text(prev),
+                comparison_n_days=np_,
+                place_total_comparison=PT,
+                place_change_pct={k: change(T[k], PT[k] if PT else None, k) for k in ("revenue", "orders", "aov_rs")},
+                change_basis="per-day averages for revenue and orders" if nc != np_ else "totals",
+            )
+        return out
+
     def calculate(self, expression):
         try:
             return {"expression": expression, "result": calculate(expression)}
@@ -623,6 +763,7 @@ class Tools:
             "breakdown": self.breakdown,
             "d1_report": self.d1_report,
             "today_live": self.today_live,
+            "region": self.region,
             "calculate": self.calculate,
         }.get(name)
         if fn is None:
@@ -657,6 +798,9 @@ def status_text(name: str, args: dict) -> str:
         return "Reading today's live numbers"
     if name == "calculate":
         return "Calculating"
+    if name == "region":
+        where = args.get("city") or args.get("state") or "India"
+        return f"Reading {args.get('level', 'state')}s in {where} for {span}"
     return name
 
 
@@ -697,6 +841,7 @@ def _context_text(view: dict | None) -> str:
             "compare_to",
             "groups",
             "latest_day",
+            "region",
         )
         if view.get(k) not in (None, "", [])
     }

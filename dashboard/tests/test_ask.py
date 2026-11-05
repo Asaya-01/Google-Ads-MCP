@@ -298,3 +298,55 @@ def test_one_roas_the_same_in_performance_and_all_and_absent_for_awareness():
     assert py["perf"] == py["all"] == pytest.approx(1800 / 900)
     assert py["aw"] is None and js[2] is None
     assert js[0] == pytest.approx(2.0) and js[1] == pytest.approx(2.0)
+
+
+@pytest.fixture(scope="module")
+def region_tools(tmp_path_factory):
+    data = _dataset(with_meta=False)
+    d = data["d1"]
+    data["region"] = {
+        "from": d,
+        "to": d,
+        "city": {d: [
+            ["Karnataka", "BANGALORE", 30, 30000.0, 60],
+            ["Karnataka", "Mysore", 5, 4000.0, 8],
+            ["Maharashtra", "MUMBAI", 25, 20000.0, 50],
+        ]},
+        "sku": {d: [
+            ["Karnataka", "BANGALORE", "Roll-On", "Serum", 20, 18000.0, 22],
+            ["Karnataka", "BANGALORE", "Mist", "Treatment", 12, 12000.0, 14],
+            ["Karnataka", "BANGALORE", "Gift", "Freebie", 25, 0.0, 30],
+            ["Karnataka", "Mysore", "Roll-On", "Serum", 5, 4000.0, 6],
+            ["Maharashtra", "MUMBAI", "Mist", "Treatment", 25, 20000.0, 28],
+        ]},
+    }
+    pages, _ = build_all(data, CFG, [t["id"] for t in settings.enabled_tabs()])
+    st = LocalStore(str(tmp_path_factory.mktemp("region_store")))
+    for k, v in pages.items():
+        st.put_json(f"pages/{k}.json", json.loads(json.dumps(v, default=str)))
+    return ask.Tools(Pages(st)), d
+
+
+def _rg(tools, d, **kw):
+    args = {"level": "state", "state": "", "city": "", "start": d, "end": d, "phase": "any", "compare_start": "", "compare_end": "", "sort_by": "", "limit": 10}
+    return tools.run("region", {**args, **kw})
+
+
+def test_region_tool_states_cities_products(region_tools):
+    tools, d = region_tools
+    s = _rg(tools, d)
+    assert s["place_total"]["revenue"] == 54000.0 and s["place_total"]["orders"] == 60
+    assert [r["name"] for r in s["rows"]] == ["Karnataka", "Maharashtra"]
+    ka = s["rows"][0]
+    assert ka["revenue"] == 34000.0 and ka["aov_rs"] == pytest.approx(34000 / 35, abs=0.01)
+    assert ka["items"] == 22 + 14 + 6  # gifts left out
+    # a state by its code, its cities; a city by another spelling
+    c = _rg(tools, d, level="city", state="ka")
+    assert c["place"] == "Karnataka" and [r["name"] for r in c["rows"]] == ["Bengaluru", "Mysuru"]
+    p = _rg(tools, d, level="product", city="Bengaluru")
+    assert p["place"] == "Bengaluru"
+    names = {r["name"]: r for r in p["rows"]}
+    assert names["Roll-On"]["revenue"] == 18000.0 and names["Gift"]["gift_or_merch"] is True
+    assert names["Roll-On"]["share_of_revenue_pct"] == pytest.approx(60.0)
+    with pytest.raises(ask.ToolError):
+        _rg(tools, d, level="city", state="Atlantis")

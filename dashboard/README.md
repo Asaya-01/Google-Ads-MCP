@@ -415,6 +415,9 @@ products. Breadcrumbs (All India > state > city) lead back.
 - **Pages**: `region` (the map, `static/india_map.json`), `region_days` (city by
   day), `region_sku/all` (product by state) and `region_sku/<state>` (product by
   city, fetched from `/api/region/<state>` when a city is opened).
+- **Ask Claude** answers questions by state, city and product through its
+  `region` tool (`app/ask_data.py` `RegionData`), with the same definitions and
+  numbers as the tab; questions asked on this tab carry the state and city open.
 - **Map**: state outlines from MapSVG via `@svg-maps/india` 2.0.0, CC BY 4.0
   (credited under the map), showing India's official boundaries.
 

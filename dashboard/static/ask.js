@@ -16,6 +16,7 @@ const ASK_SUGG = {
   marketing: ["Which Meta campaigns had the best ROAS on these dates?", "Split Meta spend by funnel stage and product", "How did Google Non-brand PMax do by product?"],
   products: ["Which products grew the most against the comparison?", "How did the basket mix (1, 2, 3+ items) change?", "Top 10 products by revenue on these dates"],
   live: ["How is today tracking against a typical day?", "Is today's spend on pace with yesterday?", "What is today's conversion rate so far?"],
+  region: ["Which states grew the most against the comparison?", "What sells best in Bengaluru compared with the rest of India?", "Which cities have the highest AOV with at least 20 orders?"],
   retention: ["Summarise new vs repeat orders for these dates", "How did repeat orders change against the comparison?", "What share of orders came from new customers?"],
 };
 
@@ -30,6 +31,13 @@ function askContext() {
       ctx.groups = c.groups.map((g) => ({ phase: g.phase, current_days: rgListDays(g.cur), comparison_days: g.prev && g.prev.length ? rgListDays(g.prev) : null }));
     }
   } catch (e) { /* the range is not ready on this tab yet */ }
+  // on the Region tab: the state and city that are open, and what the map shows
+  try {
+    if (state.tab === "region" && typeof RGN !== "undefined" && state.pages.region_days) {
+      const P = state.pages.region_days;
+      ctx.region = { state: RGN.state != null ? P.states[RGN.state].name : "All India", city: RGN.city != null ? P.cities[RGN.city].name : null, map_metric: RGN.metric };
+    }
+  } catch (e) { /* not loaded yet */ }
   return ctx;
 }
 function askCtxLine() {
