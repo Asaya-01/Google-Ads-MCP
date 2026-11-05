@@ -230,7 +230,7 @@ const trSorted = (m) => [...m.values()].sort((x, y) => (x.order - y.order) || ((
 function trHtml(g, opts = {}) {
   const { roots, info } = trBuild(g);
   TR.last = { roots, g };
-  const list = trSorted(roots).filter((n) => n.a.spend > 0.5 || n.sheet);
+  const list = trSorted(roots).filter((n) => (n.a.spend > 0.5 || n.sheet) && (!opts.only || opts.only.includes(n.k)));
   if (!list.length) return `<p class="na">No ${RG.mode === "aw" ? "awareness" : RG.mode === "perf" ? "performance" : ""} spend on these days.</p>`;
   const total = list.reduce((t, n) => t + (n.a.spend || 0), 0);
   const cols = trCols();
@@ -252,7 +252,7 @@ function trHtml(g, opts = {}) {
   };
   list.forEach((n) => emit(n, null));
   // the whole store: Shopify GMV over all spend
-  if (RG.mode !== "aw" && opts.totalRow !== false) {
+  if (RG.mode !== "aw" && opts.totalRow !== false && !opts.only) {
     const w = g.w, pw = g.pw, orv = w.roas, opv = pw ? pw.roas : null;
     out.push(`<tr class="total"><td class="text">All channels<br><span class="sub">Blended ROAS: Total sales ÷ Performance spend${RG.mode === "all" ? " (awareness and Reach left out)" : ""}</span></td>${cols.map(([l]) => {
       if (l === "Spend") return `<td>${cell(w.all_spend, "inr", w.na.all_spend)}</td>`;
@@ -304,53 +304,6 @@ function trBind(id, g, opts = {}) {
   });
   TR.repaint = repaint;
   repaint();
-}
-
-// ---------------------------------------------------- Meta: product × stage
-function trMatrixHtml() {
-  if (!TR.last || RG.mode === "aw") return "";
-  const meta = TR.last.roots.get("meta");
-  if (!meta || TR.group !== "funnel") return "";
-  const prods = new Map(); // code -> {label, cells: {stage: node}}
-  for (const st of TR_STAGES) {
-    const sn = meta.kids.get("st:" + st);
-    if (!sn) continue;
-    for (const pn of sn.kids.values()) {
-      const e = prods.get(pn.k) || prods.set(pn.k, { label: pn.label, order: pn.order, cells: {}, spend: 0 }).get(pn.k);
-      e.cells[st] = pn; e.spend += pn.a.spend;
-    }
-  }
-  if (!prods.size) return "";
-  const stTot = Object.fromEntries(TR_STAGES.map((s) => [s, meta.kids.get("st:" + s)]));
-  const all = [...prods.entries()].sort((x, y) => (x[1].order - y[1].order) || (y[1].spend - x[1].spend));
-  const rows = TR.showZero ? all : all.filter(([, e]) => e.spend >= 1);
-  const zero = all.length - all.filter(([, e]) => e.spend >= 1).length;
-  const cellOf = (n, key) => {
-    if (!n || !n.a.spend) return '<td class="mx-empty">–</td>';
-    const r = trRoas(n.a), pr = n.hasPrev ? trRoas(n.p) : null;
-    const ch = pr && r != null ? deltaHtml(r / pr - 1, "roas", (n.p.pspend || 0) < METRIC_RULES.min_spend) : "";
-    return `<td><button type="button" class="mx" data-open="${esc(key)}"><b>${esc(fmt(n.a.spend, "inr", true))}</b><span>${r == null ? "–" : esc(fmt(r, "x"))}${ch ? ` ${ch}` : ""}</span></button></td>`;
-  };
-  const head = `<tr><th class="text" scope="col">Product</th>${TR_STAGES.map((s) => `<th scope="col">${s}</th>`).join("")}<th scope="col">All stages</th></tr>`;
-  const body = rows.map(([k, e]) => `<tr><td class="text">${esc(e.label)}</td>${TR_STAGES.map((s) => cellOf(e.cells[s], `meta|st:${s}|${k}`)).join("")}<td><b>${esc(fmt(e.spend, "inr", true))}</b></td></tr>`).join("");
-  const foot = `<tr class="total"><td class="text">All products</td>${TR_STAGES.map((s) => cellOf(stTot[s], `meta|st:${s}`)).join("")}<td><b>${esc(fmt(TR_STAGES.reduce((t, s) => t + (stTot[s] ? stTot[s].a.spend : 0), 0), "inr", true))}</b></td></tr>`;
-  return `<div class="table-wrap"><table class="matrix"><thead>${head}</thead><tbody>${body}${foot}</tbody></table></div>
-    ${zero ? `<button type="button" class="more-link" data-mx-zero>${TR.showZero ? "Hide" : "Show"} ${zero} product${zero === 1 ? "" : "s"} with no spend</button>` : ""}
-    <p class="legend-note">Each cell: spend, then Meta Platform ROAS and its change. Click a cell to open those campaigns, ad sets and ads in the tree.</p>`;
-}
-function trMatrixBind(hostId, treeId) {
-  const host = document.getElementById(hostId);
-  if (!host) return;
-  host.addEventListener("click", (ev) => {
-    if (ev.target.closest("[data-mx-zero]")) { TR.showZero = !TR.showZero; host.innerHTML = trMatrixHtml(); return; }
-    const b = ev.target.closest("button[data-open]");
-    if (!b) return;
-    const parts = b.dataset.open.split("|");
-    for (let i = 1; i <= parts.length; i++) TR.open.add(parts.slice(0, i).join("|"));
-    TR.flash = b.dataset.open;
-    if (TR.repaint) TR.repaint(b.dataset.open);
-    document.getElementById(treeId)?.querySelector(`tr[data-k="${CSS.escape(b.dataset.open)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
-  });
 }
 
 // ------------------------------------------ channel reconciliation

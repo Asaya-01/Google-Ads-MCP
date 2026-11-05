@@ -21,7 +21,7 @@ from app.pages import build_all
 
 from test_pages import CFG, _dataset
 
-TABS = ["overview", "funnel", "marketing", "products", "region", "d1"]
+TABS = ["overview", "funnel", "marketing", "marketing?sub=meta", "marketing?sub=google", "products", "region", "d1"]
 # The D-1 Report is a fixed management summary: its own compact versions
 # (d1-*) are allowed; it never re-renders another tab's component.
 SCRIPT = r"""
@@ -36,13 +36,15 @@ const { chromium } = require("playwright");
   const out = {};
   for (const t of tabs) {
     await p.goto(url + "/#" + t);
-    await p.waitForSelector("#main section.card, #main .fold", { timeout: 15000 }).catch(() => {});
+    await p.waitForSelector("#main [data-component], #main .na", { timeout: 15000 }).catch(() => {});
     await p.waitForTimeout(800);
     out[t] = await p.evaluate(() => ({
       components: [...document.querySelectorAll("#main [data-component]")].map((e) => e.dataset.component),
       kpis: document.querySelectorAll("#main .kpi").length,
       tables: document.querySelectorAll("#main table").length,
       text: document.getElementById("main").innerText.slice(0, 300),
+      mvKpiSpend: (document.querySelector('#mv-kpis [data-metric="m_spend"] .kpi-v') || {}).textContent || null,
+      mvTotalSpend: (document.querySelector("#mv-x tr.mv-total td:nth-child(2) .mv-v") || {}).textContent || null,
     }));
   }
   out._errors = errors;
@@ -131,3 +133,9 @@ def test_overview_is_six_headline_numbers_and_no_table(rendered):
     ov = rendered["overview"]
     assert ov["kpis"] == 6
     assert ov["tables"] == 0
+
+
+def test_meta_explorer_totals_equal_the_kpi_strip(rendered):
+    m = rendered["marketing?sub=meta"]
+    assert "meta-explorer" in m["components"] and "meta-matrix" in m["components"]
+    assert m["mvKpiSpend"] and m["mvKpiSpend"] == m["mvTotalSpend"]

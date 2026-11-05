@@ -66,7 +66,7 @@ function d1Stages(gCur, gBase, nBase) {
   ], rows, { full: true }) + `<p class="legend-note">${gBase ? `Typical: the average day across the ${nBase} same-kind days. ` : ""}Platform ROAS is what Meta credits itself; the stage comes from each ad's name.</p>`;
 }
 function d1Links() {
-  const L = [["funnel", "Day by day and funnel drill-downs"], ["products", "Products and basket size"], ["marketing", "Campaign tree and product × stage"], ["retention", "New vs repeat and cohorts"], ["region", "States and cities"]];
+  const L = [["funnel", "Day by day and funnel drill-downs"], ["products", "Products and basket size"], ["marketing?sub=meta", "Meta: SKU × stage and campaigns"], ["retention", "New vs repeat and cohorts"], ["region", "States and cities"]];
   return `<div class="filter-row"><span class="lbl">More detail</span>${L.map(([t, l]) => `<a class="chip" href="#${t}">${esc(l)} →</a>`).join("")}</div>`;
 }
 function d1Copy(title, kpis, changed) {
@@ -118,7 +118,7 @@ R.d1 = (p) => {
         ${rgSec("Funnel", "sessions to orders, with step rates", fnBars(funnelG), { comp: "d1-funnel-summary" })}
       </div>
       ${rgSec("Channels", "spend, Platform ROAS and Shopify last-click results, one row per channel", recon, { link: rgLink("marketing", "Full channel table"), comp: "d1-channel-summary" })}
-      ${rgSec("Meta by stage", "TOF, MOF, BOF and Catalog: spend and Platform ROAS", stages, { link: rgLink("marketing", "Product × stage"), comp: "d1-meta-stages" })}
+      ${rgSec("Meta by stage", "TOF, MOF, BOF and Catalog: spend and Platform ROAS", stages, { link: rgLink("marketing?sub=meta", "Meta view"), comp: "d1-meta-stages" })}
       ${p.targets ? rgSec("Target vs achieved", "this month against the media plan", rgTargets(p.targets)) : ""}
       <section class="card">${d1Links()}</section>`;
     document.getElementById("d1-view").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-v]"); if (b && b.dataset.v !== D1.view) { D1.view = b.dataset.v; destroyCharts(); R.d1(p); } });

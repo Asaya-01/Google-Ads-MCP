@@ -180,3 +180,44 @@ Other notes on the sheet:
 | D7 | Approve P1 (needed for the Performance view as briefed) | Yes |
 | D8 | Approve P2–P5 now, later, or not at all (P6 list only) | P2 and P4 now (reach, status, budget are core to the drawer and filters); P3 with P2 if the Awareness view matters; P5 later |
 | D9 | Fix the team sheet's formula cells listed in §5 | Fix them (seven ranges), even though the dashboard view replaces the sheet |
+
+---
+
+## 9. Decisions taken
+
+| # | Decision |
+|---|---|
+| D1 | Multi-SKU ads are one combined row ("UAS + ITB", in config order) under "Duos & multi-SKU". Every multi-SKU ad in the audit window is an offer ad (Offer in the ad name), so nothing is split |
+| D2 | Offer: **Offer** only when the ad name says so (or a price offer such as B2@749); **Non-offer** when the ad, ad set or campaign says Non-offer; otherwise **Not tagged**, a visible value of the Offer filter, with the ads listed in Data health for renaming |
+| D3 | Awareness: the campaign name says "awareness", except Reach and Amazon campaigns, which are in neither scope (as Reach already was). This moves the Amazon campaign out of Marketing's Awareness numbers |
+| D4 | No benchmarks: matrix and explorer colour by change only |
+| D5 | Code list: the brief's ordered list plus TargetAndFadeDuo, EvenSkinDuo, TRIO and GFS; whole tokens with a number or PACK suffix for single products; named rows for Catalog, offer creatives (no product) and unnamed sets; Other for the rest |
+| D6 | Attribution: each ad set's own setting, stated in the view's footer |
+| D7 | Link clicks, LPV, ATC and 3-second plays are kept from the actions already received. The history did not have them (they were dropped when cached), so the ad-level backfill reads each cached day once more; the view shows them for the days already re-read |
+| D8 | Reach and frequency (daily field plus on-demand unique reach for any period and selection), and status, budget and launch date (object reads) added. ThruPlays and video quartiles, creative thumbnails and the activity log not added: Cost per ThruPlay and Hold rate are left out of the Awareness set and logged here |
+
+## 10. What was built
+
+- **Pipeline** (`app/meta.py`, `app/refresh.py`):
+  - The new fields are kept: link clicks, LPV, ATC, 3-second plays, reach and frequency.
+  - Each action list is in priority order and only the first type found is kept, so ATC and LPV are never double counted.
+  - `fetch_objects` reads status, budget and launch date for campaigns, ad sets and ads, cached in `cache/meta_objects.json`.
+  - `reach_for` asks Meta for unique reach, cached six hours behind `/api/meta/reach`.
+- **Classification** (`app/meta_model.py`, `config.json` → `meta_view`): scope, offer, stage and SKU for every ad, computed once when the pages are built.
+- **Data** (`app/pages/meta_view.py` → `meta_ads` page): ad × day rows with the tags. A test ties its daily spend to the Meta spend every other tab uses.
+- **View** (`static/meta_view.js`), Marketing › Meta:
+  - Sub-tabs Channels | Meta | Google. Channels keeps Meta as one row; Google keeps its tree. The old Meta product × stage matrix and the Meta branch of the tree are gone.
+  - A sticky filter bar: Scope, Offer (with Not tagged), Account, Status, Min spend, Search.
+  - KPI strip with 14-day sparklines.
+  - Funnel efficiency strip, which follows the cross-filters and the selected row and names the step that moved most.
+  - Watchlist built from config thresholds. "ROAS under half the stage's average in view" replaces the benchmark rule. Frequency uses daily reach, a lower bound for the period.
+  - SKU × Stage matrix with a metric switcher, cross-filter chips and an "N more" fold.
+  - Explorer with four group-by presets, six column presets (Custom up to 8), Δ under each value or the comparison values, a 14-day trend, tags, status dot, sorting within levels, validation warnings, a pinned total equal to the KPI strip, and keyboard control.
+  - Detail drawer:
+    - breadcrumb, status, budget, tags and an Ads Manager link;
+    - mini KPIs;
+    - a 2-metric chart with daily or weekly steps, range presets, the comparison dashed, the parent's value dotted and sale days shaded;
+    - for an ad: its funnel and sibling ranks;
+    - for an ad set or campaign: its children with shares of spend and of purchases.
+  - All view state is in the URL.
+- **Data health › Meta classification:** the tie-out, tag coverage, validation counts, and the Not tagged and Other ads to rename.

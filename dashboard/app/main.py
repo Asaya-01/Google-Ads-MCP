@@ -312,6 +312,43 @@ def region_state(key: str, user: str = Depends(current_user)):
     return payload
 
 
+@app.post("/api/meta/reach")
+async def meta_reach(request: Request, user: str = Depends(current_user)):
+    """Unique reach and frequency for a period, for every ad in the view or a
+    set of ads (a campaign, ad set, SKU or stage rollup). Reach cannot be
+    added up from rows, so it is asked of Meta and cached for six hours."""
+    import datetime as _dt
+    import hashlib
+    import re as _re
+
+    from . import meta
+
+    body = await request.json()
+    since, until = str(body.get("since", "")), str(body.get("until", ""))
+    ads = [str(a) for a in (body.get("ads") or []) if _re.fullmatch(r"\d{5,25}", str(a))][:2000]
+    if not (_re.fullmatch(r"\d{4}-\d{2}-\d{2}", since) and _re.fullmatch(r"\d{4}-\d{2}-\d{2}", until)):
+        raise HTTPException(400, "since and until must be dates")
+    key = hashlib.sha1(f"{since}|{until}|{','.join(sorted(ads))}".encode()).hexdigest()
+    st = store()
+    hit = st.get_json(f"cache/meta_reach/{key}.json")
+    now = _dt.datetime.now(_dt.timezone.utc)
+    if hit and now - _dt.datetime.fromisoformat(hit["at"]) < _dt.timedelta(hours=6):
+        return hit["value"]
+    mcfg = settings.config()["meta"]
+    try:
+        token = secrets.get_secret(mcfg["token_secret"])
+    except Exception:  # Secret Manager unreachable: n/a, never an error page
+        token = None
+    if not token:
+        return {"reach": None, "frequency": None, "na": "the Meta token is not available to the dashboard"}
+    try:
+        value = meta.reach_for(token, mcfg, since, until, ads or None)
+    except Exception as exc:  # shown as n/a with the reason, never zero
+        return {"reach": None, "frequency": None, "na": f"Meta: {exc}"}
+    st.put_json(f"cache/meta_reach/{key}.json", {"at": now.isoformat(), "value": value})
+    return value
+
+
 @app.get("/api/page/{tab}")
 def page(tab: str, user: str = Depends(current_user)):
     if tab not in {t["id"] for t in settings.enabled_tabs()} | {

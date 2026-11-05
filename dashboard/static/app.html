@@ -362,6 +362,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
   /*__RANGE_FUNNEL__*/
   /*__RANGE_TABS__*/
   /*__RANGE_TREE__*/
+  /*__META_VIEW__*/
   /*__RANGE_BASKET__*/
   /*__RANGE_D1__*/
   /*__RANGE_REGION__*/
@@ -374,7 +375,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     const hhmm = (iso) => iso ? new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" }) : null;
     $main.innerHTML = '<p class="empty">Loading…</p>';
     const pg = {};
-    for (const t of ["overview", "funnel", "marketing", "products", "region", "d1", "days", "product_days"]) { try { pg[t] = await loadPage(t); } catch (e) { pg[t] = null; } }
+    for (const t of ["overview", "funnel", "marketing", "products", "region", "d1", "days", "product_days", "meta_ads"]) { try { pg[t] = await loadPage(t); } catch (e) { pg[t] = null; } }
     if (state.tab !== "health") return;
     const st = state.status || {}, labels = p.source_labels || {};
     // 1. sources
@@ -449,6 +450,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     $main.innerHTML = `
       ${rgSec("Sources", `for D-1, ${esc(dayLabel(p.as_of))}`, head + table(srcCols, p.sources, { full: true }) + `<h3>Other inputs</h3>` + inputs)}
       ${rgSec("Data checks", "our copy against each source, and the mappings the tabs rely on", `<h3>Cross-checks</h3>${p.reconcile?.length ? table(recCols, p.reconcile, { full: true }) : '<p class="na">No cross-check has run yet for this day.</p>'}<h3>Google sessions ↔ campaigns</h3>${gcheck}<h3>Product map</h3>${pmap}`)}
+      ${rgSec("Meta classification", "tag coverage, names to fix, validation and the tie-out (Marketing › Meta)", mvHealth(pg.meta_ads, D), { comp: "meta-coverage" })}
       <div class="cols-2">
         ${rgSec("Sale calendar", "which days are BAU and which are sale", cal)}
         ${rgSec("Known exceptions", "days whose numbers need a footnote", excHtml)}
@@ -565,14 +567,16 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
   async function show() {
     const ids = state.config.tabs.map((t) => t.id);
     const ALIAS = { daily: "funnel" }; // old links keep working
-    if (ALIAS[location.hash.slice(1)]) { history.replaceState(null, "", "#" + ALIAS[location.hash.slice(1)]); }
-    const want = location.hash.slice(1);
+    const raw = location.hash.slice(1).split("?")[0];
+    if (ALIAS[raw]) { history.replaceState(null, "", "#" + ALIAS[raw]); }
+    const want = location.hash.slice(1).split("?")[0]; // "#marketing?sub=meta&…": the tab, then its own state
     state.tab = ids.includes(want) ? want : ids[0];
     renderTabs();
     destroyCharts();
     clearInterval(state.liveTimer); clearInterval(state.liveTick);
     $main.innerHTML = '<p class="empty">Loading…</p>';
     setSub("");
+    document.getElementById("mv-drawer")?.remove(); document.body.classList.remove("mv-dr-open");
     try {
       const page = await loadPage(state.tab);
       if (!page) throw new Error("This tab has not been built yet.");

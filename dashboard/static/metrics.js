@@ -101,6 +101,32 @@ const METRICS = {
     def: "Orders that were a customer's first valid order.", formula: "Rank 1 of a customer's valid orders", source: "Shopify orders (BigQuery)" },
   repeat_orders: { label: "Repeat orders", field: "repeat_orders", format: "count", dir: "higher", home: "retention", base: "orders",
     def: "Orders by customers who had ordered before.", formula: "Rank 2+ of a customer's valid orders", source: "Shopify orders (BigQuery)" },
+  // ---------------------------------------------------------------- Meta view (platform data)
+  /* mv: how the Meta view works the metric out from summed bases at any
+     level: num, or num ÷ den (× mul). Ratios are never averaged. */
+  m_spend: { label: "Spend", format: "currency", dir: "neutral", home: "marketing", base: "spend", mv: { num: "spend" }, def: "Meta spend on the ads in view.", formula: "Σ spend", source: "Meta API" },
+  m_impr: { label: "Impressions", format: "count", dir: "neutral", home: "marketing", base: "spend", mv: { num: "impr" }, def: "Times the ads were shown.", formula: "Σ impressions", source: "Meta API" },
+  m_reach: { label: "Reach", format: "count", dir: "neutral", home: "marketing", base: "spend", def: "Unique people reached in the period. It cannot be added up from days or rows, so it is asked of Meta for each period and selection; across both accounts it is an upper bound.", formula: "Meta unique reach", source: "Meta API" },
+  m_freq: { label: "Frequency", format: "decimal", dir: "neutral", home: "marketing", base: "spend", def: "Impressions per person reached. Above 3 on performance ads is a creative-fatigue risk.", formula: "Impressions ÷ Reach", source: "Meta API" },
+  m_cpm: { label: "CPM", format: "currency", dir: "lower", home: "marketing", base: "spend", mv: { num: "spend", den: "impr", mul: 1000 }, def: "Cost per 1,000 impressions.", formula: "Spend ÷ Impressions × 1,000", source: "Meta API" },
+  m_link: { label: "Link clicks", format: "count", dir: "higher", home: "marketing", base: "spend", mv: { num: "link" }, def: "Clicks on the ad's link (not all clicks).", formula: "Σ link clicks", source: "Meta API" },
+  m_ctr: { label: "CTR (link)", format: "percent", dir: "higher", home: "marketing", base: "spend", mv: { num: "link", den: "impr" }, def: "Link clicks per impression.", formula: "Link clicks ÷ Impressions", source: "Meta API" },
+  m_cpc: { label: "CPC (link)", format: "currency2", dir: "lower", home: "marketing", base: "spend", mv: { num: "spend", den: "link" }, def: "Cost per link click.", formula: "Spend ÷ Link clicks", source: "Meta API" },
+  m_lpv: { label: "Landing page views", short: "LPV", format: "count", dir: "higher", home: "marketing", base: "spend", mv: { num: "lpv" }, def: "Clicks that loaded the landing page.", formula: "Σ landing page views", source: "Meta API" },
+  m_lpv_rate: { label: "LPV rate", format: "percent", dir: "higher", home: "marketing", base: "spend", mv: { num: "lpv", den: "link" }, def: "Landing page views per link click: a drop means people click but the page does not load (slow page, bounce before load).", formula: "LPV ÷ Link clicks", source: "Meta API" },
+  m_cplpv: { label: "Cost per LPV", format: "currency2", dir: "lower", home: "marketing", base: "spend", mv: { num: "spend", den: "lpv" }, def: "Spend per landing page view (the sheet's CPLV).", formula: "Spend ÷ LPV", source: "Meta API" },
+  m_atc: { label: "Add to carts", short: "ATC", format: "count", dir: "higher", home: "marketing", base: "spend", mv: { num: "atc" }, def: "Add-to-cart events Meta attributes to the ads (one action type, so never double counted). Attributed with view-through, so it can exceed LPV.", formula: "Σ add to cart", source: "Meta API" },
+  m_atc_rate: { label: "ATC rate", format: "percent", dir: "higher", home: "marketing", base: "spend", mv: { num: "atc", den: "lpv" }, def: "Add to carts per landing page view.", formula: "ATC ÷ LPV", source: "Meta API" },
+  m_cpatc: { label: "Cost per ATC", format: "currency2", dir: "lower", home: "marketing", base: "spend", mv: { num: "spend", den: "atc" }, def: "Spend per add to cart.", formula: "Spend ÷ ATC", source: "Meta API" },
+  m_purch: { label: "Purchases", format: "count", dir: "higher", home: "marketing", base: "spend", mv: { num: "purch" }, def: "Purchases Meta attributes to the ads (platform data, each ad set's own attribution).", formula: "Σ purchases", source: "Meta API" },
+  m_purch_rate: { label: "Purchase rate", format: "percent", dir: "higher", home: "marketing", base: "spend", mv: { num: "purch", den: "link" }, def: "Purchases per link click (the sheet's Conv%).", formula: "Purchases ÷ Link clicks", source: "Meta API" },
+  m_purch_from_atc: { label: "Purchase rate from ATC", format: "percent", dir: "higher", home: "marketing", base: "spend", mv: { num: "purch", den: "atc" }, def: "Purchases per add to cart.", formula: "Purchases ÷ ATC", source: "Meta API" },
+  m_cpp: { label: "Cost per purchase", format: "currency", dir: "lower", home: "marketing", base: "spend", mv: { num: "spend", den: "purch" }, def: "Spend per purchase Meta reports. Not acquisition cost: Meta's purchases include repeat buyers.", formula: "Spend ÷ Purchases", source: "Meta API" },
+  m_rev: { label: "Platform revenue", format: "currency", dir: "higher", home: "marketing", base: "spend", mv: { num: "rev" }, def: "Purchase value Meta credits to the ads. Platforms over-attribute: this adds up to more than Shopify.", formula: "Σ purchase value", source: "Meta API" },
+  m_roas: { label: "Platform ROAS", format: "ratio", dir: "higher", home: "marketing", base: "spend", mv: { num: "rev", den: "spend" }, def: "Platform revenue ÷ spend: what Meta claims, not Shopify.", formula: "Platform revenue ÷ Spend", source: "Meta API" },
+  m_aov: { label: "AOV (platform)", format: "currency", dir: "higher", home: "marketing", base: "spend", mv: { num: "rev", den: "purch" }, def: "Platform revenue per platform purchase.", formula: "Platform revenue ÷ Purchases", source: "Meta API" },
+  m_v3s: { label: "3-second plays", format: "count", dir: "higher", home: "marketing", base: "spend", mv: { num: "v3s" }, def: "Video plays of at least 3 seconds.", formula: "Σ 3-second plays", source: "Meta API" },
+  m_hook: { label: "Hook rate", format: "percent", dir: "higher", home: "marketing", base: "spend", mv: { num: "v3s", den: "impr" }, def: "3-second plays per impression: how often the opening stops the scroll (video ads).", formula: "3-second plays ÷ Impressions", source: "Meta API" },
 };
 
 // What the colours and the "base too small" rule use (config.json "display" overrides these).
@@ -187,13 +213,15 @@ function kpiCard(id, o = {}) {
     + (o.scope ? `<span class="kpi-tag" title="Changes with the campaign view">${mEsc(M_SCOPE[o.scope] || o.scope)}</span>` : "");
   const head = `<div class="kpi-l"><span class="kpi-n">${mEsc(label)}</span>${mTip(id, o.tipExtra)}</div>`;
   let body;
-  if (o.value === null || o.value === undefined) {
+  if (o.loading) body = '<div class="kpi-v na-v">…</div><div class="kpi-d"><span class="kpi-vs">asking Meta</span></div>';
+  else if (o.value === null || o.value === undefined) {
     body = `<div class="kpi-v na-v" title="${mEsc(o.na || "not available")}">—</div><div class="kpi-d"><span class="na" title="${mEsc(o.na || "")}">Data unavailable${o.na ? ": " + mEsc(o.na) : ""}</span></div>`;
-  } else {
+  } else if (!o.loading) {
     const vs = o.prev === undefined ? "" : o.prev === null ? '<span class="kpi-vs">no comparison</span>'
       : `${mDeltaHtml(id, o.change, { small: o.small })}<span class="kpi-vs">vs ${mEsc(mVal(id, o.prev, true) ?? "n/a")}${o.vsLabel ? " " + mEsc(o.vsLabel) : ""}</span>`;
     body = `<div class="kpi-v">${mEsc(mVal(id, o.value, true))}</div><div class="kpi-d">${vs}</div>${o.sub || scope ? `<div class="kpi-s">${o.sub ? mEsc(o.sub) : ""}${scope}</div>` : ""}`;
   }
+  if (o.spark) body += `<div class="kpi-spark">${o.spark}</div>`;
   const tag = o.href ? "a" : "div";
   return `<${tag} class="kpi${o.hero ? " hero" : ""}" ${o.href ? `href="${o.href}" title="Open ${mEsc(o.hrefLabel || "its tab")}"` : ""} data-metric="${mEsc(id)}">${head}${body}</${tag}>`;
 }

@@ -66,13 +66,26 @@ R.marketing = (p) => {
   const sheetNA = Object.entries(p.unavailable || {}).filter(([k]) => k.startsWith("sheet_")).map(([, v]) => v);
   const chk = p.classification_check || {}, m = chk.google_match || {};
   const checkBad = (chk.unclassified_google_ids || []).length > 0 || (m.match_rate != null && m.match_rate < 0.9);
-  rgTab("marketing", ["campaign_days", "meta_tree", "google_tree", "channel_days"], "", () => {
-    const e = RG.eng, c = e.compare(RG.from, RG.to, RG.cmp), g = rgPick(c);
+  /* Three sub-tabs: Channels (every channel, one row each, Meta included as
+     one row), Meta (the Meta view, meta_view.js) and Google (its tree). */
+  const sub = new URLSearchParams(location.hash.split("?")[1] || "").get("sub") || "channels";
+  const nav = `<nav class="subtabs" aria-label="Marketing views">${[["channels", "Channels", "#marketing"], ["meta", "Meta", "#marketing?sub=meta"], ["google", "Google", "#marketing?sub=google"]].map(([k, l, h]) => `<a href="${h}" ${sub === k ? 'aria-current="page"' : ""}>${l}</a>`).join("")}</nav>`;
+  rgTab("marketing", sub === "meta" ? [] : ["campaign_days", "meta_tree", "google_tree", "channel_days"], nav, () => {
     const host = document.getElementById("rg-body");
+    if (sub === "meta") { mvRender(host); return; }
+    const e = RG.eng, c = e.compare(RG.from, RG.to, RG.cmp), g = rgPick(c);
     const late = [metaNA ? `Meta: ${metaNA}` : "", ...sheetNA].filter(Boolean);
     const filters = `<div class="tab-filters"><div class="filter-row">${rgScopeSeg("mk-scope")}${late.length ? `<span class="spill late" title="${esc(late.join("\n"))}"><i></i>Source late: ${esc(late.length === 1 && metaNA ? "Meta" : late.length + " inputs")}</span>` : ""}${checkBad ? `<a class="spill late" href="#health"><i></i>Google session check needs a look</a>` : ""}</div></div>`;
     if (!g) { host.innerHTML = filters + rgNone(); rgScopeBind("mk-scope"); return; }
     const sc = RG.mode, tag = { scope: sc };
+    if (sub === "google") {
+      host.innerHTML = filters + `
+        <section class="card" data-component="google-kpis"><div class="kpis">${[rgKpi("google_spend", g, { perDay: true, ...tag }), ...(sc === "aw" ? [] : [rgKpi("google_platform_roas", g, tag)])].join("")}</div></section>
+        ${rgSec("Google Ads: group › product › campaign", "Brand Search, Brand PMax, Non-brand PMax (by product) and Demand Gen; open any row", `${trBarHtml("gg-tree")}<div id="gg-tree"></div>`, { comp: "google-tree" })}`;
+      rgScopeBind("mk-scope");
+      trBind("gg-tree", g, { only: ["google"] });
+      return;
+    }
     const cpp = rgCpp(g);
     const kpis = sc === "aw"
       ? [rgKpi("channel_spend", g, { label: "Awareness spend", value: g.w.spend, prev: g.pw ? g.pw.spend ?? null : null, change: g.pw ? g.change("spend") : null, perDay: true, ...tag }),
@@ -81,19 +94,12 @@ R.marketing = (p) => {
         kpiCard("cpp", { ...cpp, ...tag })];
     host.innerHTML = filters + `
       <section class="card" data-component="marketing-kpis"><div class="kpis${kpis.length === 6 ? " six" : ""}">${kpis.join("")}</div></section>
-      ${rgSec("Channels: spend, platform claims and Shopify", "what each channel cost, what its platform claims, and what Shopify credits it with (last click)", trReconHtml(g, { maxHeight: "70vh" }), { comp: "channel-reconciliation" })}
-      ${rgFold("Spend and return: channel › stage › product › campaign", "every campaign, ad set and ad; Google split into Brand Search, Brand PMax, Non-brand PMax and Demand Gen", `${trBarHtml("mk-tree")}<div id="mk-tree">${metaNA ? `<p class="na">Meta: data unavailable. ${esc(metaNA)}</p>` : ""}</div>`, { id: "mk-tree-fold", comp: "spend-tree" })}
-      ${sc === "aw" ? "" : rgSec("Meta: product × stage", "spend and Meta Platform ROAS for each product at each funnel stage", '<div id="mk-matrix"></div>', { comp: "product-stage-matrix" })}
+      ${rgSec("Channels: spend, platform claims and Shopify", "what each channel cost, what its platform claims, and what Shopify credits it with (last click); Meta and Google open in their own sub-tabs", trReconHtml(g, { maxHeight: "70vh" }), { comp: "channel-reconciliation" })}
       <div class="cols-2">
         ${rgSec("Spend per day", "by channel", `${legend([["--series-1", "Meta"], ["--series-2", "Google"], ...(sc === "aw" ? [] : [["--good", "Affiliate"], ["--accent", "CRM"], ["--bad", "Reddit"]])])}<div class="chart-box"><canvas id="c-mk-spend" aria-label="Spend per day by channel"></canvas></div>`, { comp: "spend-per-day-chart" })}
         ${sc === "aw" ? "" : rgSec("Blended ROAS per day", "Total sales ÷ Performance spend", '<div class="chart-box"><canvas id="c-mk-roas" aria-label="Blended ROAS per day"></canvas></div>', { comp: "roas-per-day-chart" })}
       </div>`;
     rgScopeBind("mk-scope");
-    const mx = () => { const el = document.getElementById("mk-matrix"); if (el) el.innerHTML = trMatrixHtml() || '<p class="na">Switch the tree to “Stage › product” to see this.</p>'; };
-    trBind("mk-tree", g, { after: mx });
-    trMatrixBind("mk-matrix", "mk-tree");
-    // a click in the matrix opens the tree
-    document.getElementById("mk-matrix")?.addEventListener("click", (ev) => { if (ev.target.closest("button[data-open]")) document.getElementById("mk-tree-fold").open = true; });
     rgSpendCharts();
   });
 };
