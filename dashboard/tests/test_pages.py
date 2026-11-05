@@ -278,6 +278,7 @@ def test_every_phase1_tab_builds_and_serialises(built_without_meta):
         "google_tree",
         "channel_days",
         "slab_days",
+        "meta_ads",
         "drill_days",
         "region",
         "region_days",

@@ -840,7 +840,7 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
                     "note": {
                         "perf": "sales campaigns",
                         "awareness": "awareness campaigns",
-                        "social": "the social team's Reach campaigns: in total spend only",
+                        "social": "the Reach and Amazon campaigns: in total spend only",
                     }[k],
                 }
             )
@@ -939,7 +939,7 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
                 "Meta",
                 meta_blk,
                 "Meta's API, a little behind real time",
-                [("perf", "Performance"), ("awareness", "Awareness"), ("social", "Social (Reach)")],
+                [("perf", "Performance"), ("awareness", "Awareness"), ("social", "Reach & Amazon")],
             )
             + platform(
                 "Google Ads",

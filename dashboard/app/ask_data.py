@@ -740,7 +740,7 @@ class Breakdowns:
             if group_by == "account":
                 return [(c.get("account") or "?", 1.0)]
             if kind == "social":
-                return [("Social (Reach)", 1.0)]
+                return [("Reach & Amazon", 1.0)]
             if group_by == "stage":
                 if kind == "awareness":
                     return [("Awareness · " + (c.get("goal") or "Other"), 1.0)]

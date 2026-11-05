@@ -41,7 +41,7 @@ function trAdd(map, path, m, which, kind, f = 1, from = 0) {
 const trLab = (cd, code) => (cd.labels && cd.labels[code]) || code;
 function trMid(cd, c, stage, prod) { // the levels between the channel and the campaign, one list per product
   const lab = (code) => ({ k: "p:" + code, label: trLab(cd, code), order: TR_LAST.has("p:" + code) ? 90 : 50 });
-  if (c.kind === "social") return [[{ k: "social", label: "Social (Reach)", order: 80, note: "The social team's Reach campaigns. Counted in total spend, kept out of Performance and Awareness." }]];
+  if (c.kind === "social") return [[{ k: "social", label: "Reach & Amazon", order: 80, note: "The Reach and Amazon campaigns. Counted in total spend, kept out of Performance and Awareness." }]];
   if (c.kind === "awareness") {
     const goal = { k: "aw:" + (c.goal || c.group || "Other"), label: "Awareness · " + (c.goal || c.group || "Other"), order: 70 };
     return (prod && prod.length ? prod : ["UNMAPPED"]).map((p) => [goal, lab(p)]);

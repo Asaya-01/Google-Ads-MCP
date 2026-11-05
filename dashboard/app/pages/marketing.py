@@ -154,7 +154,7 @@ def _meta_campaigns(ctx: Context, dates: list[str]) -> list[dict]:
                         else {
                             "perf": "Performance",
                             "awareness": "Awareness",
-                            "social": "Social (Reach)",
+                            "social": "Reach & Amazon",
                         }[rules.campaign_kind(name, ctx.cfg["sessions"])]
                     ),
                     "spend": 0.0,

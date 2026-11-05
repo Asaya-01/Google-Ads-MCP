@@ -16,6 +16,424 @@
     "min_spend": 5000
   },
 
+  "meta_view": {
+    "_about": "The Meta view's classification, computed once when the pages are built and reused everywhere. SKU: the ordered sku_codes, matched on whole name tokens (names split on _ - | space + and other punctuation except &); a single product also matches with a number or PACK suffix (ITB1, UASPACK). Names are read ad, then ad set, then campaign: the first that names any code wins. A set, kit or range code wins over single products in the same name; two or more single products and no set make one combined row (UAS + ITB) under 'Duos & multi-SKU'. No code: Catalog stage, an offer creative, generic set words, else Other. Offer: 'Offer' (or a price offer like B2@749) in the AD name; Non-offer when the ad, ad set or campaign says Non-offer; anything else is Not tagged so the name can be fixed. Scope: Awareness when the campaign name says awareness, except Reach and Amazon campaigns (sessions.social_name_regex), which are in neither scope.",
+    "sku_codes": [
+      {
+        "code": "3StepSpotDimishingSet",
+        "display_name": "3-Step Spot Diminishing Set",
+        "match_tokens": [
+          "3STEPSPOTDIMISHINGSET",
+          "3STEPSPOTDIMINISHINGSET"
+        ],
+        "type": "set",
+        "product_codes": [
+          "3SS"
+        ]
+      },
+      {
+        "code": "HeadToToeSet",
+        "display_name": "Head to Toe Set",
+        "match_tokens": [
+          "HEADTOTOESET",
+          "HEADTOTOE",
+          "H2T"
+        ],
+        "type": "set",
+        "product_codes": [
+          "H2T"
+        ]
+      },
+      {
+        "code": "AntiAcneSet",
+        "display_name": "Anti-Acne Set",
+        "match_tokens": [
+          "ANTIACNESET"
+        ],
+        "type": "set",
+        "product_codes": []
+      },
+      {
+        "code": "FestiveGlowKit",
+        "display_name": "Festive Glow Kit",
+        "match_tokens": [
+          "FESTIVEGLOWKIT"
+        ],
+        "type": "kit",
+        "product_codes": []
+      },
+      {
+        "code": "TravelKit",
+        "display_name": "Travel Kit",
+        "match_tokens": [
+          "TRAVELKIT"
+        ],
+        "type": "kit",
+        "product_codes": [
+          "TFK"
+        ]
+      },
+      {
+        "code": "TargetAndFadeDuo",
+        "display_name": "Target & Fade Duo",
+        "match_tokens": [
+          "TARGETANDFADEDUO",
+          "TARGET&FADEDUO",
+          "TARGETANDFADE",
+          "TARGET&FADE"
+        ],
+        "type": "set",
+        "product_codes": [
+          "TFDUO"
+        ]
+      },
+      {
+        "code": "EvenSkinDuo",
+        "display_name": "Even Skin Duo",
+        "match_tokens": [
+          "EVENSKINDUO"
+        ],
+        "type": "set",
+        "product_codes": [
+          "ESDUO"
+        ]
+      },
+      {
+        "code": "TRIO",
+        "display_name": "Even-tone Body Trio",
+        "match_tokens": [
+          "TRIO",
+          "EVENTONETRIO",
+          "BODYTRIO",
+          "TONETRIO"
+        ],
+        "type": "set",
+        "product_codes": [
+          "TRIO"
+        ]
+      },
+      {
+        "code": "OilFreeMoisturizer",
+        "display_name": "Oil-Free Barrier+ Crème",
+        "match_tokens": [
+          "OILFREEMOISTURIZER",
+          "OILFREEMOISTURISER"
+        ],
+        "type": "single",
+        "product_codes": [
+          "OFB"
+        ]
+      },
+      {
+        "code": "ETFaceCleanser",
+        "display_name": "Even Tone Face Cleanser",
+        "match_tokens": [
+          "ETFACECLEANSER"
+        ],
+        "type": "single",
+        "product_codes": [
+          "ETC"
+        ]
+      },
+      {
+        "code": "SpotGel",
+        "display_name": "Advanced Spot Targeting Gel",
+        "match_tokens": [
+          "SPOTGEL"
+        ],
+        "type": "single",
+        "product_codes": [
+          "Spot Gel"
+        ]
+      },
+      {
+        "code": "SheerMilk",
+        "display_name": "Sheer Milk Sunscreen",
+        "match_tokens": [
+          "SHEERMILK"
+        ],
+        "type": "single",
+        "product_codes": [
+          "SMS"
+        ]
+      },
+      {
+        "code": "SunDrip",
+        "display_name": "Sun Drip Mineral Sunscreen",
+        "match_tokens": [
+          "SUNDRIP"
+        ],
+        "type": "single",
+        "product_codes": [
+          "SDM"
+        ]
+      },
+      {
+        "code": "Glow&lift",
+        "display_name": "Glow & Lift Crème",
+        "match_tokens": [
+          "GLOW&LIFT",
+          "GLOWANDLIFT"
+        ],
+        "type": "single",
+        "product_codes": [
+          "GLC"
+        ]
+      },
+      {
+        "code": "UAS",
+        "display_name": "Even Tone Underarm Mist",
+        "match_tokens": [
+          "UAS"
+        ],
+        "type": "single",
+        "product_codes": [
+          "UAS"
+        ]
+      },
+      {
+        "code": "ASS",
+        "display_name": "Advanced Spot Targeting Serum",
+        "match_tokens": [
+          "ASS"
+        ],
+        "type": "single",
+        "product_codes": [
+          "ASS"
+        ]
+      },
+      {
+        "code": "KNE",
+        "display_name": "Tone Restore Knee-Neck-Elbow Cream",
+        "match_tokens": [
+          "KNE"
+        ],
+        "type": "single",
+        "product_codes": [
+          "KNE"
+        ]
+      },
+      {
+        "code": "SSS",
+        "display_name": "Sheerscreen Mist",
+        "match_tokens": [
+          "SSS"
+        ],
+        "type": "single",
+        "product_codes": [
+          "SSM"
+        ]
+      },
+      {
+        "code": "HOT",
+        "display_name": "Hint of Tint SPF 50",
+        "match_tokens": [
+          "HOT"
+        ],
+        "type": "single",
+        "product_codes": [
+          "HOT"
+        ]
+      },
+      {
+        "code": "ALSS",
+        "display_name": "Air-Light Sunscreen Mist",
+        "match_tokens": [
+          "ALSS"
+        ],
+        "type": "single",
+        "product_codes": [
+          "ALM"
+        ]
+      },
+      {
+        "code": "ETSET",
+        "display_name": "Even Tone Restore Set",
+        "match_tokens": [
+          "ETSET"
+        ],
+        "type": "set",
+        "product_codes": [
+          "ETRS"
+        ]
+      },
+      {
+        "code": "SLSS",
+        "display_name": "Spot Light Sunscreen SPF 50",
+        "match_tokens": [
+          "SLSS"
+        ],
+        "type": "single",
+        "product_codes": [
+          "SLSS"
+        ]
+      },
+      {
+        "code": "EEC",
+        "display_name": "Even Evermore Crème",
+        "match_tokens": [
+          "EEC"
+        ],
+        "type": "single",
+        "product_codes": [
+          "EEC"
+        ]
+      },
+      {
+        "code": "ADSS",
+        "display_name": "Aqua Dew Sunscreen",
+        "match_tokens": [
+          "ADSS"
+        ],
+        "type": "single",
+        "product_codes": [
+          "ADS"
+        ]
+      },
+      {
+        "code": "Cocoon",
+        "display_name": "Moisture Cocoon Crème",
+        "match_tokens": [
+          "COCOON"
+        ],
+        "type": "single",
+        "product_codes": [
+          "MCC"
+        ]
+      },
+      {
+        "code": "AAPK",
+        "display_name": "Advanced Anti-Pigmentation Kit",
+        "match_tokens": [
+          "AAPK"
+        ],
+        "type": "kit",
+        "product_codes": [
+          "APS"
+        ]
+      },
+      {
+        "code": "APK",
+        "display_name": "Anti-Pigmentation Kit",
+        "match_tokens": [
+          "APK"
+        ],
+        "type": "kit",
+        "product_codes": [
+          "APS"
+        ]
+      },
+      {
+        "code": "ITB",
+        "display_name": "Fade Forward Inner Thigh & Bum Roll-On",
+        "match_tokens": [
+          "ITB"
+        ],
+        "type": "single",
+        "product_codes": [
+          "ITB"
+        ]
+      },
+      {
+        "code": "NLG",
+        "display_name": "New Light Gel Face Moisturiser",
+        "match_tokens": [
+          "NLG"
+        ],
+        "type": "single",
+        "product_codes": [
+          "NLG"
+        ]
+      },
+      {
+        "code": "RDSC",
+        "display_name": "Rapid Dark Spot Correction Set",
+        "match_tokens": [
+          "RDSC"
+        ],
+        "type": "set",
+        "product_codes": [
+          "RDS"
+        ]
+      },
+      {
+        "code": "PEEL",
+        "display_name": "Super Fade Regenerative Peel",
+        "match_tokens": [
+          "PEEL"
+        ],
+        "type": "single",
+        "product_codes": [
+          "Peel"
+        ]
+      },
+      {
+        "code": "SCRUB",
+        "display_name": "Fresh Start Smoothening Scrub",
+        "match_tokens": [
+          "SCRUB"
+        ],
+        "type": "single",
+        "product_codes": [
+          "Scrub"
+        ]
+      },
+      {
+        "code": "GFS",
+        "display_name": "Glow Forward Radiance Serum",
+        "match_tokens": [
+          "GFS"
+        ],
+        "type": "single",
+        "product_codes": [
+          "GFS"
+        ]
+      },
+      {
+        "code": "HPRange",
+        "display_name": "Pigmentation range",
+        "match_tokens": [
+          "HPRANGE"
+        ],
+        "type": "range",
+        "product_codes": []
+      }
+    ],
+    "generic_set_tokens": [
+      "SETS",
+      "SET",
+      "DUO",
+      "DUOS",
+      "TRIOS",
+      "ADVSETS",
+      "COMBO"
+    ],
+    "offer_regex": "(?<![A-Z])(?<!NON-)(?<!NON_)(?<!NON )(?<!NON)OFFER|B\\d@\\d|BUY\\d@",
+    "non_offer_regex": "NON[-_ ]?OFFER",
+    "labels": {
+      "MULTI": "Duos & multi-SKU",
+      "OFFERCREATIVE": "Offer creative (no product)",
+      "SETS": "Sets (not named)",
+      "CATALOG": "Catalog (all products)",
+      "OTHER": "Other (no product in the name)"
+    },
+    "min_spend_default": 500,
+    "grey_below_spend": 5000,
+    "attribution_note": "Meta platform data · each ad set's own attribution setting: mostly 7-day click, 1-day view, 1-day engaged-view; a few ad sets use incrementality",
+    "validation": {
+      "lpv_per_link_click": 1.05,
+      "atc_per_lpv": 1.5
+    },
+    "watchlist": {
+      "_about": "Rule-based flags, at most 6 shown. Spend thresholds are for the picked period.",
+      "min_spend": 5000,
+      "frequency_above": 3,
+      "ctr_drop": 0.25,
+      "cpp_rise": 0.4,
+      "no_purchase_days": 3
+    }
+  },
+
   "product_map": {
     "_about": "Every Shopify product (keyed on its product ID: titles change) under one house code and short name, used on every tab: rows read 'CODE · Short name'. Packs, sizes and old listings of one product sit under it as variants (the value is the variant's name; empty = the main listing). Freebie, merch, book and gummies products are never counted, so they are not here. A product sold but missing here shows as 'Unmapped' and raises a warning in Data health.",
     "products": [
@@ -654,7 +1072,7 @@
     "dated_awareness": [
       {"source": "reddit", "regex": "(^|_)traffic_campaign($|_)", "from": "2000-01-01", "note": "Reddit traffic campaigns are awareness on every day (the team's rule since Nov 2026, applied to the whole history). Set a later 'from' to count them as performance before that date."}
     ],
-    "social_name_regex": "(^|_)reach(_|$)",
+    "social_name_regex": "(^|_)(reach|amazon)(_|$)",
     "google_sources": ["google", "youtube"],
     "breakdown_limit": 10000,
     "landing_page_limit": 300

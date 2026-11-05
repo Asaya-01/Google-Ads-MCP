@@ -417,7 +417,7 @@ def test_spend_follows_the_campaign_type_switch():
     rows = v["all"]["spend_breakdown"]
     assert rows[0]["label"] == "Meta" and rows[0]["value"] == 1720
     subs = [(r["label"], r["value"]) for r in rows[1:4]]
-    assert subs == [("Performance", 1000), ("Awareness", 520), ("Social (Reach)", 200)]
+    assert subs == [("Performance", 1000), ("Awareness", 520), ("Reach & Amazon", 200)]
     assert all(r.get("level") == 1 for r in rows[1:4])
     g = next(i for i, r in enumerate(rows) if r["label"] == "Google Ads")
     assert rows[g]["value"] == 1000 and rows[g + 1]["value"] == 700 and rows[g + 2]["value"] == 300

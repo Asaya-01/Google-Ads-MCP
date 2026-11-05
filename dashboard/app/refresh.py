@@ -252,6 +252,10 @@ def collect(
                 data["unavailable"][
                     "meta_ad_history"
                 ] = f"Meta ad-level history: {exc}"
+            try:  # status, budget and launch date for the Meta view
+                store.put_json("cache/meta_objects.json", meta.fetch_objects(token, mcfg))
+            except Exception as exc:  # the view shows "unknown" status instead
+                data["unavailable"]["meta_objects"] = f"Meta status and budgets: {exc}"
         except Exception as exc:
             data["unavailable"]["meta"] = f"Meta API: {exc}"
             missing["meta_ads"] = data["unavailable"]["meta"]
@@ -261,6 +265,7 @@ def collect(
             if rows is not None:
                 cached[day] = rows
         data["meta"] = cached
+        data["meta_objects"] = store.get_json("cache/meta_objects.json") or {}
     data["manual_spends"] = _manual_spends(cfg, store, data["unavailable"])
     # the team's sale / BAU calendar; the last good copy if a read fails
     try:
@@ -535,7 +540,9 @@ def _meta_ad_history(token: str, mcfg: dict, store, d1_date: dt.date) -> None:
     todo = []
     for day in reversed(older):
         rows = store.get_json(f"cache/meta/{day}.json")
-        if rows and all(r.get("ad_id") is not None for r in rows):
+        # an ad-level day cached before the funnel fields (link clicks, LPV,
+        # ATC, reach) were kept is read again once, so the whole history has them
+        if rows and all(r.get("ad_id") is not None and "lpv" in r for r in rows):
             continue
         if not rows and day in checked:
             continue
