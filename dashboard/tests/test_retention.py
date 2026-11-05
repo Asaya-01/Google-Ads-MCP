@@ -329,3 +329,56 @@ def test_value_can_be_scoped_to_customers_acquired_on_one_product(tmp_path):
     assert out["v"]["size"] is None
     ltv90 = next(x for x in out["v"]["ltv"] if x["h"] == 90)
     assert ltv90["per"] == pytest.approx((800 + 400) / 2)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node is not installed")
+def test_the_90_day_figure_is_90_days_whatever_horizon_is_picked(tmp_path):
+    """"Bought it again within 90 days" counts only buyers with 90 days of
+    runway and a same-product repeat inside 90 days. It used to copy the
+    figure for the horizon picked (30, 180, ...)."""
+    rng = random.Random(11)
+    titles = [UAS, ASS, ITB]
+    rows, timelines, oid = [], [], 0
+    start = dt.date(2025, 1, 1)
+    for c in range(300):
+        d = start + dt.timedelta(days=rng.randrange(0, 420))
+        tl = [(d, rng.choice(titles))]
+        for _ in range(rng.choice([0, 1, 1, 2, 3])):
+            nd = tl[-1][0] + dt.timedelta(days=rng.randrange(3, 150))
+            if nd <= THROUGH:
+                tl.append((nd, rng.choice(titles)))
+        timelines.append(tl)
+        for day, title in tl:
+            oid += 1
+            rows.append((str(oid), str(c), at(day.isoformat()), title, "x", "serum", 400.0))
+    f = tmp_path / "census.json"
+    f.write_text(json.dumps(census_for(rows)))
+    code = CAT.classify(UAS, "x", 400.0, "serum", TYPES)[0].code
+    script = (
+        "const P=JSON.parse(require('fs').readFileSync(process.argv[1]));"
+        f"const E=require('{ENGINE}')(P);"
+        "const pick=(hz)=>E.compute(0,E.NDAYS,'product',hz).find((r)=>r.code==="
+        f"'{code}');"
+        "const a=pick(30),b=pick(180),c=pick(90);"
+        "console.log(JSON.stringify({nd:E.NDAYS,a:[a.m90_base,a.m90_rate],"
+        "b:[b.m90_base,b.m90_rate],c:[c.m90_base,c.m90_rate,c.base,c.rate]}));"
+    )
+    out = json.loads(
+        subprocess.run(
+            ["node", "-e", script, str(f)], capture_output=True, text=True, check=True
+        ).stdout
+    )
+    epoch = min(tl[0][0] for tl in timelines)
+    end90 = out["nd"] - 90
+    base = hit = 0
+    for tl in timelines:
+        uas = [d for d, t in tl if t == UAS]
+        if not uas or (uas[0] - epoch).days > end90:
+            continue
+        base += 1
+        if any(0 < (d - uas[0]).days <= 90 for d in uas[1:]):
+            hit += 1
+    want = [base, pytest.approx(100 * hit / base)]
+    assert out["a"] == want and out["b"] == want
+    # with a 90-day horizon the two figures are the same thing
+    assert out["c"][0] == out["c"][2] and out["c"][1] == pytest.approx(out["c"][3])

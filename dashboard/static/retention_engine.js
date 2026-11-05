@@ -94,6 +94,8 @@
       const mB = {}, mH = {};
       for (const h of MILES) { mB[h] = new Int32Array(NN); mH[h] = new Int32Array(NN); }
       const lateB = new Int32Array(NN), lateH = new Int32Array(NN), anyH = new Int32Array(NN);
+      // a fixed 90-day like-for-like: only buyers with 90 days of runway, whatever the horizon picked
+      const b90 = new Int32Array(NN), r90 = new Int32Array(NN), end90 = Math.min(b, NDAYS - 90);
       const OBS = hz == null ? Infinity : hz;
 
       for (let m = 0; m < SRC.length; m++) {
@@ -158,6 +160,13 @@
           for (const s of sk) {
             if (seen.has(s)) continue;
             seen.add(s);
+            if (dd >= a && dd <= end90) {
+              b90[s]++;
+              for (let j = i + 1; j < tl.length; j++) {
+                if (tl[j][0] - dd > 90) break;
+                if (tl[j][1].indexOf(s) >= 0) { r90[s]++; break; }
+              }
+            }
             if (dd < a || dd > bE) continue; // acquired on this item outside the window
             base[s]++;
             if (dd < first[s]) first[s] = dd;
@@ -187,6 +196,7 @@
           const c = cN + cP;
           if (d < a || d > b) continue;
           allBuy[s] += c; newBrand[s] += cN;
+          if (d <= end90) b90[s] += c;
           if (d <= bE) {
             base[s] += c; c1[s] += c;
             if (d < first[s]) first[s] = d;
@@ -212,7 +222,7 @@
           allBuyers: allBuy[s], newToBrand: newBrand[s], newToProduct: base[s],
           crossSell: Math.max(0, base[s] - newBrand[s]),
           rate: base[s] ? (100 * rep[s]) / base[s] : 0,
-          m90_base: base[s], m90_rate: base[s] ? (100 * rep[s]) / base[s] : null,
+          m90_base: b90[s], m90_rate: b90[s] ? (100 * r90[s]) / b90[s] : null,
           avg: g.length ? Math.round(g.reduce((p, c) => p + c, 0) / g.length) : null,
           med: median(g), buckets: bk, cross_n: tc,
           first: first[s], monthsLive: (NDAYS - first[s] + 1) / 30.44,
