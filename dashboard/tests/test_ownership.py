@@ -19,7 +19,8 @@ import pytest
 from app import settings
 from app.pages import build_all
 
-from test_pages import CFG, _dataset
+from google_fixture import add_google
+from test_pages import CFG, D1, START, _dataset
 
 TABS = ["overview", "funnel", "marketing", "marketing?sub=meta", "marketing?sub=google", "products", "region", "d1"]
 # The D-1 Report is a fixed management summary: its own compact versions
@@ -45,6 +46,8 @@ const { chromium } = require("playwright");
       text: document.getElementById("main").innerText.slice(0, 300),
       mvKpiSpend: (document.querySelector('#mv-kpis [data-metric="m_spend"] .kpi-v') || {}).textContent || null,
       mvTotalSpend: (document.querySelector("#mv-x tr.mv-total td:nth-child(2) .mv-v") || {}).textContent || null,
+      gvKpiCost: (document.querySelector('#gv-kpis [data-metric="g_cost"] .kpi-v') || {}).textContent || null,
+      gvTotalCost: (document.querySelector("#gv-x tr.mv-total td:nth-child(2) .mv-v") || {}).textContent || null,
     }));
   }
   out._errors = errors;
@@ -74,7 +77,7 @@ def rendered(tmp_path_factory):
     if not _have_playwright():
         pytest.skip("node and playwright are needed to render the tabs")
     root = tmp_path_factory.mktemp("store")
-    data = _dataset(with_meta=True)
+    data = add_google(_dataset(with_meta=True), D1, START)
     d = data["d1"]
     data["region"] = {
         "from": d, "to": d,
@@ -139,3 +142,10 @@ def test_meta_explorer_totals_equal_the_kpi_strip(rendered):
     m = rendered["marketing?sub=meta"]
     assert "meta-explorer" in m["components"] and "meta-matrix" in m["components"]
     assert m["mvKpiSpend"] and m["mvKpiSpend"] == m["mvTotalSpend"]
+
+
+def test_google_explorer_totals_equal_the_kpi_strip(rendered):
+    g = rendered["marketing?sub=google"]
+    for c in ("google-kpis", "google-split", "google-working", "google-watchlist", "google-matrix", "google-explorer"):
+        assert c in g["components"]
+    assert g["gvKpiCost"] and g["gvKpiCost"] == g["gvTotalCost"]

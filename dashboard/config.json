@@ -1096,6 +1096,20 @@
     "login_customer_id": "2013716241",
     "api_version": "v23",
     "tree_days": 90,
+    "assets_days": 30,
+    "reports": {
+      "_about": "The Google view's API reports (pipeline additions, docs/google-view-audit.md N1-N10). Each is off until approved. conv_split is on: approved with D1 (conversions = the purchase action only). insights and reach are asked of Google on demand by the view, cached six hours.",
+      "conv_split": true,
+      "impression_share": false,
+      "objects": false,
+      "keywords": false,
+      "search_terms": false,
+      "products": false,
+      "assets": false,
+      "video": false,
+      "insights": false,
+      "reach": false
+    },
     "client_id_secret": "google-ads-client-id",
     "client_secret_secret": "google-ads-client-secret",
     "refresh_token_secret": "google-ads-refresh-token",
@@ -1178,6 +1192,55 @@
       "per_user_per_hour": 120,
       "note": "Ask Claude's mic: Google Cloud Speech-to-Text in this project (app/voice.py), with the dashboard's vocabulary boosted. Falls back to the browser's own speech recognition if the API is not reachable."
     }
+  },
+  "google_view": {
+    "_about": "Marketing › Google. Tags (computed once in app/google_model.py): scope from the awareness rule; sub_type = taxonomy.google_groups (the Marketing tree's split); segment Brand for brand_sub_types, else Non-brand; campaign_type from Google's channel type (or from the sub_type while the status report is off); SKU from the ad group or asset group name, then the campaign name (the shared meta_view.sku_codes, whole tokens), and per product from the Shopping product report (item shopify_zz_<product id>_<variant id>, mapped through product_map) where that report is on. Conversions and value are the purchase action only (conversion-action category in purchase_categories); other actions (an awareness campaign's add-to-cart) are kept apart. Conversions are by click (interaction) date, data-driven attribution.",
+    "purchase_categories": ["PURCHASE"],
+    "brand_sub_types": ["Brand Search", "Brand PMax"],
+    "brand_terms": ["asaya", "world of asaya", "worldofasaya", "asya", "assya", "aasaya", "asayaa", "assaya", "aasya", "aashaya", "asaaya"],
+    "brand_terms_note": "Brand terms for the leakage check: the brand name and its misspellings only. Product names (fade forward, even tone underarm mist) are not brand terms (decided 5 Nov 2026).",
+    "labels": {
+      "OFFER": "Offer-only (no product)",
+      "BRAND": "Brand (all products)",
+      "SETS": "Sets (not named)",
+      "OTHER": "Other (no product in the name)",
+      "UNMAPPED": "Product not in the product map",
+      "NOTPRODUCT": "Not attributed to a product"
+    },
+    "min_cost_default": 300,
+    "grey_below_cost": 3000,
+    "targets": {
+      "_about": "Platform ROAS / CPA targets per sub_type, unset (null) by default. When set: ROAS green at or above target, amber within target_amber below, red further below; CPA the other way round. Grey under grey_below_cost.",
+      "Brand Search": {"roas": null, "cpa": null},
+      "Brand PMax": {"roas": null, "cpa": null},
+      "Non-brand PMax": {"roas": null, "cpa": null},
+      "Demand Gen": {"roas": null, "cpa": null},
+      "Non-brand Search": {"roas": null, "cpa": null},
+      "YouTube": {"roas": null, "cpa": null}
+    },
+    "target_amber": 0.15,
+    "working": {
+      "_about": "What's working. Scale: ROAS at or above target (or scale_vs_avg x the segment average when no target) and headroom (Lost IS budget above lost_budget_above, or limited by budget). Fix: cost at or above min_cost and ROAS under fix_below x the target or segment average. Cut: search terms or keywords with cost at or above min_cost and no conversion. Costs are for the picked period.",
+      "min_cost": 3000,
+      "scale_vs_avg": 1.5,
+      "lost_budget_above": 0.10,
+      "fix_below": 0.7,
+      "max_items": 5
+    },
+    "watchlist": {
+      "_about": "Rule-based flags, at most 8 shown; costs are for the picked period.",
+      "brand_abs_top_below": 0.80,
+      "brand_is_below": 0.90,
+      "brand_cpc_rise": 0.30,
+      "qs_at_most": 4,
+      "min_cost": 3000,
+      "lost_budget_above": 0.20,
+      "no_conv_days": 3
+    },
+    "leakage_amber": 0.10,
+    "hero_skus": ["UAS", "ITB", "ASS"],
+    "validation": {"conv_per_click": 1.2},
+    "attribution_note": "Google Ads platform data · conversions = the purchase action only, by click (interaction) date · data-driven attribution"
   },
   "taxonomy": {
     "_note": "How campaign and ad names map to funnel stage, product and Google campaign group. See app/taxonomy.py.",
@@ -1357,6 +1420,14 @@
           "PMAX",
           "BRAND"
         ]
+      },
+      {
+        "label": "Brand PMax",
+        "_about": "Offer (price-offer) Performance Max campaigns count as Brand PMax (decided 5 Nov 2026), e.g. WOA_Pmax_Lifetime_Oct_B2@749.",
+        "all": [
+          "PMAX"
+        ],
+        "rx": "(?<![A-Z])(?<!NON-)(?<!NON_)(?<!NON )(?<!NON)OFFER|B\\d+@\\d+|BUY\\d+@"
       },
       {
         "label": "Non-brand PMax",

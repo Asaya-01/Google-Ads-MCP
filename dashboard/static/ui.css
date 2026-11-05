@@ -243,3 +243,40 @@ tr.mv-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px
 .mv-matrix td.text { white-space: nowrap; }
 .mv-ncell .mv-name { white-space: nowrap; }
 .mv-ncell { white-space: nowrap; }
+/* ---------------------------------------------------------------- Google view (google_view.js); shares the Meta view's parts above */
+.gv-chips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.gv-chips .chip, .filter-row .chip[data-tf], .gv-copy { cursor: pointer; background: var(--surface); font: inherit; font-size: 12px; }
+.gv-chips .chip.on, .filter-row .chip.on { background: var(--accent-wash); border-color: var(--accent); color: var(--ink); }
+.gv-skusel { position: relative; font-size: 12.5px; }
+.gv-skusel summary { cursor: pointer; padding: 4px 9px; border: 1px solid var(--line); border-radius: 8px; list-style: none; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gv-skusel[open] > div { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: grid; gap: 4px; max-height: 50vh; overflow-y: auto; min-width: 260px; box-shadow: 0 8px 24px rgba(30, 18, 12, 0.12); }
+.gv-skusel label { display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+.seg button[disabled] { opacity: 0.45; cursor: not-allowed; }
+.gv-vt button { padding: 3px 8px; font-size: 12px; }
+.gv-csv { font-size: 12px; margin-left: 4px; }
+.gv-sum { margin: 0 0 10px; font-size: 14px; }
+.gv-split { gap: 12px; }
+.gv-panel { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 4px; align-content: start; }
+.gv-panel h3 { margin: 0 0 4px; }
+.gv-pl { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: baseline; font-size: 13px; }
+.gv-pl > span:first-child { color: var(--ink-2); }
+.gv-pl b { font-variant-numeric: tabular-nums; }
+.gv-amber, .gv-amber.more-link { color: var(--warn); font-weight: 600; }
+.mv-tag.gv-amber { background: var(--warn-bg); color: var(--warn-ink); }
+.gv-work { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1100px) { .gv-work { grid-template-columns: minmax(0, 1fr); } }
+.gv-wcol h3 { margin: 0 0 6px; } .gv-wcol.scale h3 { color: var(--good); } .gv-wcol.fix h3 { color: var(--warn); } .gv-wcol.cut h3 { color: var(--bad); }
+.gv-wcol .mv-watch li { grid-template-columns: minmax(0, 1fr); }
+.gv-wcol .mv-wbtn { display: grid; gap: 2px; text-align: left; }
+.gv-src { font-style: normal; font-size: 9.5px; font-weight: 700; color: var(--muted); grid-column: 2; grid-row: 1; letter-spacing: 0.02em; }
+td.tg-good .mv-v, td.tg-good b { color: var(--good); } td.tg-amber .mv-v, td.tg-amber b { color: var(--warn); } td.tg-bad .mv-v, td.tg-bad b { color: var(--bad); }
+tr.gv-panelrow > td { background: var(--surface-2, var(--accent-wash)); padding: 8px 10px 12px 28px; }
+.gv-panel3 { display: grid; gap: 8px; }
+.gv-ptabs button { font-size: 12.5px; }
+.gv-badge { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 0 5px; border-radius: 4px; border: 1px solid var(--line); color: var(--ink-2); margin-right: 2px; }
+.gv-mini table { font-size: 12.5px; }
+.gv-mini tr[data-open] { cursor: pointer; } .gv-mini tr[data-open]:hover td { background: var(--accent-wash); }
+.gv-mini tr.gv-gap td { color: var(--ink-2); font-style: italic; border-top: 1px dashed var(--line); }
+.mv-dot.learn { background: var(--series-1); }
+.gv-copy { margin-left: 4px; }
+#gv-x tr.mv-row[data-dr] { cursor: pointer; }

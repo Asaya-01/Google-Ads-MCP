@@ -273,3 +273,138 @@ problems.
   Non-brand PMax and says so, and fills in when one launches.
 - **D7 Targets.** Per-sub_type ROAS / CPA targets are unset by default as
   briefed; enter them later in config.
+
+## 7. Decisions taken (5 Nov 2026)
+
+- **D1 Purchase only: yes.**
+  - Conversions and Platform conv. value count the purchase action only.
+  - The rule is the conversion-action category in
+    `google_view.purchase_categories`.
+  - Other actions (the awareness Demand Gen campaign's add-to-cart) are kept
+    apart and shown as their own "Add to carts (bid goal)" metric on awareness
+    rows.
+  - N1 (`conv_split`) is switched on with this decision.
+- **D2 Timing basis: no answer yet.** The view keeps the interaction (click)
+  date, which is today's basis and the Google Ads default. The footer states it
+  with the attribution model. Switching would change conversion numbers, so it
+  waits for your call.
+- **D3 Brand terms: the brand name and its misspellings only.** Product names
+  are not brand terms (`google_view.brand_terms`).
+- **D4 Offer PMax is Brand.**
+  - Price-offer Performance Max campaigns (B2@749, Lifetime, OfferOnly) now
+    match a Brand PMax rule placed before the Non-brand PMax one in
+    `taxonomy.google_groups`.
+  - Every tab uses that rule, so the Marketing tree and the D-1 Report move
+    those campaigns from Non-brand PMax to Brand PMax too.
+  - Their product is "Offer-only".
+- **D5 Pipeline additions: no answer yet.**
+  - N2 to N10 are built and switched off (`google_ads.reports`).
+  - Each level that needs one says "Data unavailable: … not switched on yet"
+    instead of showing a zero.
+- **D6 Non-brand Search: ok.** The column appears only once a Non-brand Search
+  campaign exists.
+- **D7 Targets: ok.** `google_view.targets` holds a ROAS and a CPA per sub_type,
+  all unset (null).
+
+## 8. What was built
+
+**Pipeline** (`app/google_ads.py`, `app/refresh.py`). Every report is a GAQL
+SELECT behind its switch. A report that fails never fails the refresh; its
+reason shows in the view and in Data health.
+- `fetch_conv_split` (N1):
+  - campaign level over the history window;
+  - ad group, asset group and ad (plus keyword and product when those reports
+    are on) over `tree_days`.
+- `fetch_impression_share` (N2), per day.
+- `fetch_objects` (N3): status, primary status and reasons (budget-limited),
+  bidding, budgets and ad strength.
+- `fetch_keywords` (N4).
+- `fetch_search_terms` (N5).
+- `fetch_products` (N7).
+- `fetch_assets` (N8): `asset_group_asset` plus `ad_group_ad_asset_view`, over
+  `assets_days`.
+- `fetch_video` (N9): TrueView views and quartile counts.
+- Search insights (N6) and reach (N10) are asked of Google on demand:
+  - endpoints `/api/google/insights` and `/api/google/reach`;
+  - cached six hours, gated by their switches;
+  - insights exist only as period totals per campaign.
+
+**Classification** (`app/google_model.py`). Computed once, when the pages are
+built.
+- Scope: the dashboard's awareness rule.
+- sub_type: the Marketing tree's rule, so the split ties by construction.
+- Segment: Brand for `brand_sub_types`.
+- Campaign type: Google's channel type.
+- SKU, from names: ad group or asset group name first, then the campaign name,
+  on the shared `meta_view.sku_codes`. Fallbacks: Offer-only, Brand (all
+  products), Sets, Other.
+- SKU, from the product report: item ID → Shopify product ID → `product_map`
+  code → shared SKU.
+
+**Pages** (`app/pages/google_view.py`):
+- `google_ads`: campaigns, ad groups / asset groups and ads per day in one row
+  layout, plus the matrix rows.
+  - Each campaign-day is split over the products the feed attributes ("P").
+  - What the feed does not attribute stays on the name's SKU ("N"), so the
+    matrix always adds up to the campaigns.
+- `google_search`: keywords and search terms.
+- `google_products`: Shopping products (loaded lazily).
+- `google_assets`: assets (loaded lazily).
+- Impression share is stored as eligible / abs-top / top / lost impressions,
+  so a share over any period is re-weighted, never averaged.
+
+**Registry** (`static/metrics.js`). The `g_*` metrics:
+- Cost, Impressions, Clicks, CTR, CPC, CPM.
+- Conversions (one decimal at keyword and search-term level), Platform conv.
+  value, Platform ROAS, Conv. rate, CPA (renamed from CAC), AOV.
+- Search impr. share, Abs. top and Top impr. share, Lost IS (rank / budget).
+- Views, View rate, CPV, Watched 25–100%.
+- Add to carts (bid goal), Reach, Avg. frequency, Brand leakage.
+- No CPLV.
+- Awareness never shows ROAS, conversions or AOV.
+
+**View** (`static/google_view.js`, Marketing › Google). It shares the Meta
+view's parts. The state lives in the URL.
+- **Filter bar**: Scope, Segment, type chips, product multi-select, Status (off
+  until N3), Min cost ₹300, Search.
+- **KPI strip**: six cards per scope.
+- **Brand vs Non-brand**:
+  - shares, ROAS and CPA;
+  - Brand Search impression share and abs. top share;
+  - the brand-leakage metric, amber above 10%, which opens the matching terms;
+  - hero-SKU share;
+  - a one-line summary.
+- **What's working**: Scale / Fix / Cut.
+- **Watchlist**: the brief's rules.
+- **Product × Campaign-type matrix**: metric switcher, P/N markers, target
+  colours, cross-filter chips.
+- **Explorer**:
+  - group-by and column presets, sparklines, tags, status dots, row warnings;
+  - level-3 tabs: Search gives Keywords | Search terms | Ads; PMax gives
+    Products | Assets | Search insights; Demand Gen gives Ads | Assets;
+  - search terms carry the "Other / hidden terms" gap row and the three filter
+    chips;
+  - "Add as exact / negative" only copy the term.
+- **Drawer**: breadcrumb, header, mini KPIs, a two-metric trend with
+  comparison / parent / target overlays and sale shading, Daily/Weekly,
+  Chart/Table, and entity blocks (budget use, children, QS parts, matched terms,
+  assets).
+- **Every section** has Visual | Table and CSV.
+- **Data health › Google classification**:
+  - the tie-out to Marketing › Channels (total and Performance cost, day by
+    day);
+  - tag coverage of cost;
+  - the purchase split;
+  - the validation rules (child = parent, conversions ≤ clicks × 1.2, no
+    untagged cost);
+  - the report switches.
+
+**The sheet's seven problems in the view.** None can recur here:
+1. Per-day, phase-matched comparisons.
+2. One date window for every number.
+3. Δ colour from the registry direction.
+4. Brand / Non-brand by rule, with a product row for everything, so children
+   add up.
+5. No ROAS in Awareness.
+6. No CPLV.
+7. CPA in place of "CAC".

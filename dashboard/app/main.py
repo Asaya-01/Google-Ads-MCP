@@ -349,6 +349,73 @@ async def meta_reach(request: Request, user: str = Depends(current_user)):
     return value
 
 
+def _google_creds() -> dict | None:
+    gcfg = settings.config()["google_ads"]
+    try:
+        creds = {
+            "client_id": secrets.get_secret(gcfg["client_id_secret"]),
+            "client_secret": secrets.get_secret(gcfg["client_secret_secret"]),
+            "refresh_token": secrets.get_secret(gcfg["refresh_token_secret"]),
+        }
+    except Exception:  # Secret Manager unreachable: n/a, never an error page
+        return None
+    return creds if all(creds.values()) else None
+
+
+async def _google_on_demand(request: Request, flag: str, label: str, fetch):
+    """Shared by the Google view's on-demand reads (search insights, reach):
+    validated ids and dates, the report's switch, a six-hour cache."""
+    import datetime as _dt
+    import hashlib
+    import re as _re
+
+    body = await request.json()
+    since, until = str(body.get("since", "")), str(body.get("until", ""))
+    ids = sorted({str(c) for c in (body.get("campaigns") or []) if _re.fullmatch(r"\d{5,25}", str(c))})[:50]
+    if not (_re.fullmatch(r"\d{4}-\d{2}-\d{2}", since) and _re.fullmatch(r"\d{4}-\d{2}-\d{2}", until)):
+        raise HTTPException(400, "since and until must be dates")
+    gcfg = settings.config()["google_ads"]
+    if not (gcfg.get("reports") or {}).get(flag):
+        return {"na": f"{label} is a pipeline addition that is not switched on yet (config google_ads.reports.{flag})"}
+    if not ids:
+        return {"na": "no campaigns in view"}
+    key = hashlib.sha1(f"{flag}|{since}|{until}|{','.join(ids)}".encode()).hexdigest()
+    st = store()
+    hit = st.get_json(f"cache/google_{flag}/{key}.json")
+    now = _dt.datetime.now(_dt.timezone.utc)
+    if hit and now - _dt.datetime.fromisoformat(hit["at"]) < _dt.timedelta(hours=6):
+        return hit["value"]
+    creds = _google_creds()
+    if not creds:
+        return {"na": "the Google Ads credentials are not available to the dashboard"}
+    try:
+        value = fetch(gcfg, creds, ids, since, until)
+    except Exception as exc:  # shown as n/a with the reason, never zero
+        return {"na": f"Google Ads: {exc}"}
+    st.put_json(f"cache/google_{flag}/{key}.json", {"at": now.isoformat(), "value": value})
+    return value
+
+
+@app.post("/api/google/insights")
+async def google_insights(request: Request, user: str = Depends(current_user)):
+    """Performance Max search query categories for a period, per campaign
+    (Google gives them only as period totals). Read-only."""
+    from . import google_ads
+
+    return await _google_on_demand(
+        request, "insights", "Search insights",
+        lambda g, c, ids, a, b: {"campaigns": google_ads.fetch_insights(g, c, ids, a, b)},
+    )
+
+
+@app.post("/api/google/reach")
+async def google_reach(request: Request, user: str = Depends(current_user)):
+    """Unique users and frequency for a period and set of campaigns. Read-only."""
+    from . import google_ads
+
+    return await _google_on_demand(request, "reach", "Google reach", google_ads.fetch_reach)
+
+
 @app.get("/api/page/{tab}")
 def page(tab: str, user: str = Depends(current_user)):
     if tab not in {t["id"] for t in settings.enabled_tabs()} | {
@@ -362,6 +429,10 @@ def page(tab: str, user: str = Depends(current_user)):
         "drill_days",
         "region_days",
         "meta_ads",
+        "google_ads",
+        "google_search",
+        "google_products",
+        "google_assets",
     }:
         raise HTTPException(404, "No such tab")
     payload = store().get_json(f"pages/{tab}.json")

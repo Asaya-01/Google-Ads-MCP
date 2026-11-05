@@ -119,6 +119,9 @@ def google_group(campaign: str, tcfg: dict) -> str:
         if all(k in flat for k in need) and not any(k in flat for k in none):
             if g.get("any") and not any(t in toks for t in g["any"]):
                 continue
+            # a pattern on the raw (upper-cased) name, e.g. a price offer
+            if g.get("rx") and not re.search(g["rx"], (campaign or "").upper()):
+                continue
             return g["label"]
     return "Other"
 

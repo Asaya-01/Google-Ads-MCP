@@ -118,6 +118,7 @@ def collect(
     data["google_ads"] = bq.run("google_ads_daily", **window)
     data["google_campaigns"] = bq.run("google_campaigns")
     data["google_tree"] = (gsrc or {}).get("tree") or []
+    data["google_view"] = (gsrc or {}).get("view") or {}
     if gsrc:
         data["google_ads"] = gsrc["rows"]
         known = {c["campaign_id"]: c for c in data["google_campaigns"]}
@@ -465,11 +466,13 @@ def _google_from_api(
         )
     except Exception as exc:  # the drill-down is a bonus; never fail the run
         unavailable["google_tree"] = f"Google Ads ad groups and ads: {exc}"
+    view = _google_view_reports(gcfg, creds, d1, since, unavailable)
     dates = [r["date"] for r in rows if r["date"] <= d1]
     return {
         "rows": rows,
         "campaigns": campaigns,
         "tree": tree,
+        "view": view,
         "creds": creds,
         "check": {
             "source": "google_ads",
@@ -477,6 +480,59 @@ def _google_from_api(
             "d1_rows": sum(1 for r in rows if r["date"] == d1),
         },
     }
+
+
+# The Google view's reports (Marketing › Google). Each is a pipeline addition
+# switched on in config google_ads.reports once approved; a report that is
+# off, or fails, leaves its levels showing "Data unavailable" with the reason.
+GOOGLE_REPORTS = {
+    "conv_split": "Conversions by action (purchase only)",
+    "impression_share": "Search impression share",
+    "objects": "Status, budget, bidding and ad strength",
+    "keywords": "Keywords and Quality Score",
+    "search_terms": "Search terms",
+    "products": "Shopping products",
+    "assets": "Assets",
+    "video": "Video views and watch-through",
+}
+
+
+def _google_view_reports(gcfg: dict, creds: dict, d1: str, since: str, unavailable: dict) -> dict:
+    on = gcfg.get("reports") or {}
+    end = dt.date.fromisoformat(d1)
+    tree_from = (end - dt.timedelta(days=gcfg.get("tree_days", 90) - 1)).isoformat()
+    asset_from = (end - dt.timedelta(days=gcfg.get("assets_days", 30) - 1)).isoformat()
+    lower = ["ad_group", "asset_group", "ad"] + [
+        lvl for lvl, flag in (("keyword", "keywords"), ("product", "products")) if on.get(flag)
+    ]
+    out: dict = {
+        "on": {k: bool(on.get(k)) for k in GOOGLE_REPORTS},
+        "from": tree_from,
+        "assets_from": asset_from,
+        "conv_levels": ["campaign", *lower] if on.get("conv_split") else [],
+    }
+    jobs = {
+        # the campaign split covers the whole history window, like the spend
+        "conv_split": lambda: google_ads.fetch_conv_split(gcfg, creds, since, d1, ["campaign"])
+        + google_ads.fetch_conv_split(gcfg, creds, tree_from, d1, lower),
+        "impression_share": lambda: google_ads.fetch_impression_share(gcfg, creds, tree_from, d1),
+        "objects": lambda: google_ads.fetch_objects(gcfg, creds),
+        "keywords": lambda: google_ads.fetch_keywords(gcfg, creds, tree_from, d1),
+        "search_terms": lambda: google_ads.fetch_search_terms(gcfg, creds, tree_from, d1),
+        "products": lambda: google_ads.fetch_products(gcfg, creds, tree_from, d1),
+        "assets": lambda: google_ads.fetch_assets(gcfg, creds, asset_from, d1),
+        "video": lambda: google_ads.fetch_video(gcfg, creds, tree_from, d1),
+    }
+    for key, job in jobs.items():
+        if not on.get(key):
+            continue
+        try:
+            out[key] = job()
+        except Exception as exc:  # one report failing never fails the run
+            unavailable[f"google_{key}"] = f"Google Ads {GOOGLE_REPORTS[key].lower()}: {exc}"
+            if key == "conv_split":
+                out["conv_levels"] = []
+    return out
 
 
 def _fetch_meta(

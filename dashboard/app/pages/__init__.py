@@ -3,7 +3,7 @@ served at /api/page/<tab>."""
 
 from __future__ import annotations
 
-from . import d1, daily, days, marketing, meta_view, overview, products, range_data, region
+from . import d1, daily, days, google_view, marketing, meta_view, overview, products, range_data, region
 from .common import Context
 
 BUILDERS = {
@@ -31,6 +31,7 @@ def build_all(
     pages["slab_days"] = range_data.slabs(ctx)
     pages["drill_days"] = range_data.drills(ctx)
     pages["meta_ads"] = meta_view.build(ctx)
+    pages.update(google_view.build(ctx))
     if "region" in pages:
         pages.update(region.build_data(ctx))
     return pages, ctx

@@ -92,7 +92,10 @@ def test_google_groups():
     assert g("WOA_Search_Brand_Topkey_120825") == "Brand Search"
     assert g("WOA_Pmax_Brand_AllProducts_130825") == "Brand PMax"
     assert g("WOA_Pmax_ITB_110526") == "Non-brand PMax"
-    assert g("WOA_Pmax_Lifetime_Oct_B2@749_Phase1_131026") == "Non-brand PMax"
+    # offer PMax campaigns are Brand PMax (decided 5 Nov 2026)
+    assert g("WOA_Pmax_Lifetime_Oct_B2@749_Phase1_131026") == "Brand PMax"
+    assert g("WOA_Pmax_OfferOnly_120226") == "Brand PMax"
+    assert g("WOA_Pmax_Non-offer_UAS_120226") == "Non-brand PMax"
     assert g("WOA_DemandGen_Rem_021225") == "Demand Gen"
     assert g("WOA_Awareness_VV_YT_TF_Hyd_070826") == "YouTube"
     assert g("Something_Else") == "Other"
