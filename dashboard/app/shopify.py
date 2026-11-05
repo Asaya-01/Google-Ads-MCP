@@ -139,6 +139,79 @@ class Shopify:
             d["gmv"][at.hour] = float(r.get("total_sales") or 0)
         return {k: v for k, v in out.items() if since <= k <= until}
 
+    # ------------------------------------------------------------ region
+    REGION_LIMIT = 10000
+
+    def _where(self, exclude_names: list[str]) -> str:
+        cond = " AND ".join(f"order_name NOT CONTAINS '{n}'" for n in exclude_names)
+        return f"WHERE {cond} " if cond else ""
+
+    def sales_by_city(
+        self, since: str, until: str, exclude_names: list[str]
+    ) -> list[dict]:
+        """Shopify's Sales report (Orders, Total sales, Quantity ordered, as on
+        D-1) per IST day, state and city of the shipping address. A range that
+        hits the row limit is split, so nothing is cut off."""
+        rows = self.shopifyql(
+            "FROM sales SHOW orders, total_sales, quantity_ordered "
+            "GROUP BY shipping_region, shipping_city TIMESERIES day "
+            + self._where(exclude_names)
+            + f"SINCE {since} UNTIL {until} LIMIT {self.REGION_LIMIT}"
+        )
+        if len(rows) >= self.REGION_LIMIT and since < until:
+            a, b = dt.date.fromisoformat(since), dt.date.fromisoformat(until)
+            mid = a + (b - a) // 2
+            return self.sales_by_city(since, mid.isoformat(), exclude_names) + self.sales_by_city(
+                (mid + dt.timedelta(days=1)).isoformat(), until, exclude_names
+            )
+        out = []
+        for r in rows:
+            o, sales, q = _int(r.get("orders")), float(r.get("total_sales") or 0), _int(r.get("quantity_ordered"))
+            if not (o or sales or q):
+                continue
+            out.append(
+                {
+                    "date": str(r.get("day") or "")[:10],
+                    "region": r.get("shipping_region") or "",
+                    "city": r.get("shipping_city") or "",
+                    "orders": o,
+                    "sales": sales,
+                    "qty": q,
+                }
+            )
+        return out
+
+    def sales_by_city_product(
+        self, day: str, exclude_names: list[str]
+    ) -> list[dict]:
+        """The same report for one day by state, city and product (with its
+        product type, so gifts and merch can be told apart)."""
+        rows = self.shopifyql(
+            "FROM sales SHOW orders, total_sales, quantity_ordered "
+            "GROUP BY shipping_region, shipping_city, product_title, product_type "
+            + self._where(exclude_names)
+            + f"SINCE {day} UNTIL {day} LIMIT {self.REGION_LIMIT}"
+        )
+        if len(rows) >= self.REGION_LIMIT:
+            raise ShopifyError(f"more than {self.REGION_LIMIT} city-product rows on {day}")
+        out = []
+        for r in rows:
+            o, sales, q = _int(r.get("orders")), float(r.get("total_sales") or 0), _int(r.get("quantity_ordered"))
+            if not r.get("product_title") or not (o or sales or q):
+                continue
+            out.append(
+                {
+                    "region": r.get("shipping_region") or "",
+                    "city": r.get("shipping_city") or "",
+                    "product": r.get("product_title"),
+                    "type": r.get("product_type") or "",
+                    "orders": o,
+                    "sales": sales,
+                    "qty": q,
+                }
+            )
+        return out
+
     def orders_count(self, day: str) -> int:
         """Shopify's own count of orders created on one IST day (test orders
         excluded), used to check the BigQuery copy is complete."""

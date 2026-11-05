@@ -36,6 +36,8 @@ KEYS = [
     "landing",
     "meta",
     "catalog",
+    "region",
+    "region_notes",
     "unavailable",
 ]
 

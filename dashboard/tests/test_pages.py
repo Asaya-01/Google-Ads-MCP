@@ -279,6 +279,9 @@ def test_every_phase1_tab_builds_and_serialises(built_without_meta):
         "channel_days",
         "slab_days",
         "drill_days",
+        "region",
+        "region_days",
+        "region_sku/all",
     }
     for page in pages.values():
         json.dumps(page, default=str)

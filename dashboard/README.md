@@ -391,6 +391,33 @@ refreshes itself every 3 minutes in the browser. D-1 is untouched: the live job
 - Every source shows its own freshness chip; a failed source says why instead
   of showing zero, and a view older than 30 minutes warns on screen.
 
+## Region
+
+Where orders come from, by the shipping address. A map of India coloured by the
+metric you pick (Revenue, Orders, AOV, Items, Basket size; quantile bands of a
+one-hue ramp, so Maharashtra does not wash out every other state; AOV and basket
+size need 20+ orders before a state is coloured or ranked). Hover a state for
+its numbers; click it to zoom in and open its cities; click a city for its
+products. Breadcrumbs (All India > state > city) lead back.
+
+- **Numbers**: Shopify's own Sales report, the same as D-1 (Orders, Total sales,
+  Quantity ordered) by `shipping_region` and `shipping_city`, pulled by the
+  refresh (`app/region.py`). City by day is pulled for the whole window each run;
+  city by product one day per query, the last 3 days again each run and older
+  days backfilled 45 a run, cached per month in `cache/region/sku/`.
+- **Items and basket size** leave out gifts, merch, books and gummies, as on the
+  Products tab; the Items tile says how many gifts went out too. For a product,
+  AOV is its revenue per order that had it and basket size its units per order.
+- **Names**: states map onto the map's shapes (Ladakh shares Jammu & Kashmir's
+  outline; Dadra & Nagar Haveli and Daman & Diu is one territory, two shapes);
+  city spellings merge (`CITY_SAME` in `app/pages/region.py`: Bangalore and
+  Bengaluru are Bengaluru, Gurgaon and Gurugram are Gurugram).
+- **Pages**: `region` (the map, `static/india_map.json`), `region_days` (city by
+  day), `region_sku/all` (product by state) and `region_sku/<state>` (product by
+  city, fetched from `/api/region/<state>` when a city is opened).
+- **Map**: state outlines from MapSVG via `@svg-maps/india` 2.0.0, CC BY 4.0
+  (credited under the map), showing India's official boundaries.
+
 ## Retention
 
 The Retention tab is a rebuild of the retention artifact, on all-time data.

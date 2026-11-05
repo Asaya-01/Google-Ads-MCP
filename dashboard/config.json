@@ -15,6 +15,7 @@
     {"id": "daily",     "label": "Daily",     "phase": 1, "enabled": true},
     {"id": "marketing", "label": "Marketing", "phase": 1, "enabled": true},
     {"id": "products",  "label": "Products",  "phase": 1, "enabled": true},
+    {"id": "region",    "label": "Region",    "phase": 1, "enabled": true},
     {"id": "d1",        "label": "D-1",       "phase": 1, "enabled": true},
     {"id": "retention", "label": "Retention", "phase": 1, "enabled": true},
     {"id": "health",    "label": "Data health", "phase": 1, "enabled": true},
@@ -132,6 +133,13 @@
     "exclude_name_regex": "ASAYASS|ASAYAINF"
   },
 
+  "region": {
+    "enabled": true,
+    "history_days": 400,
+    "refresh_days": 3,
+    "sku_backfill_per_run": 45,
+    "note": "Region tab: Shopify's Sales report by the shipping address's state and city (and product). City by day is pulled for the whole window every run; product detail one day per query, the last refresh_days again each run and older days backfilled sku_backfill_per_run at a time (app/region.py)."
+  },
   "freebies": {
     "exclude_product_types": ["freebie", "merch", "book", "gummies", ""],
     "known_types": ["serum", "treatment", "combo", "sunscreen", "moisturiser", "moisturise", "cleanser", "gel", "scrub", "hand cream"]

@@ -136,8 +136,8 @@ function rgBar() {
   const cur = [...c.groups.map((g) => cnt(g.cur.length, g.phase === "sale" ? "sale" : "BAU")), ...(c.mixed.length ? [cnt(c.mixed.length, "transition")] : [])].join(" + ");
   const vs = RG.cmp.mode === "none" ? "" : c.groups.map((g) => (g.prev && g.prev.length ? `${g.phase === "sale" ? "sale" : "BAU"}: ${rgListDays(g.prev)}` : `${g.phase === "sale" ? "sale" : "BAU"}: nothing to compare`)).join(" · ");
   const info = `<span class="rg-info" title="Sale days are only compared with sale days, BAU with BAU. Transition days (a sale went live or ended) sit out of both."><b>${esc(rgSpan(RG.from, RG.to))}</b> <span class="rg-dim">${esc(cur)}</span>${vs ? ` <span class="rg-dim">vs</span> <b>${esc(vs)}</b>` : ""}</span>`;
-  const mode = RG.tab === "products"
-    ? '<span class="rg-modenote" title="Product sales cannot be split by campaign type, so there is no Performance / Awareness switch here.">Whole store</span>'
+  const mode = RG.tab === "products" || RG.tab === "region"
+    ? '<span class="rg-modenote" title="Sales by product and by place cannot be split by campaign type, so there is no Performance / Awareness switch here.">Whole store</span>'
     : `<div class="seg rg-mode" id="rg-mode" role="group" aria-label="Campaign type">${RG_MODES.map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${RG.mode === k}">${l}</button>`).join("")}</div>`;
   return `<section class="rg-barcard" id="rg-bar"><div class="rg-wrap rg-line">
       ${mode}

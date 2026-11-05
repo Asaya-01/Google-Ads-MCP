@@ -291,6 +291,19 @@ async def transcribe(request: Request, user: str = Depends(current_user)):
     return {"text": text}
 
 
+@app.get("/api/region/{key}")
+def region_state(key: str, user: str = Depends(current_user)):
+    """One state's products by city, for the Region tab (loaded on click)."""
+    import re
+
+    if not re.fullmatch(r"[a-z]{2,6}", key):  # a state's key, or "all"
+        raise HTTPException(404, "No such state")
+    payload = store().get_json(f"pages/region_sku/{key}.json")
+    if payload is None:
+        return {"rows": [], "na": "no product detail for this state yet"}
+    return payload
+
+
 @app.get("/api/page/{tab}")
 def page(tab: str, user: str = Depends(current_user)):
     if tab not in {t["id"] for t in settings.enabled_tabs()} | {
@@ -302,6 +315,7 @@ def page(tab: str, user: str = Depends(current_user)):
         "channel_days",
         "slab_days",
         "drill_days",
+        "region_days",
     }:
         raise HTTPException(404, "No such tab")
     payload = store().get_json(f"pages/{tab}.json")

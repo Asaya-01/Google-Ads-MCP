@@ -3,7 +3,7 @@ served at /api/page/<tab>."""
 
 from __future__ import annotations
 
-from . import d1, daily, days, marketing, overview, products, range_data
+from . import d1, daily, days, marketing, overview, products, range_data, region
 from .common import Context
 
 BUILDERS = {
@@ -12,6 +12,7 @@ BUILDERS = {
     "marketing": marketing.build,
     "products": products.build,
     "d1": d1.build,
+    "region": region.build_tab,
 }
 
 
@@ -29,4 +30,6 @@ def build_all(
     pages["channel_days"] = range_data.channels(ctx)
     pages["slab_days"] = range_data.slabs(ctx)
     pages["drill_days"] = range_data.drills(ctx)
+    if "region" in pages:
+        pages.update(region.build_data(ctx))
     return pages, ctx

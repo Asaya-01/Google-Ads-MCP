@@ -196,6 +196,16 @@ def collect(
                     else ""
                 )
             )
+        # the Region tab: the same report by state, city and product
+        if cfg.get("region", {}).get("enabled", True):
+            region_notes: dict = {}
+            try:
+                from . import region
+
+                data["region"] = region.collect(cfg, store, shop, d1, region_notes)
+            except Exception as exc:  # never fail the refresh over this tab
+                data["unavailable"]["region"] = f"Region data could not be pulled from Shopify: {exc}"
+            data["region_notes"] = region_notes
         try:
             data["catalog"] = shop.catalog()
             store.put_json("cache/catalog.json", data["catalog"])
