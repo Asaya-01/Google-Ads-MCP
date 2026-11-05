@@ -491,3 +491,101 @@ Calculation bugs need your OK (§8). Display bugs are fixed as part of the refac
 - Run it before and after the refactor and diff the two snapshots. Any difference fails, unless it is one of the changes approved in §8.
 - The snapshot needs the production pages, so it runs where the pages live (Cloud Run or a machine with bucket access).
 - Snapshot values are business data, so they are written outside the repository, never committed.
+
+---
+
+## 11. Decisions taken (answers to §8)
+
+| # | Decision |
+|---|---|
+| 1 | Headline revenue stays Shopify Total sales. Label "GMV" becomes **"Total sales"**. Tooltip: "Shopify Total sales: gross sales minus discounts and returns, plus shipping and taxes, on valid orders. Returns count on the day they are processed, so past days can move slightly." Blended ROAS keeps this number. Notes are corrected. |
+| 2 | Headline Orders and AOV stay on Shopify's report; AOV = Total sales ÷ Shopify orders everywhere. "Reconcile to Shopify: cancellations, returns and edits" is a collapsed row, in breakdown tables only, never in KPI cards. |
+| 3 | New-customer definition unchanged in this refactor (see §12). |
+| 4 | "Unattributed / other" is an expandable group with "Not in GoKwik" and "Organic Search" visible on expand. D-1 stops dropping them. Channel rows must sum to headline Orders and Total sales on every tab, D-1 included. |
+| 5 | Product map in config keyed on Shopify product ID, bundles / duos / sets with their own codes. Rows "CODE · Short name", variants underneath. Products not in the map show under "Unmapped" with a Data health warning. |
+| 6 | D-1 defaults to fixed yesterday with a "This month so far" switch. The switch view keeps the phase rule (BAU vs BAU, sale vs sale, per-day averages). |
+| 7 | D-1 keeps only the morning read (§13). Drill-downs become links. |
+| 8 | Today undercount fixed (§14). |
+| 9 | Retention 90-day figure fixed (§15). |
+| 10 | Products owns the one basket definition. Exclusions everywhere: freebies, merch, books, gummies, tests, cancelled, ASAYASS and ASAYAINF. Region's metric becomes "Items per order" on the same definition and must match Products for the whole store. |
+| 11 | Target vs achieved is a placeholder in this refactor, built against the follow-up's shape: monthly Total sales, spend and ROAS targets ("Target vs Achieved") and daily pacing ("Day wise Budget"). |
+| 12 | No ROAS benchmarks. |
+
+## 12. The two new-customer definitions
+
+**Overview tile, Daily columns and D-1 section** (`sql/orders_daily.sql`):
+- A customer's first valid order is "new"; every later valid order is "repeat".
+- Valid orders: not test, not cancelled, not ASAYASS / ASAYAINF, with a Shopify customer ID.
+- Ranked by created time over all history.
+- Any order counts, whatever it contains.
+
+**Retention census** (`app/retention/build.py`, `sql/retention_lines.sql`). Same valid-order rule, plus:
+1. **Only orders with a counted product line enter a customer's timeline.** These do not count:
+   - lines of type freebie, merch, book or gummies;
+   - zero-revenue lines and gift lines;
+   - test, free or "pay remaining amount" lines;
+   - minis and travel kits with no product type;
+   - merch words unless the title is a named product;
+   - blank-type lines that are not a named product.
+
+   An order of only such lines is skipped, so the customer's "first order" is their first order with a paid product.
+2. **Orders by one customer less than 24 hours apart are merged into one** (payment retries, split checkouts).
+3. **The day is the IST date of the first order in a merged group.**
+
+**Where they disagree.** I rebuilt both rules in BigQuery for 6 Oct to 4 Nov 2026, comparing new customers per day:
+- They agree on 25 of the 30 days.
+- They differ on 10, 12, 17 and 31 Oct and 2 Nov 2026, by one or two customers on each day.
+- The cause is a first order that held only uncounted lines, e.g. gift-only or zero-value.
+- The overall gap is a few hundredths of a percent.
+- Switching to the census rule would barely move the numbers; that decision is for a separate change.
+
+## 13. D-1 Report: the final contents
+
+Default view: **yesterday vs a typical day of the same kind** (BAU or sale). "Typical" is the median of the same-kind days in the last N days (the existing `pulse` baseline).
+
+Switch: **This month so far**, with sale days compared to sale days and BAU to BAU, using per-day averages.
+
+**Kept on D-1**
+
+| # | Section | Contents |
+|---|---|---|
+| 1 | Headline | Total sales, Orders, AOV, Blended ROAS, Performance spend, CVR, each vs the typical day |
+| 2 | Checkout status | Healthy / Watch / Problem, with the three GoKwik steps behind "See the steps" |
+| 3 | Funnel summary | Sessions → ATC → Checkout started → Orders, with Sessions→ATC, ATC→IC, IC→Order |
+| 4 | Channel summary | One row per channel: Spend, Platform ROAS, Shopify sessions, orders, Total sales, CVR. "Unattributed / other" group. Collapsed reconcile row, so it sums to the headline |
+| 5 | Meta stage ROAS | TOF / MOF / BOF / Catalog spend and Platform ROAS vs the typical day. No benchmark colouring, per decision 12 |
+| 6 | Target vs achieved | Placeholder, hidden until targets are pulled |
+| 7 | What changed | 3–5 rule-based bullets, each linking to its evidence |
+
+**Removed from D-1, with links to their home**
+
+| Removed | Home |
+|---|---|
+| 15-row metric table; Day by day | Funnel |
+| Revenue & AOV (basket) | Products |
+| Products top 12; Product drill-down | Products |
+| New vs repeat | Retention |
+| Spend & ROAS table (per channel) | folded into the channel summary; full tree on Marketing |
+| Channel drill-down | Marketing (channel reconciliation) |
+| Source, Campaign and Landing-page drill-downs | Funnel ("Funnel by source / campaign / landing page"); they are session funnels and had no other home |
+| Campaign / ad tree, product × stage matrix | Marketing |
+| Region cuts, cohort tables | Region, Retention |
+
+## 14. Today undercount: root cause
+
+- `live.py` read today with `cum_at(hourly, t)`. That function spreads the current hour: it adds `(t − h) × bucket[h]`.
+- This is correct for the baseline days (yesterday, typical days), whose hourly buckets are complete.
+- **Today's bucket for the current hour is not complete**: it holds only the minutes so far. Multiplying it by the fraction of the hour counted it short a second time.
+- Effect: at 14:30 only half of the 14:00–14:30 orders, sales, sessions and add-to-carts were counted. The worst case is about a quarter of an hour's worth, around half past.
+- The chart was always right, so tiles and chart disagreed.
+- **Fix**: today is read in full (its data already stops at "now"); baselines keep the spreading.
+- Test: `tests/test_live.py::test_todays_current_hour_is_not_cut_twice`.
+- Checked on 2, 3 and 4 Nov at 11:20, 15:40 and 20:30 IST (figures shared in chat, not here). The tiles were short by 1–6% of orders and sales at those times, most in the morning.
+
+## 15. Retention 90-day figure: root cause
+
+- In `retention_engine.js` `compute()`, `m90_base` and `m90_rate` were assigned the **horizon's** base and rate: `base[s]` and `rep[s] / base[s]`.
+- So "Bought it again within 90 days" showed the 30-day figure when the horizon was 30 days, the 180-day figure at 180, and so on. It was right only at 90.
+- **Fix**: a separate count of buyers whose first purchase of the product falls in the window with at least 90 days of runway (`≤ NDAYS − 90`), and of those who bought the same product again within 90 days. The horizon no longer affects it. Nothing else in the census changes.
+- Test: `tests/test_retention.py::test_the_90_day_figure_is_90_days_whatever_horizon_is_picked`. It fails on the old code and passes on the new.
+- Old vs new for three windows was checked in BigQuery (figures in chat, not here). At a 30-day horizon the old figure was 2–4 times lower than the true 90-day rate; at 180 days, 2–3 times higher.
