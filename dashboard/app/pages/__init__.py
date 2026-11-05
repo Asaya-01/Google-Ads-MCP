@@ -8,7 +8,7 @@ from .common import Context
 
 BUILDERS = {
     "overview": overview.build,
-    "daily": daily.build,
+    "funnel": daily.build,
     "marketing": marketing.build,
     "products": products.build,
     "d1": d1.build,

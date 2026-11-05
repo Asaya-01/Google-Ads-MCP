@@ -11,7 +11,8 @@ from __future__ import annotations
 from collections import defaultdict
 
 from .. import rules
-from .common import Context, delta_block
+from .common import Context
+from .overview import _pulse, delta_block
 
 BLOCK_FIELDS = [
     "sessions",
@@ -85,14 +86,15 @@ def build(ctx: Context, commentary: dict | None = None) -> dict:
         "delta": delta_block(cur_total, prior_total, BLOCK_FIELDS, per_day),
         "drilldowns": drill,
         "commentary": commentary,
+        # yesterday's checkout status and ROAS against a typical day of the same kind
+        "pulse": _pulse(ctx),
         "notes": [
-            "Every table here follows the dates and comparison picked at the top: sale days are compared with "
-            "sale days and BAU with BAU. Only the written commentary is for one fixed window (the run of "
-            "same-phase days ending yesterday, against the matching period of the previous month).",
-            "Sessions and ATC: Shopify. IC: GoKwik checkouts started. Orders and revenue: valid Shopify orders, "
-            "attributed to source and campaign through the UTM GoKwik recorded at checkout.",
-            "Landing page orders are not available per order; the landing-page drill shows GoKwik IC and "
-            "conversions by the landing page GoKwik recorded.",
+            "The D-1 Report is always yesterday against a typical day of the same kind (BAU or sale: the "
+            "median of the same-kind days in the last weeks). \"This month so far\" compares the month with "
+            "the same dates last month, sale days with sale days and BAU with BAU, on per-day averages.",
+            "Total sales and Orders are Shopify's Sales report (cancelled orders count; returns come off on "
+            "the day they are processed). The channel summary counts orders as placed, by the UTM GoKwik "
+            "recorded; its reconcile row ties it to Shopify's numbers.",
         ],
     }
 

@@ -1,6 +1,9 @@
 /* Ask Claude: the floating button and chat panel (static/ask.js). */
-/* room below the last card, so the button never covers a table's last row */
-main { padding-bottom: 88px; }
+/* Docked in the header: a pill button; the panel is a side panel under the header. */
+.ask-fab.docked { position: static; padding: 7px 14px; font-size: 13px; box-shadow: none; transform: none; }
+.ask-fab.docked:hover { transform: none; box-shadow: none; filter: brightness(1.08); }
+.ask-fab.docked[aria-expanded="true"] { display: inline-flex; background: var(--ink-2); }
+.ask-fab.docked svg { width: 14px; height: 14px; }
 .ask-fab { position: fixed; z-index: 40; right: max(20px, env(safe-area-inset-right, 0px)); bottom: max(20px, env(safe-area-inset-bottom, 0px));
   display: inline-flex; align-items: center; gap: 8px; padding: 12px 18px; border: 0; border-radius: 999px; cursor: pointer;
   background: var(--accent); color: var(--surface); font: 600 14px/1 var(--font-body); letter-spacing: 0.01em;
@@ -9,8 +12,8 @@ main { padding-bottom: 88px; }
 .ask-fab svg { width: 16px; height: 16px; flex: none; }
 .ask-fab[aria-expanded="true"] { display: none; }
 
-.ask-panel { position: fixed; z-index: 41; right: max(20px, env(safe-area-inset-right, 0px)); bottom: max(20px, env(safe-area-inset-bottom, 0px));
-  width: min(480px, calc(100vw - 32px)); height: min(720px, calc(100vh - 96px)); display: flex; flex-direction: column;
+.ask-panel { position: fixed; z-index: 41; right: 0; top: calc(var(--bar-h, 58px) + env(safe-area-inset-top, 0px)); bottom: 0;
+  width: min(440px, 100vw); height: auto; border-radius: 0; border-top: 0; border-right: 0; border-bottom: 0; display: flex; flex-direction: column;
   background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
   box-shadow: 0 18px 48px rgba(30, 18, 12, 0.24), 0 2px 6px rgba(30, 18, 12, 0.12); }
 .ask-panel[hidden] { display: none; }
@@ -87,8 +90,11 @@ main { padding-bottom: 88px; }
 .ask-note { margin: 6px 2px 0; font-size: 11px; color: var(--muted); }
 
 @media (max-width: 640px) {
-  .ask-panel { right: 0; left: 0; bottom: 0; width: 100vw; height: min(88vh, calc(100vh - 48px)); border-radius: 16px 16px 0 0; border-bottom: 0; }
-  .ask-fab { padding: 11px 15px; }
+  .ask-panel { right: 0; left: 0; top: auto; bottom: 0; width: 100vw; height: min(88vh, calc(100vh - 48px)); border-radius: 16px 16px 0 0; border: 1px solid var(--line); border-bottom: 0; }
+  .ask-fab.docked span { display: none; }
+  .ask-fab.docked { padding: 7px 9px; }
   .ask-form textarea { font-size: 16px; } /* below 16px, iOS zooms in on focus */
 }
+/* wide screens: the page steps aside for the panel instead of sitting under it */
+@media (min-width: 1100px) { body.ask-open main { margin-right: 440px; } }
 @media print { .ask-fab, .ask-panel { display: none !important; } }

@@ -1,552 +1,136 @@
-/* D-1 as a management report, read top to bottom:
-   summary → overview → traffic → checkout funnel → revenue & basket → products
-   → new vs repeat → spend & ROAS, then the day-by-day table and the drill-down
-   as detail. Every section follows the picked dates, the sale / BAU block and
-   the Performance / Awareness / All switch, and opens with one plain sentence
-   that says what moved. Inlined after range_basket.js, inside the closure. */
+/* The D-1 Report: what management reads every morning. Always yesterday
+   against a typical day of the same kind (BAU or sale), with a "This month so
+   far" view that keeps the phase rule. Headline → checkout status → funnel →
+   channels → Meta stages → what changed; every drill-down is a link to its
+   home tab. Inlined after range_basket.js, inside the dashboard closure. */
 
-const D1_MODE_TEXT = {
-  perf: "Performance: the team's D-1 sheet (whole-store sessions and revenue, performance sessions, sales-campaign spend).",
-  all: "All campaigns: as Performance. Spends, RoAS and CPS stay on performance spend: awareness and Reach spend are never in RoAS.",
-  aw: "Awareness: awareness traffic only, the orders and revenue credited to it by UTM, and awareness spend.",
-};
-const D1_F = {
-  perf: [["sessions", "Overall sessions", "int"], ["report_perf_sessions", "Perf. sessions", "int"], ["atc", "ATC", "int"], ["ic", "Checkout started (IC)", "int"], ["sh_orders", "Orders", "int"], ["sh_sales", "Revenue", "inr"], ["sh_aov", "AOV", "inr"],
-    ["atc_rate", "Sessions → ATC %", "pct"], ["atc_to_ic", "ATC → IC %", "pct"], ["sh_ic_to_order", "IC → orders %", "pct"], ["sh_cvr", "CVR % (on sessions)", "pct"], ["sh_perf_cvr", "CVR % (on perf)", "pct"],
-    ["perf_all_spend", "Spends", "inr"], ["sh_roas", "RoAS", "x"], ["cps", "CPS", "inr2"]],
-  aw: [["sessions", "Awareness sessions", "int"], ["atc", "ATC", "int"], ["ic", "Checkout started (IC)", "int"], ["orders", "Orders credited", "int"], ["gmv", "Revenue credited", "inr"], ["aov", "AOV", "inr"],
-    ["atc_rate", "Sessions → ATC %", "pct"], ["atc_to_ic", "ATC → IC %", "pct"], ["ic_to_order", "IC → orders %", "pct"], ["cvr", "CVR %", "pct"],
-    ["spend", "Awareness spend", "inr"], ["cps_ad", "Cost / session", "inr2"]],
-};
-// the same sheet in the All view: RoAS is only ever on performance spend
-D1_F.all = D1_F.perf.slice();
-// the headline tiles: what management reads first
-const D1_TILES = {
-  perf: ["sessions", "sh_orders", "sh_sales", "sh_aov", "sh_cvr", "perf_all_spend", "sh_roas"],
-  all: ["sessions", "sh_orders", "sh_sales", "sh_aov", "sh_cvr", "perf_all_spend", "sh_roas"],
-  aw: ["sessions", "orders", "gmv", "atc_rate", "cvr", "spend", "cps_ad"],
-};
-const D1 = { section: null };
+const D1 = { view: "day" };
+const D1_KPIS = ["total_sales", "orders", "aov", "blended_roas", "perf_spend", "cvr"];
+const d1Median = (xs) => { const a = xs.filter((v) => v != null && Number.isFinite(v)).sort((x, y) => x - y); if (!a.length) return null; const h = a.length >> 1; return a.length % 2 ? a[h] : (a[h - 1] + a[h]) / 2; };
 
-const d1All = () => RG.engAll || (RG.engAll = createRangeEngine(RG.raw, "all"));
-const d1Eng = () => (RG.mode === "aw" ? RG.eng : d1All());
-const d1IsRate = (u, k) => u === "pct" || u === "x" || u === "inr2" || RG_RATES.includes(k) || ["aov", "sh_aov"].includes(k);
-const d1Sign = (v) => (v > 0 ? "+" : v < 0 ? "−" : "±");
-// a change written out: "+12,345", "−0.70 pp", "+0.03x", "+Rs 12"
-function d1Abs(d, unit) {
-  if (d == null || !isFinite(d)) return '<span class="flat">–</span>';
-  const a = Math.abs(d);
-  const t = unit === "pct" ? `${(a * 100).toFixed(2)} pp` : unit === "x" ? `${a.toFixed(2)}x` : unit === "inr2" ? `Rs ${a.toFixed(2)}` : unit === "inr" ? fmt(a, "inr") : fmt(Math.round(a), "int");
-  return `<span class="flat">${d1Sign(d)}${esc(t)}</span>`;
+/* Yesterday, and the same-kind days it is judged against (the D-1 checkout
+   status uses the same baseline: same-kind days in the last baseline_days). */
+function d1Day(d1) {
+  const e = RG.eng, raw = RG.raw, cfg = state.config.checkout || {};
+  const i = raw.dates.indexOf(d1);
+  let kind = e.phaseOf(d1);
+  if (kind === "mixed") kind = (raw.phase_eff && raw.phase_eff[i]) || "bau";
+  const N = cfg.baseline_days || 28, minN = cfg.min_baseline_days || 5;
+  const base = e.rangeOf(e.addDays(d1, -N), e.addDays(d1, -1)).filter((d) => e.phaseOf(d) === kind);
+  const w = e.windowOf([d1]);
+  const ok = base.length >= minN;
+  const typ = {};
+  if (ok) { const per = base.map((d) => e.windowOf([d])); for (const k of Object.keys(w)) if (typeof w[k] === "number" || w[k] === null) typ[k] = d1Median(per.map((x) => x[k])); }
+  return { d1, kind, base, ok, w, typ, pooled: ok ? e.windowOf(base) : null };
 }
-// change between two windows: rates directly, counts per day when the periods differ in length
-function d1Diff(cur, prev, k, unit, nc, np) {
-  if (cur == null || prev == null) return null;
-  if (d1IsRate(unit, k) || nc === np) return cur - prev;
-  return cur / Math.max(nc, 1) - prev / Math.max(np, 1);
+function d1Kpi(id, D) {
+  const k = METRICS[id].field, v = D.w[k], t = D.ok ? D.typ[k] : null;
+  return kpiCard(id, { value: v, prev: D.ok ? t : null, change: v != null && t ? v / t - 1 : null, small: D.ok && (D.typ.orders ?? 0) < METRIC_RULES.min_orders,
+    na: v == null ? rgNa(D.w, k) : null, est: rgEstFor(k, D.w), href: id === "blended_roas" || id === "perf_spend" ? "#marketing" : id === "cvr" ? "#funnel" : null });
 }
-function d1Pct(cur, prev, k, unit, nc, np) {
-  if (cur == null || prev == null || prev === 0) return null;
-  if (d1IsRate(unit, k) || nc === np) return cur / prev - 1;
-  return cur / Math.max(nc, 1) / (prev / Math.max(np, 1)) - 1;
+const D1_CK = { ok: ["Healthy", "✓"], watch: ["Watch", "!"], problem: ["Problem", "✕"], unknown: ["No data", "–"] };
+function d1Checkout(pl) {
+  if (!pl || !pl.checkout) return '<p class="na">Data unavailable: the checkout status is built with the next refresh.</p>';
+  const co = pl.checkout, [word, icon] = D1_CK[co.status] || D1_CK.unknown;
+  const steps = table([
+    { label: "Step", text: true, render: (r) => `${esc(r.label)}${r.counts ? "" : ' <span class="sub">(context, not in the verdict)</span>'}` },
+    { label: "Yesterday", render: (r) => esc(mFormat("percent", r.value) ?? "n/a") },
+    { label: "Typical", render: (r) => esc(mFormat("percent", r.baseline) ?? "–") },
+    { label: "Change", render: (r) => deltaHtml(r.delta, "rate") },
+  ], co.steps);
+  return `<div class="ck"><span class="ck-pill ${esc(co.status)}"><i aria-hidden="true">${icon}</i>${word}</span><span class="why">${esc(co.reason)}</span></div>
+    <details class="steps"><summary>See the steps</summary>${steps}</details>`;
 }
-const d1Pp = (a, b) => (a == null || b == null ? null : a - b);
-const d1Word = (d, up = "up", down = "down") => (d == null ? "" : d >= 0 ? up : down);
-const d1Move = (d) => (d == null ? "with nothing to compare" : Math.abs(d) < 0.0005 ? "flat" : `${d > 0 ? "up" : "down"} ${Math.abs(d * 100).toFixed(1)}%`);
-const d1P = (d) => (d == null ? "n/a" : `${d >= 0 ? "+" : "−"}${Math.abs(d * 100).toFixed(1)}%`);
-const d1PP = (d) => (d == null ? "n/a" : `${d >= 0 ? "+" : "−"}${Math.abs(d * 100).toFixed(1)} pp`);
-const d1Money = (v) => (v == null ? "n/a" : fmt(v, "inr", true));
-const d1N = (v) => (v == null ? "n/a" : fmt(Math.round(v), "int"));
+/* Meta by stage: spend and Platform ROAS, against the typical day (or the comparison). */
+function d1Stages(gCur, gBase, nBase) {
+  const keep = TR.group; TR.group = "funnel";
+  let a, b;
+  try { a = trBuild(gCur).roots.get("meta"); b = gBase ? trBuild(gBase).roots.get("meta") : null; } finally { TR.group = keep; }
+  if (!a) return '<p class="na">Data unavailable: no Meta spend on these days.</p>';
+  const nCur = gCur.cur.length || 1;
+  const rows = TR_STAGES.map((s) => {
+    const n = a.kids.get("st:" + s), m = b ? b.kids.get("st:" + s) : null;
+    const spend = n ? n.a.spend : 0, roas = n ? trRoas(n.a) : null;
+    const bs = gBase ? (m ? m.a.spend / nBase : 0) : n && n.hasPrev ? n.p.spend : null;
+    const br = gBase ? (m ? trRoas(m.a) : null) : n && n.hasPrev ? trRoas(n.p) : null;
+    return { s, spend: spend / (gBase ? nCur : 1), bs, roas, br, small: (gBase ? (m ? m.a.pspend : 0) : n ? n.p.pspend : 0) < METRIC_RULES.min_spend };
+  }).filter((r) => r.spend > 0 || r.bs);
+  const vs = gBase ? "Typical day" : "Comparison";
+  return table([
+    { label: "Stage", text: true, render: (r) => `<b>${esc(r.s)}</b>` },
+    { label: gBase ? "Spend" : "Spend", render: (r) => esc(mFormat("currency", r.spend)) },
+    { label: `${vs} spend`, render: (r) => esc(mFormat("currency", r.bs) ?? "–") },
+    { label: mHead("meta_platform_roas", "Platform ROAS"), render: (r) => esc(mFormat("ratio", r.roas) ?? "–") },
+    { label: `${vs} ROAS`, render: (r) => esc(mFormat("ratio", r.br) ?? "–") },
+    { label: "Δ ROAS", render: (r) => (r.roas != null && r.br ? deltaHtml(r.roas / r.br - 1, "roas", r.small) : '<span class="flat">–</span>') },
+  ], rows, { full: true }) + `<p class="legend-note">${gBase ? `Typical: the average day across the ${nBase} same-kind days. ` : ""}Platform ROAS is what Meta credits itself; the stage comes from each ad's name.</p>`;
+}
+function d1Links() {
+  const L = [["funnel", "Day by day and funnel drill-downs"], ["products", "Products and basket size"], ["marketing", "Campaign tree and product × stage"], ["retention", "New vs repeat and cohorts"], ["region", "States and cities"]];
+  return `<div class="filter-row"><span class="lbl">More detail</span>${L.map(([t, l]) => `<a class="chip" href="#${t}">${esc(l)} →</a>`).join("")}</div>`;
+}
+function d1Copy(title, kpis, changed) {
+  const lines = [title, ...kpis.map(([l, v, d]) => `• ${l}: ${v}${d ? ` (${d})` : ""}`), ...(changed.length ? ["What changed:", ...changed.map((x) => `• ${x}`)] : [])];
+  const text = lines.join("\n");
+  const done = () => { const b = document.getElementById("d1-copy"); if (b) { b.textContent = "Copied"; setTimeout(() => { b.textContent = "Copy summary"; }, 1500); } };
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => window.prompt("Copy the summary:", text)); else window.prompt("Copy the summary:", text);
+}
+const d1Plain = (html) => { const t = document.createElement("div"); t.innerHTML = html; return t.textContent.replace(/\s+/g, " ").trim(); };
 
-/* A section: title, its table, then what the table says. `wide` sections
-   (tables of more than six columns) take the full row of the D-1 grid; the
-   rest pair up two to a row. */
-function d1InsightHtml(insight) {
-  const pts = (Array.isArray(insight) ? insight : [insight]).filter(Boolean);
-  return pts.length ? `<div class="d1-insight"><div class="d1-ins-h">What this says</div><ul>${pts.map((x) => `<li>${x}</li>`).join("")}</ul></div>` : "";
-}
-function d1Section(n, title, sub, insight, body, id, wide) {
-  return `<section class="card d1-sec${wide ? " wide" : ""}" ${id ? `id="${id}"` : ""}>
-    <div class="section-head"><h2>${esc(title)}</h2>${sub ? `<span class="sub">${sub}</span>` : ""}</div>
-    ${body}${d1InsightHtml(insight)}</section>`;
-}
-// spends estimated for days the team's sheets have not reached yet
-const D1_EST_KEYS = ["affiliate_spend", "crm_flow_spend", "crm_broadcast_spend", "reddit_spend"];
-const D1_EST_NAMES = { affiliate_spend: "affiliate", crm_flow_spend: "CRM flow", crm_broadcast_spend: "CRM broadcast", reddit_spend: "Reddit" };
-function d1EstNote(W) {
-  if (!W || !W.est) return "";
-  const keys = D1_EST_KEYS.filter((k) => W.est[k] && W.est[k].length);
-  if (!keys.length) return "";
-  const days = [...new Set(keys.flatMap((k) => W.est[k]))].sort();
-  return `Includes <b>estimated</b> ${keys.map((k) => D1_EST_NAMES[k]).join(", ")} spend for ${rgListDays(days)}, because the sheets are not filled yet; the next refresh after they are replaces it.`;
-}
-const d1Verb = (x) => (x >= 0 ? "added" : "cost");
-const d1Th = (g) => [g.prev && g.prev.length ? (g.prevSpan ? rgSpanShort(g.prevSpan[0], g.prevSpan[1]) : "Comparison") : null, g.curSpan ? rgSpanShort(g.curSpan[0], g.curSpan[1]) : "Selected"];
-
-// ---------------------------------------------------------------- 1 · overview
-function d1Overview(g) {
-  const F = D1_F[RG.mode] || D1_F.perf, w = g.w, pw = g.pw, nc = g.cur.length, np = g.prev ? g.prev.length : 0;
-  const byKey = Object.fromEntries(F.map((f) => [f[0], f]));
-  const tiles = (D1_TILES[RG.mode] || D1_TILES.perf).map((k) => byKey[k] || [k, k, "int"]).map(([k, l, u]) => {
-    const v = w[k], ch = pw ? g.change(k) : null;
-    if (v == null) return `<div class="tile"><div class="label">${esc(l)}</div><div class="na" title="${esc(rgNa(w, k) || "not available")}">Data unavailable: ${esc(rgNa(w, k) || "not available")}</div></div>`;
-    const est = rgEstFor(k, w);
-    return `<div class="tile"><div class="label">${esc(l)}${est ? ` <span class="chip pending" title="${esc(est)}">est.</span>` : ""}</div><div class="value">${esc(fmt(v, u, true))}</div><div class="foot">${pw ? `${deltaHtml(ch, RG_NEUTRAL.has(k) || /spend|cps/.test(k) ? "spend" : k)}<span>vs ${esc(fmt(pw[k], u, true) ?? "n/a")}</span>` : "<span>no comparison</span>"}</div>${est ? `<div class="foot sub" title="${esc(est)}">${esc(rgEstShort(w))}</div>` : ""}</div>`;
-  }).join("");
-  const [hp, hc] = d1Th(g);
-  const cols = [{ label: "Metric", text: true, render: (r) => esc(r.l) }];
-  if (pw) cols.push({ label: hp, render: (r) => cell(pw[r.k], r.u, rgNa(pw, r.k)) });
-  cols.push({ label: hc, render: (r) => cell(w[r.k], r.u, rgNa(w, r.k)) });
-  if (pw) {
-    cols.push({ label: nc !== np ? "Δ (per day)" : "Δ", render: (r) => d1Abs(d1Diff(w[r.k], pw[r.k], r.k, r.u, nc, np), r.u) });
-    cols.push({ label: "Δ %", render: (r) => deltaHtml(g.change(r.k), /spend|cps/.test(r.k) ? "spend" : r.k) });
-  }
-  const tbl = table(cols, F.map(([k, l, u]) => ({ k, l, u })));
-  // the sentence
-  const rk = RG.mode === "aw" ? "gmv" : "sh_sales", ok = RG.mode === "aw" ? "orders" : "sh_orders", ak = RG.mode === "aw" ? "aov" : "sh_aov";
-  let s = "";
-  if (w[rk] != null) {
-    s = `<b>Revenue ${d1Money(w[rk])}${pw ? `, ${d1Move(g.change(rk))}` : ""}</b>`;
-    if (pw) s += `: orders ${d1Move(g.change(ok))}, AOV ${d1Move(g.change(ak))}, sessions ${d1Move(g.change("sessions"))}${nc !== np ? " (per day)" : ""}.`;
-    else s += ` from ${d1N(w[ok])} orders.`;
-    const conv = RG.mode === "aw" ? "cvr" : "sh_cvr";
-    if (pw && g.change(conv) != null) {
-      const dc = d1Pp(w[conv], pw[conv]);
-      s += Math.abs(dc) < 0.0005 ? ` Conversion held at ${fmt(w[conv], "pct")}.` : ` Conversion moved ${d1PP(dc)} (${fmt(pw[conv], "pct")} → ${fmt(w[conv], "pct")}).`;
-    }
-  }
-  const note = `<p class="legend-note">${esc(D1_MODE_TEXT[RG.mode] || "")}${RG.mode === "aw" ? "" : " Orders and Revenue are Shopify's own Sales report; Spends are all channels on sales campaigns; RoAS is revenue ÷ Spends; CPS is Spends ÷ overall sessions."}${nc !== np && pw ? " The periods differ in length, so changes compare per-day averages." : ""}</p>`;
-  const body = `<div class="tiles d1-kpis">${tiles}</div>${g.note ? `<div class="banner">${esc(g.note)}</div>` : ""}
-    <div class="d1-ov"><div class="d1-ov-t">${tbl}</div><aside class="d1-ov-a">${d1InsightHtml([s, ...d1MoreOverview(g, rk, ok, ak)])}${note}</aside></div>`;
-  return { html: d1Section(1, "Overview", esc(rgVsText(g, "cur")) + (pw ? ` · compared with ${esc(rgVsText(g, "prev"))}` : ""), [], body, null, true), line: s };
-}
-
-// ---------------------------------------------------------------- 2 · traffic
-function d1Collect(dim, days) {
-  const m = new Map(), set = new Set(days || []);
-  const src = (state.pages.drill_days || {})[dim];
-  const keep = (k) => RG.mode === "all" || k === 3 || (RG.mode === "aw" ? k === 1 : k === 0);
-  for (const r of src ? src.rows : []) {
-    if (!set.has(r[0]) || !keep(r[2])) continue;
-    const a = m.get(r[1]) || m.set(r[1], { sessions: 0, perf_sessions: 0, atc: 0, ic: 0, orders: 0, gmv: 0, converted: 0 }).get(r[1]);
-    a.sessions += r[3]; a.perf_sessions += r[4]; a.atc += r[5]; a.ic += r[6]; a.orders += r[7]; a.gmv += r[8]; a.converted += r[9];
-  }
-  return m;
-}
-function d1Traffic(g) {
-  const dd = state.pages.drill_days;
-  if (!dd || !dd.channel) return { html: d1Section(2, "Traffic by channel", "", "", '<p class="na">Data unavailable: the channel data appears after the next refresh.</p>'), line: "" };
-  const nc = g.cur.length, np = g.prev ? g.prev.length : 0, hasP = np > 0;
-  const C = d1Collect("channel", g.cur), P = hasP ? d1Collect("channel", g.prev) : new Map();
-  const z = { sessions: 0, orders: 0, gmv: 0 };
-  const rows = [...new Set([...C.keys(), ...P.keys()])].map((i) => {
-    const a = C.get(i) || z, b = P.get(i) || z;
-    return { name: dd.channel.names[i].key, a, b, dS: hasP ? d1Diff(a.sessions, b.sessions, "s", "int", nc, np) : null, pS: hasP ? d1Pct(a.sessions, b.sessions, "s", "int", nc, np) : null, pO: hasP ? d1Pct(a.orders, b.orders, "o", "int", nc, np) : null };
-  }).filter((r) => r.a.sessions || r.b.sessions).sort((x, y) => y.a.sessions - x.a.sessions);
-  const tot = rows.reduce((t, r) => ({ s: t.s + r.a.sessions, ps: t.ps + r.b.sessions, o: t.o + r.a.orders, po: t.po + r.b.orders }), { s: 0, ps: 0, o: 0, po: 0 });
-  const [hp, hc] = d1Th(g);
-  const cols = [{ label: "Channel (UTM)", text: true, render: (r) => esc(r.name) }];
-  if (hasP) cols.push({ label: `Sessions · ${hp}`, render: (r) => esc(d1N(r.b.sessions)) });
-  cols.push({ label: `Sessions · ${hc}`, render: (r) => esc(d1N(r.a.sessions)) });
-  if (hasP) cols.push({ label: nc !== np ? "Δ / day" : "Δ", render: (r) => d1Abs(r.dS, "int") }, { label: "Δ %", render: (r) => deltaHtml(r.pS, "sessions") });
-  cols.push({ label: "Share", render: (r) => esc(tot.s ? `${((r.a.sessions / tot.s) * 100).toFixed(1)}%` : "–") });
-  cols.push({ label: "Orders", render: (r) => esc(d1N(r.a.orders)) });
-  if (hasP) cols.push({ label: "Orders Δ %", render: (r) => deltaHtml(r.pO, "orders") });
-  cols.push({ label: "CVR", render: (r) => (r.a.sessions && r.a.orders <= r.a.sessions ? esc(fmt(r.a.orders / r.a.sessions, "pct")) : '<span class="flat" title="more orders than visits: the two are tagged differently, so no rate">–</span>') });
-  let s = "";
-  if (hasP && rows.length) {
-    const tdS = d1Diff(tot.s, tot.ps, "s", "int", nc, np);
-    const lead = [...rows].sort((x, y) => (tdS >= 0 ? y.dS - x.dS : x.dS - y.dS))[0];
-    const shareOf = tdS ? Math.round((lead.dS / tdS) * 100) : null;
-    const what = RG.mode === "aw" ? "Awareness sessions" : RG.mode === "all" ? "Sessions" : "Sessions outside awareness";
-    s = `<b>${what} ${d1Move(d1Pct(tot.s, tot.ps, "s", "int", nc, np))}</b>${nc !== np ? " per day" : ""}; <b>${esc(lead.name)}</b> ${lead.dS >= 0 ? "added" : "lost"} the most (${d1Sign(lead.dS)}${d1N(Math.abs(lead.dS))}${nc !== np ? " a day" : ""}${shareOf != null && shareOf > 0 && shareOf <= 100 ? `, ${shareOf}% of the change` : shareOf > 100 ? `, more than the whole net change: other channels moved the other way` : ""}).`;
-    const oc = d1Pct(tot.o, tot.po, "o", "int", nc, np);
-    if (oc != null) s += ` Orders credited to them ${d1Move(oc)}.`;
-  } else if (rows.length) s = `<b>${esc(rows[0].name)}</b> brought the most sessions (${d1N(rows[0].a.sessions)}, ${((rows[0].a.sessions / tot.s) * 100).toFixed(0)}% of all).`;
-  const note = RG.mode === "all" ? "" : `<p class="legend-note">${RG.mode === "aw" ? "Awareness campaigns only." : "Everything that is not awareness or social."} Orders are the ones each channel is credited with by UTM.</p>`;
-  return { html: d1Section(2, "Traffic by channel", "", [s, ...d1MoreTraffic(rows, nc, np, hasP)], table(cols, rows, { full: true }) + note, null, cols.length > 6), line: s };
-}
-
-// ---------------------------------------------------------------- 3 · checkout funnel
-function d1Funnel(g) {
-  const w = g.w, pw = g.pw, nc = g.cur.length, np = g.prev ? g.prev.length : 0;
-  const ok = RG.mode === "aw" ? "orders" : "sh_orders";
-  const steps = [["atc", "Added to cart"], ["ic", "Checkout started (IC)"], ["gk_address", "Address landed"], ["gk_payment", "Payment step reached"], [ok, "Orders"]];
-  const rows = steps.map(([k, l], i) => {
-    const prevK = i ? steps[i - 1][0] : null;
-    const rate = (W) => (W && prevK && W[k] != null && W[prevK] ? W[k] / W[prevK] : null);
-    return { k, l, cur: w[k], prev: pw ? pw[k] : null, r: rate(w), pr: rate(pw), from: i ? steps[i - 1][1] : null };
-  });
-  const [hp, hc] = d1Th(g);
-  const cols = [{ label: "Step", text: true, render: (r) => esc(r.l) }];
-  if (pw) cols.push({ label: hp, render: (r) => cell(r.prev, "int", rgNa(pw, r.k)) });
-  cols.push({ label: hc, render: (r) => cell(r.cur, "int", rgNa(w, r.k)) });
-  if (pw) cols.push({ label: "Δ %", render: (r) => deltaHtml(d1Pct(r.cur, r.prev, r.k, "int", nc, np), r.k) });
-  cols.push({ label: "Step rate", render: (r) => (r.r == null ? '<span class="flat">–</span>' : esc(fmt(r.r, "pct")) + (r.pr != null ? `<br><span class="sub">vs ${esc(fmt(r.pr, "pct"))}</span>` : "")) });
-  if (pw) cols.push({ label: "Δ rate", render: (r) => (r.r == null || r.pr == null ? '<span class="flat">–</span>' : `<span class="${r.r >= r.pr ? "up" : "down"}">${esc(d1PP(r.r - r.pr))}</span>`) });
-  let s = "";
-  const moved = rows.filter((r) => r.r != null && r.pr != null);
-  if (moved.length) {
-    const worst = [...moved].sort((x, y) => (x.r - x.pr) - (y.r - y.pr))[0], best = [...moved].sort((x, y) => (y.r - y.pr) - (x.r - x.pr))[0];
-    s = worst.r - worst.pr < 0
-      ? `<b>The biggest leak is ${esc(worst.from)} → ${esc(worst.l)}</b>: ${fmt(worst.pr, "pct")} → ${fmt(worst.r, "pct")} (${d1PP(worst.r - worst.pr)}).${best.r - best.pr > 0 ? ` ${esc(best.from)} → ${esc(best.l)} improved the most (${d1PP(best.r - best.pr)}).` : ""}`
-      : `<b>Every step held or improved</b>; the most at ${esc(best.from)} → ${esc(best.l)} (${d1PP(best.r - best.pr)}).`;
-  } else if (rows[4].r != null) s = `<b>${fmt(rows[4].r, "pct")} of payment-step visitors ordered.</b>`;
-  return { html: d1Section(3, "Checkout funnel", "add to cart through to order, GoKwik for the checkout steps", [s, ...d1MoreFunnel(g, rows)], table(cols, rows, { full: true }), null, cols.length > 6), line: s };
-}
-
-// ---------------------------------------------------------------- 4 · revenue, AOV and basket
-function d1Basket(g) {
-  const p = state.pages.slab_days;
-  if (!p || !p.rows || p.na) return { html: d1Section(4, "Revenue & AOV", "", "", `<p class="na">Data unavailable: ${esc((p && p.na) || "basket size has not been built yet")}.</p>`), line: "" };
-  const sum = (days) => { const set = new Set(days || []), m = new Map(); for (const [d, slab, o, u, sales] of p.rows) { if (!set.has(d)) continue; const a = m.get(slab) || m.set(slab, { o: 0, s: 0 }).get(slab); a.o += o; a.s += sales; } return m; };
-  const nc = g.cur.length, np = g.prev ? g.prev.length : 0, hasP = np > 0;
-  const C = sum(g.cur), P = hasP ? sum(g.prev) : new Map();
-  const tot = (m) => [...m.values()].reduce((t, a) => ({ o: t.o + a.o, s: t.s + a.s }), { o: 0, s: 0 });
-  const tc = tot(C), tp = tot(P);
-  const rows = [...new Set([...C.keys(), ...P.keys()])].filter((k) => k > 0).sort((a, b) => a - b).map((k) => {
-    const a = C.get(k) || { o: 0, s: 0 }, b = P.get(k) || { o: 0, s: 0 };
-    return { k, l: BK_LABEL(k, p.top), a, b, mix: tc.s ? a.s / tc.s : null, pmix: tp.s ? b.s / tp.s : null };
-  });
-  const [hp, hc] = d1Th(g);
-  const cols = [{ label: "Basket", text: true, render: (r) => esc(r.l) }];
-  if (hasP) cols.push({ label: `Revenue · ${hp}`, render: (r) => `${esc(d1Money(r.b.s))}<br><span class="sub">${esc(r.pmix == null ? "–" : (r.pmix * 100).toFixed(1) + "% of revenue")}</span>` });
-  cols.push({ label: `Revenue · ${hc}`, render: (r) => `${esc(d1Money(r.a.s))}<br><span class="sub">${esc(r.mix == null ? "–" : (r.mix * 100).toFixed(1) + "% of revenue")}</span>` });
-  if (hasP) cols.push({ label: "Δ %", render: (r) => deltaHtml(d1Pct(r.a.s, r.b.s, "s", "inr", nc, np), "gmv") }, { label: "Δ mix", render: (r) => d1Abs(d1Pp(r.mix, r.pmix), "pct") });
-  cols.push({ label: "Orders", render: (r) => esc(d1N(r.a.o)) }, { label: "AOV", render: (r) => esc(r.a.o ? fmt(r.a.s / r.a.o, "inr") : "–") });
-  const aov = tc.o ? tc.s / tc.o : null, paov = tp.o ? tp.s / tp.o : null;
-  let s = "";
-  if (hasP && rows.length) {
-    const shift = [...rows].sort((x, y) => (y.mix - y.pmix) - (x.mix - x.pmix));
-    const up = shift[0], down = shift[shift.length - 1];
-    s = `<b>AOV ${d1Money(aov)}, ${d1Move(paov ? aov / paov - 1 : null)}</b> (from ${d1Money(paov)}). ` + (Math.abs(up.mix - up.pmix) < 0.01 ? "The basket mix barely moved (no basket size changed its revenue share by 1 pp or more)." : `${esc(up.l)} gained the most revenue share (${d1PP(up.mix - up.pmix)})${down !== up && down.mix - down.pmix < 0 ? `, at the expense of ${esc(down.l.toLowerCase())} (${d1PP(down.mix - down.pmix)})` : ""}.`);
-  } else if (aov != null) s = `<b>AOV ${d1Money(aov)}</b>; ${rows.length ? `${esc(rows[0].l.toLowerCase())} baskets brought ${((rows[0].mix || 0) * 100).toFixed(0)}% of revenue` : ""}.`;
-  return { html: d1Section(4, "Revenue & AOV", "basket mix · whole store · items exclude freebies, merch, books and gummies", [s, ...d1MoreBasket(rows, tc, tp)], table(cols, rows, { full: true }), null, cols.length > 6), line: s, whole: true };
-}
-
-// ---------------------------------------------------------------- 5 · products
-function d1Products(g) {
-  const pd = state.pages.product_days;
-  if (!pd) return { html: "", line: "" };
-  const sum = (days) => { const set = new Set(days || []), m = new Map(); for (const [d, i, u, rev] of pd.rows) { if (!set.has(d)) continue; const a = m.get(i) || m.set(i, { u: 0, r: 0 }).get(i); a.u += u; a.r += rev; } return m; };
-  const nc = g.cur.length, np = g.prev ? g.prev.length : 0, hasP = np > 0;
-  const C = sum(g.cur), P = hasP ? sum(g.prev) : new Map();
-  const all = [...new Set([...C.keys(), ...P.keys()])].map((i) => {
-    const a = C.get(i) || { u: 0, r: 0 }, b = P.get(i) || { u: 0, r: 0 };
-    return { name: pd.names[i].label, a, b, dR: hasP ? d1Diff(a.r, b.r, "r", "inr", nc, np) : null, pR: hasP ? d1Pct(a.r, b.r, "r", "inr", nc, np) : null, pU: hasP ? d1Pct(a.u, b.u, "u", "int", nc, np) : null };
-  });
-  const rows = all.filter((r) => r.a.r || r.b.r).sort((x, y) => Math.max(y.a.r, y.b.r) - Math.max(x.a.r, x.b.r)).slice(0, 12);
-  const [hp, hc] = d1Th(g);
-  const cols = [{ label: "Product", text: true, render: (r) => esc(r.name) }];
-  if (hasP) cols.push({ label: `Revenue · ${hp}`, render: (r) => esc(d1Money(r.b.r)) });
-  cols.push({ label: `Revenue · ${hc}`, render: (r) => esc(d1Money(r.a.r)) });
-  if (hasP) cols.push({ label: "Δ %", render: (r) => deltaHtml(r.pR, "gmv") });
-  if (hasP) cols.push({ label: `Units · ${hp}`, render: (r) => esc(d1N(r.b.u)) });
-  cols.push({ label: `Units · ${hc}`, render: (r) => esc(d1N(r.a.u)) });
-  if (hasP) cols.push({ label: "Δ %", render: (r) => deltaHtml(r.pU, "units") });
-  let s = "";
-  const movers = all.filter((r) => r.dR != null && (r.a.r || r.b.r));
-  if (hasP && movers.length) {
-    const fall = [...movers].sort((x, y) => x.dR - y.dR)[0], rise = [...movers].sort((x, y) => y.dR - x.dR)[0];
-    const bits = [];
-    if (fall.dR < 0) bits.push(`<b>${esc(fall.name)}</b> fell the most (${d1P(fall.pR)}, ${d1Sign(fall.dR)}${d1Money(Math.abs(fall.dR))}${nc !== np ? " a day" : ""})`);
-    if (rise.dR > 0) bits.push(`<b>${esc(rise.name)}</b> grew the most (${rise.b.r ? d1P(rise.pR) : "new"}, +${d1Money(rise.dR)}${nc !== np ? " a day" : ""})`);
-    s = bits.join("; ") + (bits.length ? "." : "");
-  } else if (rows.length) s = `<b>${esc(rows[0].name)}</b> was the top seller (${d1Money(rows[0].a.r)}).`;
-  return { html: d1Section(5, "Products", "top 12 by revenue · whole store", [s, ...d1MoreProducts(all, nc, np, hasP)], table(cols, rows, { full: true }), null, cols.length > 6), line: s, whole: true };
-}
-
-// ---------------------------------------------------------------- 6 · new vs repeat
-function d1Retention(g) {
-  const e = d1All(), W = e.windowOf(g.cur), PW = g.prev && g.prev.length ? e.windowOf(g.prev) : null;
-  const nc = g.cur.length, np = g.prev ? g.prev.length : 0;
-  const val = (X, k) => {
-    if (!X) return null;
-    const known = (X.new_orders ?? 0) + (X.repeat_orders ?? 0), rev = (X.new_gmv ?? 0) + (X.repeat_gmv ?? 0);
-    return { new_aov: X.new_orders ? X.new_gmv / X.new_orders : null, repeat_aov: X.repeat_orders ? X.repeat_gmv / X.repeat_orders : null,
-      rep_share: known && X.repeat_orders != null ? X.repeat_orders / known : null, rep_rev_share: rev && X.repeat_gmv != null ? X.repeat_gmv / rev : null }[k] ?? X[k];
-  };
-  const R = [["new_orders", "New-customer orders", "int"], ["repeat_orders", "Repeat orders", "int"], ["new_gmv", "New-customer revenue", "inr"], ["repeat_gmv", "Repeat revenue", "inr"],
-    ["new_aov", "New-customer AOV", "inr"], ["repeat_aov", "Repeat AOV", "inr"], ["rep_share", "Repeat share of orders", "pct"], ["rep_rev_share", "Repeat share of revenue", "pct"]];
-  const RATE = new Set(["new_aov", "repeat_aov", "rep_share", "rep_rev_share"]);
-  const [hp, hc] = d1Th(g);
-  const cols = [{ label: "Metric", text: true, render: (r) => esc(r.l) }];
-  if (PW) cols.push({ label: hp, render: (r) => cell(val(PW, r.k), r.u, rgNa(PW, r.k)) });
-  cols.push({ label: hc, render: (r) => cell(val(W, r.k), r.u, rgNa(W, r.k)) });
-  if (PW) {
-    cols.push({ label: nc !== np ? "Δ (per day)" : "Δ", render: (r) => d1Abs(RATE.has(r.k) ? d1Pp(val(W, r.k), val(PW, r.k)) : d1Diff(val(W, r.k), val(PW, r.k), r.k, r.u, nc, np), r.u) });
-    cols.push({ label: "Δ %", render: (r) => deltaHtml(RATE.has(r.k) ? d1Pct(val(W, r.k), val(PW, r.k), r.k, "x", 1, 1) : d1Pct(val(W, r.k), val(PW, r.k), r.k, r.u, nc, np), "orders") });
-  }
-  let s = "";
-  if (W.new_orders == null) s = "";
-  else if (PW && PW.new_orders != null) {
-    const pn = d1Pct(W.new_orders, PW.new_orders, "n", "int", nc, np), pr = d1Pct(W.repeat_orders, PW.repeat_orders, "r", "int", nc, np);
-    const who = pn != null && pr != null ? (pn < 0 && pr >= 0 ? "<b>The change is a new-customer story</b>: " : pr < 0 && pn >= 0 ? "<b>The change is a repeat-customer story</b>: " : "") : "";
-    s = `${who}${who ? "new" : "New"}-customer orders ${d1Move(pn)}, repeat orders ${d1Move(pr)}${nc !== np ? " (per day)" : ""}; repeat customers placed ${fmt(val(W, "rep_share"), "pct")} of orders (was ${fmt(val(PW, "rep_share"), "pct")}).`;
-  } else s = `<b>${fmt(val(W, "rep_share"), "pct")} of orders were from repeat customers.</b>`;
-  return { html: d1Section(6, "New vs repeat customers", "whole store · a customer's first valid order is new", [s, ...d1MoreRetention(W, PW, nc, np)], table(cols, R.map(([k, l, u]) => ({ k, l, u })), { full: true }), null, cols.length > 6), line: s, whole: true };
-}
-
-// ---------------------------------------------------------------- 7 · spend and ROAS
-function d1Spend(g) {
-  const e = d1All(), W = e.windowOf(g.cur), PW = g.prev && g.prev.length ? e.windowOf(g.prev) : null;
-  const nc = g.cur.length, np = g.prev ? g.prev.length : 0;
-  const perf = [["Meta (sales)", "meta_perf_spend", "meta_perf_value"], ["Google (sales)", "google_perf_spend", "google_perf_value"], ["Reddit", "reddit_spend", null], ["Affiliate", "affiliate_spend", "affiliate_revenue"], ["CRM (flow + broadcast)", "crm_spend", "crm_revenue"]];
-  const aw = [["Meta (awareness)", "meta_aw_spend", "meta_aw_value"], ["Google (awareness)", "google_aw_spend", "google_aw_value"]];
-  // one RoAS: Shopify revenue over performance spend. Awareness and Reach spend
-  // are shown for what they cost, never in RoAS, and the Awareness view has none.
-  const showRoas = RG.mode !== "aw";
-  const keep = (r) => W[r.sk] || (PW && PW[r.sk]) || W[r.sk] == null;
-  const asRows = (list) => list.map(([l, sk, vk]) => ({ l, sk, vk: showRoas ? vk : null })).filter(keep);
-  const T = RG.mode === "aw" ? { l: "Awareness total", sk: "aw_spend", vk: null, _class: "total" } : { l: "Total performance spend · RoAS on Shopify revenue", sk: "perf_all_spend", vk: "sh_sales", _class: "total" };
-  const rows = [...asRows(RG.mode === "aw" ? aw : perf), T];
-  if (RG.mode === "all") rows.push(...asRows([...aw, ["Social (Reach)", "meta_social_spend", null]]).map((r) => ({ ...r, l: r.l + " · not in RoAS", vk: null })));
-  const roas = (X, sk, vk) => (X && vk && X[sk] && X[vk] != null ? X[vk] / X[sk] : null);
-  const [hp, hc] = d1Th(g);
-  const cols = [{ label: "Channel", text: true, render: (r) => esc(r.l) }];
-  if (PW) cols.push({ label: `Spend · ${hp}`, render: (r) => cell(PW[r.sk], "inr", rgNa(PW, r.sk)) });
-  cols.push({ label: `Spend · ${hc}`, render: (r) => cell(W[r.sk], "inr", rgNa(W, r.sk)) });
-  if (PW) cols.push({ label: "Δ %", render: (r) => deltaHtml(d1Pct(W[r.sk], PW[r.sk], r.sk, "inr", nc, np), "spend") });
-  if (showRoas) {
-    if (PW) cols.push({ label: `ROAS · ${hp}`, render: (r) => (r.vk ? cell(roas(PW, r.sk, r.vk), "x", rgNa(PW, r.vk)) : '<span class="flat" title="not in RoAS, or no revenue reported for this channel">–</span>') });
-    cols.push({ label: `ROAS · ${hc}`, render: (r) => (r.vk ? cell(roas(W, r.sk, r.vk), "x", rgNa(W, r.vk)) : '<span class="flat" title="not in RoAS, or no revenue reported for this channel">–</span>') });
-    if (PW) cols.push({ label: "Δ ROAS", render: (r) => deltaHtml(r.vk ? d1Pct(roas(W, r.sk, r.vk), roas(PW, r.sk, r.vk), "x", "x", 1, 1) : null, "roas") });
-  }
-  let s = "";
-  if (W[T.sk] != null) {
-    s = `<b>${RG.mode === "aw" ? "Awareness spend" : "Performance spend"} ${d1Money(W[T.sk])}${PW ? `, ${d1Move(d1Pct(W[T.sk], PW?.[T.sk], "s", "inr", nc, np))}${nc !== np ? " per day" : ""}` : ""}</b>${showRoas ? `; RoAS ${PW ? `${fmt(roas(PW, T.sk, T.vk), "x") ?? "n/a"} → ` : ""}${fmt(roas(W, T.sk, T.vk), "x") ?? "n/a"}` : ""}.`;
-    const ch = rows.filter((r) => r !== T).filter((r) => PW && W[r.sk] != null && PW[r.sk] != null).map((r) => ({ ...r, d: d1Diff(W[r.sk], PW[r.sk], r.sk, "inr", nc, np) })).sort((x, y) => Math.abs(y.d) - Math.abs(x.d))[0];
-    if (ch && ch.d) s += ` ${esc(ch.l)} moved spend the most (${d1Sign(ch.d)}${d1Money(Math.abs(ch.d))}${nc !== np ? " a day" : ""}).`;
-  } else s = `<b>Spend is not complete for these days</b>, so there is no RoAS: ${esc(rgNa(W, T.sk) || "")}.`;
-  return { html: d1Section(7, RG.mode === "aw" ? "Awareness spend" : "Spend & ROAS", RG.mode === "aw" ? "awareness campaigns: what they cost; there is no ROAS for awareness" : "RoAS is Shopify revenue over performance spend; a channel's row is its own reported revenue over its spend", [s, ...d1MoreSpend(W, PW, rows, T, roas, nc, np), RG.mode === "aw" ? "" : d1EstNote(W)], table(cols, rows, { full: true }), null, cols.length > 6), line: s };
-}
-
-// ---------------------------------------------------------------- detail: day by day, drill-down
-function d1DayTable(g, e) {
-  const F = D1_F[RG.mode] || D1_F.perf;
-  const span = (s) => (s ? rgSpan(s[0], s[1]) : "no matching period");
-  const fix = (w, extra) => { const na = { ...w.na }; for (const k of Object.keys(RG_DEP)) { const x = rgNa(w, k); if (x) na[k] = x; } return { ...w, ...extra, na }; };
-  const dayRows = (list) => list.map((d) => fix(e.windowOf([d]), { date: d }));
-  const head = `<tr><th class="text" scope="col">Day</th>${F.map(([, l]) => `<th scope="col">${esc(l)}</th>`).join("")}</tr>`;
-  const rows = [];
-  if (g.pw) rows.push({ _group: `Comparison · ${g.phase === "sale" ? "sale days" : "BAU days"} · ${span(g.prevSpan)}` }, ...dayRows(g.prev), fix(g.pw, { _label: "Total", _class: "total" }));
-  rows.push({ _group: `Selected · ${g.phase === "sale" ? "sale days" : "BAU days"} · ${span(g.curSpan)}` }, ...dayRows(g.cur), fix(g.w, { _label: "Total", _class: "total" }));
-  if (g.pw) rows.push({ _label: "Change", _class: "delta", _delta: true });
-  const body = rows.map((r) => {
-    if (r._group) return `<tr class="group"><td colspan="${F.length + 1}">${esc(r._group)}</td></tr>`;
-    return `<tr class="${r._class || ""}"><td class="text">${r._label ? esc(r._label) : esc(dayLabel(r.date))}</td>${F.map(([k, , u]) => `<td>${r._delta ? deltaHtml(g.change(k), k) : cell(r[k], u, r.na?.[k])}</td>`).join("")}</tr>`;
-  }).join("");
-  return `<div class="table-wrap"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
-}
-const D1_DRILLS = [["channel", "Channel"], ["source", "Source"], ["campaign", "Campaign"], ["landing_page", "Landing page"], ["product", "Product"]];
-function d1DrillTable(g) {
-  const dim = state.drill, dd = state.pages.drill_days;
-  if (dim !== "product" && (!dd || !dd[dim])) return '<p class="na">Data unavailable: the drill-down data appears after the next refresh.</p>';
-  const cur = g.cur || [], prev = g.prev && g.prev.length ? g.prev : [], perDay = prev.length && cur.length !== prev.length;
-  let C, P, nameOf, kindOf;
-  if (dim === "product") {
-    const pd = state.pages.product_days;
-    const sum = (days) => { const set = new Set(days), m = new Map(); for (const [d, i, u, rev] of pd.rows) { if (!set.has(d)) continue; const a = m.get(i) || m.set(i, { units: 0, revenue: 0 }).get(i); a.units += u; a.revenue += rev; } return m; };
-    C = sum(cur); P = prev.length ? sum(prev) : new Map(); nameOf = (i) => pd.names[i].label; kindOf = () => null;
-  } else {
-    C = d1Collect(dim, cur); P = prev.length ? d1Collect(dim, prev) : new Map(); nameOf = (i) => dd[dim].names[i].key; kindOf = (i) => dd[dim].names[i].kind;
-  }
-  const sortKey = dim === "product" ? "revenue" : "sessions", RATE = new Set(["atc_rate", "cvr"]);
-  const rows = [...new Set([...C.keys(), ...P.keys()])].map((i) => {
-    const c = { ...(C.get(i) || {}) }, q = { ...(P.get(i) || {}) };
-    for (const side of [c, q]) { side.atc_rate = side.sessions ? side.atc / side.sessions : null; side.cvr = side.sessions ? side.orders / side.sessions : null; }
-    const delta = {};
-    for (const k of new Set([...Object.keys(c), ...Object.keys(q)])) delta[k] = !q[k] ? null : perDay && !RATE.has(k) ? ((c[k] ?? 0) / cur.length) / (q[k] / prev.length) - 1 : (c[k] ?? 0) / q[k] - 1;
-    return { key: nameOf(i) || "(unknown)", kind: kindOf(i), current: c, prior: q, delta, _s: Math.max(c[sortKey] || 0, q[sortKey] || 0) };
-  }).filter((r) => r._s > 0).sort((x, y) => y._s - x._s).slice(0, 50);
-  const fields = dim === "product" ? [["units", "Units", "num"], ["revenue", "Revenue", "inr"]]
-    : dim === "landing_page" ? [["sessions", "Sessions", "num"], ["atc", "ATC", "num"], ["atc_rate", "Sessions → ATC", "pct"], ["ic", "IC (GoKwik)", "num"], ["converted", "Converted (GoKwik)", "num"]]
-    : [["sessions", "Sessions", "num"], ...(RG.mode === "aw" ? [] : [["perf_sessions", "Perf sessions", "num"]]), ["atc", "ATC", "num"], ["atc_rate", "Sessions → ATC", "pct"], ["ic", "IC", "num"], ["orders", "Orders", "num"], ["gmv", "Revenue", "inr"]];
-  const cols = [{ label: D1_DRILLS.find((d) => d[0] === dim)[1], text: true, render: (r) => `${esc(r.key)}${dim === "campaign" && r.kind === "awareness" ? ' <span class="phase sale">Awareness</span>' : ""}` },
-    ...fields.map(([k, l, u]) => ({ label: l, render: (r) => `${esc(fmt(r.current[k], u, true) ?? "–")}${prev.length ? `<br><span class="sub">${esc(fmt(r.prior[k], u, true) ?? "–")} · ${deltaHtml(r.delta[k], k)}</span>` : ""}` }))];
-  const gaps = [];
-  if (dd && dd.from && cur.some((d) => d < dd.from)) gaps.push(`Drill-down detail starts ${rgFmtDay(dd.from, true)}; earlier days are not in it.`);
-  if (RG.mode !== "all" && dim === "product") gaps.push("Products are for the whole store: orders cannot be split by campaign type.");
-  if (RG.mode !== "all" && dim === "landing_page") gaps.push("Landing-page sessions are for the whole store; IC and conversions follow the switch.");
-  return (gaps.length ? `<div class="banner">${esc(gaps.join(" "))}</div>` : "") + table(cols, rows, { maxHeight: "65vh" });
-}
-
-// ---------------------------------------------------------------- insights
-/* What each table says, worked out from its numbers: every change is split
-   into its parts (revenue = orders x AOV, orders = sessions x conversion,
-   AOV = basket mix x price per basket) so the bullet names the cause, not just
-   the move. Counts compare per day when the periods differ in length. */
-function d1MoreOverview(g, rk, ok, ak) {
-  const w = g.w, pw = g.pw, nc = g.cur.length, np = g.prev ? g.prev.length : 0, out = [];
-  const perDay = nc !== np ? " a day" : "";
-  const conv = RG.mode === "aw" ? "cvr" : "sh_cvr";
-  if (!pw) return out;
-  const dR = g.change(rk), dO = g.change(ok), dA = g.change(ak), dS = g.change("sessions");
-  // revenue = orders x AOV
-  if (dR != null && dO != null && dA != null && Math.abs(dR) >= 0.005) {
-    const lo = Math.log(1 + dO), la = Math.log(1 + dA);
-    if (Math.sign(lo) === Math.sign(la) || Math.abs(la) < 0.002 || Math.abs(lo) < 0.002) {
-      out.push(`<b>Both levers moved the same way</b>: orders ${d1P(dO)}, AOV ${d1P(dA)}${perDay ? " (orders per day)" : ""}.`);
-    } else {
-      const big = Math.abs(lo) >= Math.abs(la) ? "orders" : "aov", off = Math.round((Math.min(Math.abs(lo), Math.abs(la)) / Math.max(Math.abs(lo), Math.abs(la))) * 100);
-      out.push(big === "orders"
-        ? `<b>Order volume drove revenue</b> (orders ${d1P(dO)}); AOV ${d1P(dA)} pulled the other way and offset about ${off}% of it.`
-        : `<b>Basket value drove revenue</b> (AOV ${d1P(dA)}); orders ${d1P(dO)} pulled the other way and offset about ${off}% of it.`);
-    }
-  }
-  // orders = sessions x conversion: what traffic and conversion each did, in orders
-  if (w.sessions != null && pw.sessions != null && w[conv] != null && pw[conv] != null && w[ok] != null) {
-    const sNow = w.sessions / Math.max(nc, 1), sThen = pw.sessions / Math.max(np, 1);
-    const traffic = (sNow - sThen) * pw[conv] * nc, conversion = sNow * (w[conv] - pw[conv]) * nc;
-    if (Math.abs(traffic) + Math.abs(conversion) >= 1) {
-      const story = Math.abs(traffic) >= Math.abs(conversion) ? "a traffic story" : "a conversion story";
-      out.push(`<b>Orders are ${story}</b>: sessions ${d1P(dS)}${perDay} ${d1Verb(traffic)} about ${d1N(Math.abs(traffic))} orders; conversion ${fmt(pw[conv], "pct")} → ${fmt(w[conv], "pct")} ${d1Verb(conversion)} about ${d1N(Math.abs(conversion))}.`);
-    }
-  }
-  if (RG.mode !== "aw") {
-    // paid traffic against the store
-    const dP = g.change("report_perf_sessions");
-    if (dP != null && dS != null && Math.abs(dP - dS) >= 0.03) {
-      out.push(dP > dS
-        ? `Perf sessions ${d1P(dP)} against all sessions ${d1P(dS)}: <b>paid traffic did better than the store</b>, so organic, direct, awareness and social visits explain most of the move.`
-        : `Perf sessions ${d1P(dP)} against all sessions ${d1P(dS)}: <b>paid traffic did worse than the store</b>, so start with the ad channels.`);
-    }
-    // efficiency
-    const dSp = g.change("perf_all_spend");
-    if (dSp != null && w.sh_roas != null && pw.sh_roas != null && dR != null) {
-      out.push(`Spends ${d1P(dSp)}${perDay} against revenue ${d1P(dR)}: <b>RoAS ${fmt(pw.sh_roas, "x")} → ${fmt(w.sh_roas, "x")}</b>, ${dSp > dR ? "because spend fell less than revenue (or rose faster)" : "because revenue held up better than spend"}. Cost per session ${fmt(pw.cps, "inr2") ?? "n/a"} → ${fmt(w.cps, "inr2") ?? "n/a"}.`);
-      if (d1EstNote(w)) out.push(d1EstNote(w));
-    } else if (w.perf_all_spend == null) {
-      out.push(`No RoAS yet: ${esc(rgNa(w, "perf_all_spend") || "a spend is missing")}.`);
-    }
-  }
-  return out;
-}
-function d1MoreTraffic(rows, nc, np, hasP) {
-  const out = [];
-  const tot = rows.reduce((t, r) => t + r.a.sessions, 0);
-  if (rows.length && tot) {
-    const top = rows[0], share = top.a.sessions / tot;
-    if (share >= 0.4) out.push(`<b>${esc(top.name)} brings ${(share * 100).toFixed(0)}% of these sessions</b>, so it sets the direction for the whole store.`);
-  }
-  if (hasP) {
-    // who moved orders, and whether it was their traffic or their conversion
-    const per = (v, n) => v / Math.max(n, 1);
-    const movers = rows.map((r) => ({ ...r, dO: per(r.a.orders, nc) - per(r.b.orders, np) })).filter((r) => r.dO).sort((x, y) => Math.abs(y.dO) - Math.abs(x.dO));
-    const m = movers[0];
-    if (m && Math.abs(m.dO) >= 1) {
-      const cNow = m.a.sessions && m.a.orders <= m.a.sessions ? m.a.orders / m.a.sessions : null, cThen = m.b.sessions && m.b.orders <= m.b.sessions ? m.b.orders / m.b.sessions : null;
-      const why = cNow != null && cThen != null ? (Math.abs(d1Pct(m.a.sessions, m.b.sessions, "s", "int", nc, np) || 0) >= Math.abs(cNow / cThen - 1) ? `its sessions moved ${d1P(d1Pct(m.a.sessions, m.b.sessions, "s", "int", nc, np))}` : `its conversion went ${fmt(cThen, "pct")} → ${fmt(cNow, "pct")}`) : "";
-      out.push(`<b>${esc(m.name)} moved orders the most</b> (${d1Sign(m.dO)}${d1N(Math.abs(m.dO))}${nc !== np ? " a day" : ""})${why ? `: ${why}` : ""}.`);
-    }
-  }
-  return out;
-}
-function d1MoreFunnel(g, rows) {
-  const out = [], w = g.w;
-  const moved = rows.filter((r) => r.r != null && r.pr != null && r.r > 0);
-  const orders = rows[rows.length - 1].cur, aov = RG.mode === "aw" ? w.aov : w.sh_aov;
-  const worst = [...moved].sort((x, y) => (x.r - x.pr) - (y.r - y.pr))[0];
-  if (worst && worst.r < worst.pr && orders) {
-    const lost = orders * (worst.pr / worst.r - 1);
-    out.push(`<b>Had ${esc(worst.from)} → ${esc(worst.l)} held at ${fmt(worst.pr, "pct")}, about ${d1N(lost)} more orders${aov ? ` (${d1Money(lost * aov)})` : ""}</b> would have come in: the biggest single lever on this page.`);
-  }
-  const ic = rows.find((r) => r.k === "ic"), atc = rows.find((r) => r.k === "atc");
-  if (ic && atc && ic.r != null && ic.pr != null && Math.abs(ic.r - ic.pr) >= 0.03 && worst && worst.k === "ic") out[out.length - 1] += " Cart to checkout is the step to look at: the cart page, shipping or COD messaging, and any offer change in the Shopify changes log for these dates.";
-  else if (ic && atc && ic.r != null && ic.pr != null && Math.abs(ic.r - ic.pr) >= 0.03) out.push(`Cart to checkout moved ${d1PP(ic.r - ic.pr)}: check the cart page, shipping or COD messaging and any offer change against the Shopify changes log for these dates.`);
-  return out;
-}
-function d1MoreBasket(rows, tc, tp) {
-  const out = [];
-  if (!tc.o || !tp.o) return out;
-  // AOV = sum of (share of orders x AOV of that basket size): split the change
-  let mix = 0, price = 0;
-  for (const r of rows) {
-    const sh = r.a.o / tc.o, psh = r.b.o / tp.o, a = r.a.o ? r.a.s / r.a.o : null, pa = r.b.o ? r.b.s / r.b.o : null;
-    if (pa != null) mix += (sh - psh) * pa;
-    if (a != null && pa != null) price += sh * (a - pa);
-  }
-  if (Math.abs(mix) + Math.abs(price) >= 1) {
-    const lead = Math.abs(mix) >= Math.abs(price) ? "the basket mix" : "what each basket size sells for";
-    out.push(`<b>AOV ${d1Sign(mix + price)}${d1Money(Math.abs(mix + price))} came mostly from ${lead}</b>: ${d1Sign(mix)}${d1Money(Math.abs(mix))} from ${mix >= 0 ? "more" : "fewer"} multi-item orders, ${d1Sign(price)}${d1Money(Math.abs(price))} from the price of the same basket size (discounts, pack sizes and products within a size).`);
-  }
-  return out;
-}
-function d1MoreProducts(all, nc, np, hasP) {
-  const out = [];
-  const tot = all.reduce((t, r) => t + r.a.r, 0), ptot = all.reduce((t, r) => t + r.b.r, 0);
-  const top3 = [...all].sort((x, y) => y.a.r - x.a.r).slice(0, 3), ptop3 = [...all].sort((x, y) => y.b.r - x.b.r).slice(0, 3);
-  if (tot) {
-    const s3 = top3.reduce((t, r) => t + r.a.r, 0) / tot, p3 = ptot ? ptop3.reduce((t, r) => t + r.b.r, 0) / ptot : null;
-    out.push(`The top three products are <b>${(s3 * 100).toFixed(0)}% of product revenue</b>${p3 != null ? ` (was ${(p3 * 100).toFixed(0)}%)` : ""}: ${top3.map((r) => esc(r.name)).join(", ")}.`);
-  }
-  if (hasP) {
-    const dTot = d1Diff(tot, ptot, "r", "inr", nc, np);
-    const lead = [...all].filter((r) => r.dR != null).sort((x, y) => Math.abs(y.dR) - Math.abs(x.dR))[0];
-    if (lead && dTot && Math.sign(lead.dR) === Math.sign(dTot) && Math.abs(dTot) >= 1) {
-      const sh = Math.round((lead.dR / dTot) * 100);
-      if (sh >= 25 && sh <= 300) out.push(`<b>${esc(lead.name)} alone explains ${sh}% of the change in product revenue</b> (${d1Sign(lead.dR)}${d1Money(Math.abs(lead.dR))}${nc !== np ? " a day" : ""} of ${d1Sign(dTot)}${d1Money(Math.abs(dTot))}).`);
-    }
-  }
-  return out;
-}
-function d1MoreRetention(W, PW, nc, np) {
-  const out = [];
-  if (!W || W.new_gmv == null || W.repeat_gmv == null) return out;
-  const nAov = W.new_orders ? W.new_gmv / W.new_orders : null, rAov = W.repeat_orders ? W.repeat_gmv / W.repeat_orders : null;
-  if (nAov && rAov) out.push(`Repeat customers spend <b>${d1Money(rAov)}</b> an order against <b>${d1Money(nAov)}</b> for new ones (${d1P(rAov / nAov - 1)}).`);
-  if (PW && PW.new_gmv != null && PW.repeat_gmv != null) {
-    const dN = d1Diff(W.new_gmv, PW.new_gmv, "n", "inr", nc, np), dRp = d1Diff(W.repeat_gmv, PW.repeat_gmv, "r", "inr", nc, np), dT = dN + dRp;
-    if (Math.abs(dT) >= 1 && Math.sign(dN) === Math.sign(dT)) out.push(`<b>New customers account for ${Math.round((dN / dT) * 100)}% of the revenue change</b> (${d1Sign(dN)}${d1Money(Math.abs(dN))}${nc !== np ? " a day" : ""}), so acquisition, not loyalty, is where it moved.`);
-    else if (Math.abs(dT) >= 1) out.push(`<b>Repeat customers account for most of the revenue change</b> (${d1Sign(dRp)}${d1Money(Math.abs(dRp))}${nc !== np ? " a day" : ""}).`);
-  }
-  return out;
-}
-function d1MoreSpend(W, PW, rows, T, roas, nc, np) {
-  const out = [];
-  if (!PW || RG.mode === "aw") return out;
-  // channels by their own reported return, where they report one
-  const withR = rows.filter((r) => r !== T && r.vk && roas(W, r.sk, r.vk) != null && W[r.sk] > 0);
-  if (withR.length >= 2) {
-    const best = [...withR].sort((x, y) => roas(W, y.sk, y.vk) - roas(W, x.sk, x.vk))[0], worst = [...withR].sort((x, y) => roas(W, x.sk, x.vk) - roas(W, y.sk, y.vk))[0];
-    out.push(`By each channel's own reported revenue, <b>${esc(best.l)} returns the most (${fmt(roas(W, best.sk, best.vk), "x")})</b> and ${esc(worst.l)} the least (${fmt(roas(W, worst.sk, worst.vk), "x")}); these are the platforms' claims, so they overlap and do not add up to Shopify revenue.`);
-  }
-  const big = rows.filter((r) => r !== T && W[r.sk] != null && PW[r.sk] != null).map((r) => ({ ...r, p: d1Pct(W[r.sk], PW[r.sk], r.sk, "inr", nc, np) })).filter((r) => r.p != null && Math.abs(r.p) >= 0.15 && W[r.sk] >= (W[T.sk] || 0) * 0.05);
-  if (big.length) out.push(`Big spend moves: ${big.map((r) => `${esc(r.l)} ${d1P(r.p)}`).join(", ")}${nc !== np ? " (per day)" : ""}.`);
-  return out;
-}
-
-// ---------------------------------------------------------------- the tab
 R.d1 = (p) => {
-  rgTab("d1", ["slab_days", "drill_days", "product_days"], "", () => {
-    const draw = () => {
-      const e = d1Eng(), cmp = e.compare(RG.from, RG.to, RG.cmp);
-      const host = document.getElementById("rg-body");
-      if (!cmp.groups.length) { host.innerHTML = `<section class="card"><p class="na">Data unavailable: there are no days in the data for ${esc(rgSpan(RG.from, RG.to))}.</p></section>`; return; }
-      const [g, ctl] = rgPhasePick(cmp, "d1-phase");
-      const parts = [d1Overview(g), d1Traffic(g), d1Funnel(g), d1Basket(g), d1Products(g), d1Retention(g), d1Spend(g)];
-      // no summary: each section ends with what its table says. The sale /
-      // BAU switch and the transition-day note sit above the first section.
-      const lead = `<div class="d1-lead">${ctl}
-        ${cmp.groups.length > 1 ? `<span class="sub">These dates hold both sale and BAU days; this report covers the ${g.phase === "sale" ? "sale" : "BAU"} days.</span>` : ""}
-        ${cmp.mixed.length ? `<span class="sub">${cmp.mixed.length} transition day${cmp.mixed.length === 1 ? "" : "s"} (${esc(rgListDays(cmp.mixed))}) left out: a sale went live or ended.</span>` : ""}
-        <div class="d1-health">${statusStrip()}</div></div>`;
-      const sections = `<div class="d1-grid">${parts.map((x) => x.html).join("")}</div>`;
-      const detail = `
-        <details class="card rg-all"><summary>Day by day · every metric for every day</summary>${d1DayTable(g, e)}</details>
-        <section class="card"><div class="section-head"><h2>Drill-down</h2><span class="sub">explore any dimension for these dates · current, then comparison · Δ${g.prev && g.prev.length && g.prev.length !== g.cur.length ? " (per day)" : ""}</span></div>
-          <div class="seg" role="group" aria-label="Drill-down dimension">${D1_DRILLS.map(([k, l]) => `<button type="button" data-drill="${k}" aria-pressed="${k === state.drill}">${l}</button>`).join("")}</div>
-          <div id="drill">${d1DrillTable(g)}</div></section>
-        <section class="card">${notes(p)}</section>`;
-      host.innerHTML = lead + sections + detail;
-      host.querySelectorAll("[data-drill]").forEach((b) => b.addEventListener("click", () => {
-        state.drill = b.dataset.drill;
-        host.querySelectorAll("[data-drill]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-        document.getElementById("drill").innerHTML = d1DrillTable(g);
-      }));
-      rgPhaseBind("d1-phase", draw);
-
-    };
-    draw();
+  RG.tab = "d1";
+  $main.innerHTML = `<div id="rg-body"><p class="empty">Loading…</p></div>`;
+  rgShell(async () => {
+    try { for (const pg of ["channel_days", "product_days", "campaign_days", "meta_tree", "google_tree"]) await loadPage(pg); } catch (err) { /* sections say what is missing */ }
+    if (state.tab !== "d1") return;
+    const e = RG.eng, d1 = p.as_of && e.inData([p.as_of]).length ? p.as_of : e.last;
+    const D = d1Day(d1), kw = D.kind === "sale" ? "sale" : "BAU";
+    const host = document.getElementById("rg-body");
+    let g, sub, kpis, funnelG, stages, changed, recon, ck;
+    if (D1.view === "day") {
+      g = { cur: [d1], prev: D.ok ? D.base : null, w: D.w, pw: D.ok ? D.pooled : null, phase: D.kind };
+      sub = `<b>Report for ${esc(rgFmtDay(d1, true))}</b> <span class="phase-badge" title="${esc(RG_PHASE_RULE)}">${kw} day</span> <span class="rg-dim">${D.ok ? `vs a typical ${kw} day: the median of ${D.base.length} ${kw} days, ${esc(rgListDays(D.base))}` : `too few ${kw} days in the last weeks for a typical day`}</span>`;
+      kpis = D1_KPIS.map((id) => d1Kpi(id, D)).join("");
+      funnelG = { w: D.w, pw: D.ok ? D.typ : null };
+      stages = d1Stages({ cur: [d1], prev: null, w: D.w, pw: null }, D.ok ? { cur: D.base, prev: null, w: D.pooled, pw: null } : null, D.base.length);
+      ck = d1Checkout(p.pulse);
+    } else {
+      const from = e.monthStart(d1), c = e.compare(from, d1, { mode: "month" });
+      g = rgPick(c);
+      if (!g) { host.innerHTML = rgNone(); return; }
+      const seg = c.groups.length > 1 ? `<div class="seg" id="d1-phase" role="group" aria-label="Which days">${c.groups.map((x) => `<button type="button" data-ph="${x.phase}" aria-pressed="${x.phase === MK.phase}">${x.phase === "sale" ? "Sale" : "BAU"} days</button>`).join("")}</div>` : `<span class="phase-badge" title="${esc(RG_PHASE_RULE)}">${g.phase === "sale" ? "Sale vs Sale" : "BAU vs BAU"}</span>`;
+      sub = `<b>${esc(rgSpan(from, d1))}</b> ${seg} <span class="rg-dim">${rgVsLine(g)}</span>`;
+      kpis = D1_KPIS.map((id) => rgKpi(id, g, { href: id === "blended_roas" || id === "perf_spend" ? "#marketing" : id === "cvr" ? "#funnel" : null })).join("");
+      funnelG = g;
+      stages = d1Stages(g, null, 0);
+      ck = fnCheckout(g);
+    }
+    changed = rgWhatChanged(g);
+    recon = trReconHtml({ cur: g.cur, prev: null, w: g.w, pw: null }, { compact: true, mode: "perf" });
+    const viewSeg = `<div class="seg" id="d1-view" role="group" aria-label="Report period"><button type="button" data-v="day" aria-pressed="${D1.view === "day"}">Yesterday</button><button type="button" data-v="mtd" aria-pressed="${D1.view === "mtd"}">This month so far</button></div>`;
+    setSub(`<div class="sub-line">${viewSeg} ${sub} <button type="button" class="rg-btn" id="d1-copy" style="margin-left:auto">Copy summary</button></div>`);
+    const chHtml = changed.length ? `<ul class="changed">${changed.map((x) => `<li><span class="ic ${x.dir}">${x.dir === "up" ? "▲" : x.dir === "down" ? "▼" : "!"}</span><span>${x.html}</span><a href="${x.link}">${esc(x.lab)} →</a></li>`).join("")}</ul>` : `<p class="na">${g.pw ? "Nothing moved enough to call out." : "No typical day to compare with."}</p>`;
+    host.innerHTML = `
+      <section class="card" data-component="d1-headline"><div class="kpis six">${kpis}</div></section>
+      ${rgSec("What changed", D1.view === "day" ? `yesterday against a typical ${kw} day, biggest movers first` : "against the same dates last month", chHtml, { comp: "d1-what-changed" })}
+      <div class="cols-2">
+        ${rgSec("Checkout", "GoKwik's checkout steps", ck, { comp: "d1-checkout-status" })}
+        ${rgSec("Funnel", "sessions to orders, with step rates", fnBars(funnelG), { comp: "d1-funnel-summary" })}
+      </div>
+      ${rgSec("Channels", "spend, Platform ROAS and Shopify last-click results, one row per channel", recon, { link: rgLink("marketing", "Full channel table"), comp: "d1-channel-summary" })}
+      ${rgSec("Meta by stage", "TOF, MOF, BOF and Catalog: spend and Platform ROAS", stages, { link: rgLink("marketing", "Product × stage"), comp: "d1-meta-stages" })}
+      ${p.targets ? rgSec("Target vs achieved", "this month against the media plan", rgTargets(p.targets)) : ""}
+      <section class="card">${d1Links()}</section>`;
+    document.getElementById("d1-view").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-v]"); if (b && b.dataset.v !== D1.view) { D1.view = b.dataset.v; destroyCharts(); R.d1(p); } });
+    document.getElementById("d1-phase")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-ph]"); if (b) { MK.phase = b.dataset.ph; R.d1(p); } });
+    document.getElementById("d1-copy").addEventListener("click", () => {
+      const title = D1.view === "day" ? `Asaya D-1 · ${rgFmtDay(d1, true)} (${kw} day) vs a typical ${kw} day` : `Asaya · ${rgSpan(e.monthStart(d1), d1)} vs the same dates last month`;
+      const rows = D1_KPIS.map((id) => {
+        const k = METRICS[id].field, v = g.w[k], t = D1.view === "day" ? (D.ok ? D.typ[k] : null) : g.pw ? g.pw[k] : null;
+        const ch = D1.view === "day" ? (v != null && t ? v / t - 1 : null) : g.pw ? g.change(k) : null;
+        return [METRICS[id].label, mVal(id, v, true) ?? "n/a", ch == null ? "" : `${ch >= 0 ? "+" : "−"}${Math.abs(ch * 100).toFixed(1)}%`];
+      });
+      d1Copy(title, rows, changed.map((x) => d1Plain(x.html)));
+    });
   });
 };

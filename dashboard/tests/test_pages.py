@@ -267,7 +267,7 @@ def test_every_phase1_tab_builds_and_serialises(built_without_meta):
     pages, _ = built_without_meta
     assert set(pages) == {
         "overview",
-        "daily",
+        "funnel",
         "marketing",
         "products",
         "d1",

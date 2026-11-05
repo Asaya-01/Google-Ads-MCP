@@ -11,7 +11,7 @@
    Inlined after range_d1.js, inside the dashboard closure. */
 
 const RGN = { metric: "sales", state: null, city: null, sort: { k: "sales", d: -1 }, psort: { k: "sales", d: -1 }, allRows: false, sku: {}, vb: null, anim: 0 };
-const RGN_METRICS = [["sales", "Revenue"], ["orders", "Orders"], ["aov", "AOV"], ["paid", "Items"], ["basket", "Basket size"]];
+const RGN_METRICS = [["sales", "Total sales"], ["orders", "Orders"], ["aov", "AOV"], ["paid", "Items"], ["basket", "Items per order"]];
 const RGN_RATE = new Set(["aov", "basket", "share"]);
 const RGN_MIN_ORDERS = 20; // a place needs this many orders before its AOV or basket size is ranked
 
@@ -48,7 +48,7 @@ function rgnVal(a, k, noSku) {
   if (k === "aov") return a.orders ? a.sales / a.orders : null;
   if (noSku && noSku.length) return null;
   if (k === "paid") return a.paid;
-  if (k === "basket") return a.orders ? a.paid / a.orders : null;
+  if (k === "basket") return a.ipo !== undefined ? a.ipo : a.orders ? a.paid / a.orders : null;
   return null;
 }
 function rgnChange(k, a, b, nc, np, noSkuA, noSkuB) {
@@ -135,7 +135,7 @@ function rgnTiles(a, b, nc, np, noA, noB) {
       ${sub ? `<div class="foot sub">${sub}</div>` : ""}</div>`;
   };
   const per = a && a.orders && nc > 1 ? `${esc(rgnFmt(a.sales / nc, "sales", true))} a day` : "";
-  return `<div class="rgn-tiles">${t("sales", "Revenue", per)}${t("orders", "Orders")}${t("aov", "AOV")}${t("paid", "Items", "gifts &amp; merch left out")}${t("basket", "Basket size", "items per order")}</div>`;
+  return `<div class="rgn-tiles">${t("sales", "Total sales", per)}${t("orders", "Orders")}${t("aov", "AOV")}${t("paid", "Items", "gifts &amp; merch left out")}${t("basket", "Items per order", a && a.ipo !== undefined ? "as on Products" : "by shipping address")}</div>`;
 }
 function rgnRank(list, k, total) {
   // ranked bars of the top places by the chosen metric
@@ -212,8 +212,8 @@ const rgnInsightBox = (pts) => (pts.length ? `<div class="d1-insight"><div class
 // ---------------------------------------------------------------- the tab
 R.region = (p) => {
   const head = p.available ? "" : `<section class="card"><h2>Region</h2><p class="na">Data unavailable: ${esc(p.na || "region data has not been pulled yet")}. It is pulled from Shopify on the next refresh.</p></section>`;
-  rgTab("region", p.available ? ["region_days"] : [], head, () => {
-    if (!p.available) { document.getElementById("rg-body").innerHTML = `<section class="card">${notes(p)}</section>`; return; }
+  rgTab("region", p.available ? ["region_days", "slab_days"] : [], head, () => {
+    if (!p.available) { document.getElementById("rg-body").innerHTML = ""; return; }
     const draw = async () => {
       const P = state.pages.region_days, e = RG.eng, c = e.compare(RG.from, RG.to, RG.cmp);
       const host = document.getElementById("rg-body");
@@ -223,6 +223,8 @@ R.region = (p) => {
       const cur = inData(g.cur), prev = inData(g.prev), nc = cur.length, np = prev.length;
       if (!nc) { host.innerHTML = `<section class="card"><p class="na">Data unavailable: region data covers ${esc(rgSpan(P.from, P.to))}.</p></section>`; return; }
       const A = rgnPlaces(cur), B = np ? rgnPlaces(prev) : null;
+      const ipo = (days) => { const sl = state.pages.slab_days; if (!sl || !sl.rows) return undefined; const set = new Set(days); let o = 0, u = 0; for (const r of sl.rows) if (set.has(r[0])) { o += r[2]; u += r[3]; } return o ? u / o : undefined; };
+      A.all.ipo = ipo(cur); if (B) B.all.ipo = ipo(prev);
       // a state's own page (products by city) when one is open
       const skey = RGN.state != null ? P.states[RGN.state].key : null;
       for (const key of ["all", ...(RGN.city != null && skey ? [skey] : [])]) {
@@ -260,13 +262,13 @@ R.region = (p) => {
       const scopeTotal = RGN.state == null ? A.all.sales : (A.st.get(RGN.state) || {}).sales;
       const placeCols = [
         { k: "name", label: RGN.state == null ? "State" : "City", text: true, render: (r) => `<span class="rgn-pn">${esc(r.name)}</span>` },
-        { k: "sales", label: "Revenue", render: (r) => esc(fmt(r.sales, "inr")) },
+        { k: "sales", label: "Total sales", render: (r) => esc(fmt(r.sales, "inr")) },
         { k: "dSales", label: np ? (nc !== np ? "Δ / day" : "Δ") : "Δ", render: (r) => rgnDelta(r.dSales, "gmv") },
         { k: "share", label: "Share", render: (r) => `<span class="rgn-share"><i style="width:${Math.max(2, Math.round((r.share || 0) * 48))}px"></i>${esc(rgnFmt(r.share, "share"))}</span>` },
         { k: "orders", label: "Orders", render: (r) => esc(rgnFmt(r.orders, "orders")) },
         { k: "aov", label: "AOV", render: (r) => esc(rgnFmt(r.aov, "aov")) },
         { k: "paid", label: "Items", render: (r) => esc(rgnFmt(r.paid, "paid")) },
-        { k: "basket", label: "Basket size", render: (r) => esc(rgnFmt(r.basket, "basket")) },
+        { k: "basket", label: "Items per order", render: (r) => esc(rgnFmt(r.basket, "basket")) },
       ];
       const shown = RGN.allRows ? placeRows : [...placeRows].sort((x, y) => y.sales - x.sales).slice(0, 40);
       const placeTable = rgnSortable(placeCols, shown, RGN.sort, "places", (r) => `class="rgn-row${(r.kind === "ci" && r.i === RGN.city) || (r.kind === "st" && r.i === RGN.state) ? " sel" : ""}" data-${r.kind}="${r.i}" tabindex="0"`);
@@ -286,17 +288,17 @@ R.region = (p) => {
       prodRows.forEach((r) => (r.share = prodTot ? r.sales / prodTot : null));
       const prodCols = [
         { k: "name", label: "Product", text: true, render: (r) => esc(r.name) },
-        { k: "sales", label: "Revenue", render: (r) => esc(fmt(r.sales, "inr")) },
+        { k: "sales", label: "Total sales", render: (r) => esc(fmt(r.sales, "inr")) },
         { k: "dSales", label: np ? (nc !== np ? "Δ / day" : "Δ") : "Δ", render: (r) => rgnDelta(r.dSales, "gmv") },
         { k: "share", label: "Share", render: (r) => `<span class="rgn-share"><i style="width:${Math.max(2, Math.round((r.share || 0) * 48))}px"></i>${esc(rgnFmt(r.share, "share"))}</span>` },
         { k: "orders", label: "Orders", render: (r) => esc(rgnFmt(r.orders, "orders")) },
         { k: "aov", label: "AOV", render: (r) => esc(rgnFmt(r.aov, "aov")) },
         { k: "qty", label: "Quantity", render: (r) => esc(rgnFmt(r.qty, "orders")) },
-        { k: "upo", label: "Basket size", render: (r) => esc(rgnFmt(r.upo, "basket")) },
+        { k: "upo", label: "Units per order", render: (r) => esc(rgnFmt(r.upo, "basket")) },
       ];
       const skuMissing = cur.filter((d) => !(P.sku_days || []).includes(d));
       const prodNote = skuMissing.length === nc ? `<p class="na">Product detail for these dates fills in over the next refreshes (newest days first).</p>`
-        : skuMissing.length ? `<div class="banner">Product detail is missing for ${esc(rgListDays(skuMissing))}; those days are left out of this table and of Items and Basket size.</div>` : "";
+        : skuMissing.length ? `<div class="banner">Product detail is missing for ${esc(rgListDays(skuMissing))}; those days are left out of this table and of Items and Items per order.</div>` : "";
 
       const crumbs = [`<button type="button" data-crumb="all" class="${RGN.state == null ? "on" : ""}">All India</button>`];
       if (RGN.state != null) crumbs.push(`<button type="button" data-crumb="state" class="${RGN.city == null ? "on" : ""}">${esc(P.states[RGN.state].name)}</button>`);
@@ -307,7 +309,7 @@ R.region = (p) => {
         : placeRows.map((r) => ({ ...r, kind: "ci" }));
       host.innerHTML = `
         ${ctl ? `<div class="d1-lead">${ctl}<span class="sub">These dates hold both sale and BAU days; this view covers the ${g.phase === "sale" ? "sale" : "BAU"} days.</span></div>` : ""}
-        <section class="card rgn-hero">
+        <section class="card rgn-hero" data-component="region-map">
           <div class="rgn-top">
             <nav class="rgn-crumbs" aria-label="Where you are">${crumbs.join('<span aria-hidden="true">›</span>')}</nav>
             <div class="seg rgn-metric" role="group" aria-label="Colour the map by">${RGN_METRICS.map(([mk, ml]) => `<button type="button" data-metric="${mk}" aria-pressed="${RGN.metric === mk}">${ml}</button>`).join("")}</div>
@@ -322,18 +324,18 @@ R.region = (p) => {
             </div>
           </div>
         </section>
-        <section class="card">
+        <section class="card" data-component="region-places">
           <div class="section-head"><h2>${RGN.state == null ? "States" : `Cities in ${esc(P.states[RGN.state].name)}`}</h2><span class="sub">click a row to open it · sort by any column</span></div>
           ${placeTable}${more}
           ${rgnInsightBox(rgnPlaceInsights(placeRows, scopeTotal, RGN.state == null ? "India" : P.states[RGN.state].name, child, rgnVal(RGN.state == null ? A.all : A.st.get(RGN.state), "aov")))}
         </section>
-        <section class="card">
+        <section class="card" data-component="region-products">
           <div class="section-head"><h2>Products · ${esc(scopeName)}</h2><span class="sub">gifts, merch, books and gummies left out</span></div>
           ${prodNote}${rgnSortable(prodCols, prodRows, RGN.psort, "products", () => "")}
-          <p class="legend-note">A product's AOV is its revenue per order that had it; its basket size is its units per such order.</p>
+          
           ${rgnInsightBox(rgnProductInsights(prodRows, prodTot, scopeName, RGN.state != null ? natShare : null))}
         </section>
-        <section class="card">${notes(p)}</section>`;
+        `;
       rgnBind(host, draw);
       rgPhaseBind("rgn-phase", draw);
     };
@@ -379,7 +381,7 @@ function rgnHover(host) {
   const show = (path, x, y) => {
     const si = path.dataset.s === "" ? null : +path.dataset.s;
     const name = si == null ? path.getAttribute("aria-label") : P.states[si].name, a = si == null ? null : A.st.get(si);
-    tip.innerHTML = `<b>${esc(name)}</b>${a && a.orders ? `<dl><dt>Revenue</dt><dd>${esc(fmt(a.sales, "inr", true))} · ${((a.sales / (A.all.sales || 1)) * 100).toFixed(1)}%</dd><dt>Orders</dt><dd>${esc(fmt(a.orders, "int"))}</dd><dt>AOV</dt><dd>${esc(rgnFmt(rgnVal(a, "aov"), "aov"))}</dd>${rgnVal(a, "basket", A.noSku) != null ? `<dt>Basket</dt><dd>${esc(rgnFmt(rgnVal(a, "basket", A.noSku), "basket"))} items</dd>` : ""}</dl><small>Click to open</small>` : "<small>No orders in these dates</small>"}`;
+    tip.innerHTML = `<b>${esc(name)}</b>${a && a.orders ? `<dl><dt>Total sales</dt><dd>${esc(fmt(a.sales, "inr", true))} · ${((a.sales / (A.all.sales || 1)) * 100).toFixed(1)}%</dd><dt>Orders</dt><dd>${esc(fmt(a.orders, "int"))}</dd><dt>AOV</dt><dd>${esc(rgnFmt(rgnVal(a, "aov"), "aov"))}</dd>${rgnVal(a, "basket", A.noSku) != null ? `<dt>Items per order</dt><dd>${esc(rgnFmt(rgnVal(a, "basket", A.noSku), "basket"))}</dd>` : ""}</dl><small>Click to open</small>` : "<small>No orders in these dates</small>"}`;
     tip.hidden = false;
     const r = map.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
     let left = x - r.left + 14, top = y - r.top + 14;

@@ -55,12 +55,14 @@ def build(ctx: Context, days: int = 45) -> dict:
         ],
         "rows": rows,
         "notes": [
-            "Perf sessions = all sessions minus Awareness sessions: any campaign whose name contains "
-            '"awareness" (Meta or Google; Google sessions are matched by campaign ID).',
-            "IC = GoKwik checkouts started. CVR = orders / all sessions. Spends = performance spend on every "
-            "channel (Meta, Google and Reddit sales campaigns, CRM, affiliates). ROAS = GMV / Spends; "
-            "awareness and Reach spend are never in it.",
-            "Phase (sale / BAU) is inferred from the GMV spike against the BAU median and Meta spend scale; "
-            "override any day in config.json (phases.overrides).",
+            "Perf sessions follow the team's rule: sessions whose UTM source is one of the performance "
+            "sources (paid, affiliate, CRM) and that carry a UTM campaign, awareness campaigns left out. "
+            "Google sessions are matched to campaigns by campaign ID.",
+            "Checkout started (IC) is GoKwik's checkouts started. CVR = Orders ÷ all Sessions; Orders are "
+            "Shopify's Sales report. Performance spend is every channel's sales-campaign spend (Meta, Google "
+            "and Reddit sales campaigns, CRM, affiliates); Blended ROAS = Total sales ÷ Performance spend.",
+            "Sale and BAU days come from hourly order detection and the team's sale calendar, which wins on "
+            "every day it covers; phases.overrides in config.json applies only to days the calendar does "
+            "not cover.",
         ],
     }

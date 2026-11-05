@@ -589,3 +589,74 @@ Switch: **This month so far**, with sale days compared to sale days and BAU to B
 - **Fix**: a separate count of buyers whose first purchase of the product falls in the window with at least 90 days of runway (`≤ NDAYS − 90`), and of those who bought the same product again within 90 days. The horizon no longer affects it. Nothing else in the census changes.
 - Test: `tests/test_retention.py::test_the_90_day_figure_is_90_days_whatever_horizon_is_picked`. It fails on the old code and passes on the new.
 - Old vs new for three windows was checked in BigQuery (figures in chat, not here). At a 30-day horizon the old figure was 2–4 times lower than the true 90-day rate; at 180 days, 2–3 times higher.
+
+## 16. What the restructure built
+
+**Shell**
+- One opaque sticky header.
+  - First row: tabs (Today · Overview · Funnel · Marketing · Products · Retention · Region · Data health, with D-1 Report set apart), the data status pill (opens Data health), Ask Claude and the theme toggle.
+  - Second row: the date picker, "vs", and the BAU / Sale switch (or a "BAU vs BAU" badge whose tooltip states the phase rule).
+  - Today and the D-1 Report show their own fixed time frame there instead.
+- `#daily` redirects to `#funnel`.
+- Ask Claude is docked in the header and opens as a side panel. On wide screens the page steps aside for it, so it never covers a table.
+
+**Metric registry** (`static/metrics.js`)
+- Holds every metric's name, definition, formula, source, format, direction and home tab.
+- Cards, column headers, (i) tooltips and the Data health dictionary all read from it.
+- One formatter: ₹ with Indian grouping; compact on cards, full in tables. Rates have 1 decimal (2 under 1%), ratios 2 decimals, shares in pp.
+- Deltas are coloured by direction: lower-is-better metrics turn red when they rise; neutral metrics stay grey. A change under 2% is grey.
+- A comparison under 20 orders or ₹5,000 spend shows "n/m". "Infinity" and "NaN" can no longer show.
+- These thresholds sit in `config.json` → `display`.
+
+**Tabs**
+- **Today:**
+  - six numbers, against a typical same-weekday day at the same time or yesterday at the same time;
+  - the running-total chart;
+  - spend pacing with "est." tags, and the campaign view;
+  - campaign tables that flag spend with no platform value after a set hour (`live.flag_spend_without_return`);
+  - a "Source late" state for GoKwik.
+- **Overview:**
+  - six KPI cards: Blended ROAS and Performance spend link to Marketing, CVR links to Funnel;
+  - a deterministic "What changed" panel: channels and products by their contribution to the change, the funnel step that moved most, data issues;
+  - one Total sales / Orders chart;
+  - the Target vs achieved placeholder, built to the follow-up's shape.
+- **Funnel:**
+  - KPIs, funnel bars, and GoKwik checkout steps with a Healthy / Watch / Problem status;
+  - funnel rates by channel (rates only);
+  - the daily table with funnel columns, plus a full CSV download;
+  - funnel by source, campaign or landing page.
+- **Marketing:**
+  - the campaign view (its only home outside Today);
+  - KPIs: Performance spend, Blended ROAS, Meta and Google Platform ROAS, CPS, Cost per purchase;
+  - the channel reconciliation table: spend, platform claims and Shopify last click, with an expandable "Unattributed / other" group and a collapsed reconcile row that adds up to the headline;
+  - the spend tree, collapsed by default;
+  - product × stage, with zero-spend products folded away;
+  - spend and Blended ROAS charts side by side.
+- **Products:**
+  - KPIs: Units, Product revenue, Items per order, Multi-item orders, Landed discount;
+  - parent products as "CODE · Short name" from the product map, with variants (pack, size, shade, scent) underneath, and "Unmapped" for anything missing;
+  - the one basket table (reconcile row collapsed), categories, and folds for excluded types and MRP coverage.
+- **Retention:** new vs repeat orders for the picked dates; the cohort explorer uses the picked dates as its acquisition window.
+- **Region:** "Items per order". All India uses the Products definition, so the two tabs match.
+- **D-1 Report:** the contents in §13, plus "Copy summary" for Slack.
+- **Data health:** sources and other inputs, cross-checks, the Google session check, the product map check, the sale calendar, known exceptions, the metric dictionary, every tab's methodology notes and the arrival history. No tab carries footnotes any more.
+
+**Data added for presentation only**
+- `product_days.variants` / `vrows`: variant rows whose sums are the product rows.
+- `d1.pulse`: the same checkout status the Overview page already built.
+- `config.json` → `product_map`, keyed on Shopify product ID.
+
+**Parity**
+- `range_engine.js` and the server's number code (`common.py`, `days.py`) are unchanged.
+- Pages built by the old and new code from the same inputs were snapshotted with `tools/metric_snapshot.js` over three range pairs, including a sale window. Every metric in every view (Performance, Awareness, All) is identical, and so are the channel, basket and product sums.
+- The page diff shows only notes, the added fields above, the `daily` → `funnel` page name and one table's row order.
+- The two approved calculation fixes (§14, §15) are separate commits.
+
+**Tests**
+- `tests/test_ownership.py` renders every tab in a headless browser. It fails if a component is drawn on two tabs, if Overview has more than six KPI cards or any table, or if any tab throws.
+- `tests/test_frontend.py` checks the registry, the formatter and the delta rules.
+
+**Still open**
+- **Region by state or city:** Items per order there still uses Shopify's report by shipping address, which counts cancelled orders. It is the only per-place source; matching Products exactly at state level needs a BigQuery pull by shipping address (a pipeline change).
+- **Checkout steps:** there is no "payment selected" step in GoKwik's data, so the checkout steps stop at "payment reached".
+- **Product-page data:** there is still no product-page sessions or add-to-cart data.

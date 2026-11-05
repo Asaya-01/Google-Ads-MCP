@@ -36,7 +36,7 @@ function bkHtml(g) {
   const pct = (v, t) => (t ? v / t : null);
   const pc = (v) => (v == null ? '<span class="na">–</span>' : esc((v * 100).toFixed(1) + "%"));
   // a change in mix, in percentage points; not good or bad, so not coloured
-  const pp = (a, b) => (a == null || b == null ? '<span class="flat">–</span>' : `<span class="flat">${a - b >= 0 ? "+" : ""}${((a - b) * 100).toFixed(1)} pp</span>`);
+  const pp = (a, b) => mPpHtml(a == null || b == null ? null : a - b);
   const rows = slabs.filter((s) => s !== 0 || (cur.get(0) || {}).orders).map((s) => {
     const a = cur.get(s) || { orders: 0, units: 0, sales: 0 }, b = prev ? prev.get(s) || { orders: 0, units: 0, sales: 0 } : null;
     const so = pct(a.orders, tc.orders), sp = b ? pct(b.orders, tp.orders) : null;
@@ -46,7 +46,7 @@ function bkHtml(g) {
   });
   const bar = (v) => (v == null ? "" : `<span class="bk-bar" style="width:${Math.max(2, Math.round(v * 100))}%"></span>`);
   const cols = [
-    { label: "Basket", text: true, render: (r) => esc(r.label) },
+    { label: mHead("items_per_order", "Basket"), text: true, render: (r) => esc(r.label) },
     { label: "Orders", render: (r) => esc(fmt(r.a.orders, "int")) },
     { label: "Δ orders", render: (r) => (prev ? deltaHtml(r.dOrders, "orders") : '<span class="flat">–</span>') },
     { label: "Share of orders", render: (r) => `<span class="bk-cell">${bar(r.so)}${pc(r.so)}</span>${r.sp != null ? `<br><span class="sub">vs ${esc((r.sp * 100).toFixed(1))}% · ${pp(r.so, r.sp)}</span>` : ""}` },
@@ -57,16 +57,17 @@ function bkHtml(g) {
   ];
   const total = { label: "All orders placed", _class: "total", a: tc, so: 1, sp: tp ? 1 : null, ss: 1, ssp: tp ? 1 : null, aov: tc.orders ? tc.sales / tc.orders : null, paov: tp && tp.orders ? tp.sales / tp.orders : null,
     b: tp, dOrders: tp && tp.orders ? rgAvgChange(tc.orders, nCur, tp.orders, nPrev) : null };
-  // reconcile to the headline: Shopify's own Orders and Total sales (as on D-1)
-  const recon = [];
+  // reconcile to the headline (Shopify's own Orders and Total sales): collapsed by default
   const days = (g.cur || []).filter((d) => have.has(d));
   const W = days.length ? (RG.engAll || (RG.engAll = createRangeEngine(RG.raw, "all"))).windowOf(days) : null;
+  let recon = "";
   if (W && W.orders != null && W.gmv != null) {
-    recon.push({ label: "Cancelled orders and returns (Shopify's report)", _adj: true, a: { orders: W.orders - tc.orders, units: null, sales: W.gmv - tc.sales }, so: null, ss: null, aov: null, b: null, dOrders: null });
-    recon.push({ label: "Total (Shopify's report, as on D-1)", _class: "total", a: { orders: W.orders, units: null, sales: W.gmv }, so: null, ss: null, aov: W.orders ? W.gmv / W.orders : null, b: null, dOrders: null });
+    const rid = "bk" + ++trRid;
+    const line = (r, cls) => `<tr class="${cls}" data-rid="${rid}" hidden>${cols.map((c) => `<td class="${c.text ? "text" : ""}">${c.render(r)}</td>`).join("")}</tr>`;
+    recon = `<tr class="recon-toggle" data-recon="${rid}" tabindex="0" role="button" aria-expanded="false"><td class="text" colspan="${cols.length}">▸ Reconcile to Shopify: cancellations, returns and edits</td></tr>`
+      + line({ label: "Cancellations, returns and edits", a: { orders: W.orders - tc.orders, units: null, sales: W.gmv - tc.sales }, so: null, ss: null, aov: null, b: null, dOrders: null }, "recon")
+      + line({ label: "Total · Shopify's report (the headline)", a: { orders: W.orders, units: null, sales: W.gmv }, so: null, ss: null, aov: W.orders ? W.gmv / W.orders : null, b: null, dOrders: null }, "total recon");
   }
   const warn = [missCur.length ? `Basket data is missing for ${rgListDays(missCur)}, which are left out.` : "", g.prev && missPrev.length ? `Comparison days without basket data (${rgListDays(missPrev)}) are left out too.` : ""].filter(Boolean).join(" ");
-  const note = RG.mode === "all" ? "" : `<p class="legend-note">Basket size is for the whole store: orders cannot be split by campaign type here.</p>`;
-  return (warn ? `<div class="banner">${esc(warn)}</div>` : "") + table(cols, [...rows, total, ...recon]) +
-    `<p class="legend-note">A basket counts the items bought, leaving out freebies, merch, books and gummies, and orders that are tests, cancelled, samples or influencer orders. Share of orders is how many of the day's orders held that many items; the “vs” line is the comparison period. Sales are those orders' value. The last two rows tie the table to Shopify's own Orders and Total sales, the numbers on D-1 and every headline: Shopify still counts cancelled orders as orders and takes returns off Total sales.</p>${note}`;
+  return (warn ? `<div class="banner">${esc(warn)}</div>` : "") + table(cols, [...rows, total], { full: true }).replace("</tbody>", recon + "</tbody>");
 }

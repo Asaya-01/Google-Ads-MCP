@@ -142,9 +142,17 @@ def public_config():
         "google_client_id": settings.env("GOOGLE_OAUTH_CLIENT_ID"),
         "dev_mode": bool(dev_user()),
         "tabs": [
-            {"id": t["id"], "label": t["label"]}
+            {"id": t["id"], "label": t["label"], "report": bool(t.get("report"))}
             for t in settings.enabled_tabs()
         ],
+        "display": settings.config().get("display", {}),
+        "product_map": settings.config().get("product_map", {}).get("products", []),
+        "phase_overrides": settings.config().get("phases", {}).get("overrides", {}),
+        "live_flag": settings.config().get("live", {}).get("flag_spend_without_return", {}),
+        "checkout": {
+            k: settings.config().get("pulse", {}).get(k)
+            for k in ("watch_drop", "problem_drop", "baseline_days", "min_baseline_days")
+        },
     }
 
 

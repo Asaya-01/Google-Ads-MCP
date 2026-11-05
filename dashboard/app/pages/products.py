@@ -90,10 +90,12 @@ def build(ctx: Context) -> dict:
             "na": mrp_na,
         },
         "notes": [
-            "Lines are excluded from units and product tables when the product type is freebie, merch, "
-            "book, gummies or blank. GMV and orders are not affected.",
-            "Revenue = line total sales (sums to GMV). MRP = Shopify compare-at price today, applied to all "
-            "past dates. Landed discount = 1 - revenue / (units x MRP), on units that have an MRP.",
+            "Lines are left out of units, items and product tables when the product type is freebie, merch, "
+            "book, gummies or blank. Total sales and Orders (Shopify's report) are not affected.",
+            "Product revenue = line total sales of the orders placed (valid orders: not test, not cancelled, "
+            "not ASAYASS or ASAYAINF). It does not take off cancellations or returns, so it does not equal "
+            "Total sales. MRP = Shopify compare-at price today, applied to all past dates. Landed discount = "
+            "1 - revenue / (units x MRP), on units that have an MRP.",
             "Bundles (combo) use the bundle's own compare-at price.",
         ],
     }

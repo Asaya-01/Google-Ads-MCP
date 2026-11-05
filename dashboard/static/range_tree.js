@@ -186,10 +186,10 @@ function trCols() {
   const spend = ["Spend", (n) => n0(n.a.spend, "inr")];
   const dsp = ["Δ spend", null, "dspend"];
   const share = ["Share", null, "share"];
-  const val = ["Revenue (platform)", (n) => n0(n.a.value, "inr")];
-  const roas = ["ROAS", null, "roas"];
+  const val = ["Platform revenue", (n) => n0(n.a.value, "inr")];
+  const roas = ["Platform ROAS", null, "roas"];
   const dr = ["Δ ROAS", null, "droas"];
-  const res = ["Purchases", (n) => (n.a.results == null ? null : fmt(Math.round(n.a.results), "int"))];
+  const res = ["Platform purchases", (n) => (n.a.results == null ? null : fmt(Math.round(n.a.results), "int"))];
   const cpa = ["Cost / purchase", (n) => (n.a.results ? fmt(n.a.spend / n.a.results, "inr") : null)];
   const impr = ["Impr.", (n) => (n.a.impr ? fmt(Math.round(n.a.impr), "int") : null)];
   const cpm = ["CPM", (n) => (n.a.impr ? fmt((n.a.spend / n.a.impr) * 1000, "inr") : null)];
@@ -209,6 +209,7 @@ function trCell(n, col, parent, g, total) {
     return n.a.spend != null && base ? `${((n.a.spend / base) * 100).toFixed(1)}%${parent ? "" : ""}` : '<span class="na">–</span>';
   }
   if (special === "roas") {
+    if (n.k === "reddit") return '<span class="sub">No platform attribution</span>';
     const r = trRoas(n.a);
     if (r == null) return n.na ? `<span class="cell-na" title="Data unavailable: ${esc(n.na)}">n/a</span>` : '<span class="na">–</span>';
     const mixed = n.kinds.size > 1 && n.kinds.has("perf");
@@ -217,7 +218,7 @@ function trCell(n, col, parent, g, total) {
   }
   if (special === "droas") {
     const r = trRoas(n.a), pr = n.hasPrev ? trRoas(n.p) : null;
-    return g.pw && r != null && pr ? deltaHtml(r / pr - 1, "roas") : '<span class="flat">–</span>';
+    return g.pw && r != null && pr ? deltaHtml(r / pr - 1, "roas", (n.p.pspend || 0) < METRIC_RULES.min_spend) : '<span class="flat">–</span>';
   }
   const v = f(n);
   if (v == null) return n.na ? `<span class="cell-na" title="Data unavailable: ${esc(n.na)}">n/a</span>` : '<span class="na">–</span>';
@@ -253,16 +254,17 @@ function trHtml(g, opts = {}) {
   // the whole store: Shopify GMV over all spend
   if (RG.mode !== "aw" && opts.totalRow !== false) {
     const w = g.w, pw = g.pw, orv = w.roas, opv = pw ? pw.roas : null;
-    out.push(`<tr class="total"><td class="text">All channels<br><span class="sub">ROAS: Shopify GMV ÷ performance spend${RG.mode === "all" ? " (awareness and Reach left out)" : ""}</span></td>${cols.map(([l]) => {
+    out.push(`<tr class="total"><td class="text">All channels<br><span class="sub">Blended ROAS: Total sales ÷ Performance spend${RG.mode === "all" ? " (awareness and Reach left out)" : ""}</span></td>${cols.map(([l]) => {
       if (l === "Spend") return `<td>${cell(w.all_spend, "inr", w.na.all_spend)}</td>`;
       if (l === "Δ spend") return `<td>${pw && w.all_spend != null && pw.all_spend != null ? deltaHtml(rgAvgChange(w.all_spend, w.days, pw.all_spend, pw.days), "spend") : '<span class="flat">–</span>'}</td>`;
-      if (l === "Revenue (platform)") return `<td>${cell(w.gmv, "inr", w.na.gmv)}<br><span class="sub">Shopify GMV</span></td>`;
-      if (l === "ROAS") return `<td>${cell(orv, "x", rgNa(w, "roas"))}${opv != null ? `<br><span class="sub">vs ${esc(fmt(opv, "x"))}</span>` : ""}</td>`;
+      if (l === "Platform revenue") return `<td>${cell(w.gmv, "inr", w.na.gmv)}<br><span class="sub">Total sales (Shopify)</span></td>`;
+      if (l === "Platform ROAS") return `<td>${cell(orv, "x", rgNa(w, "roas"))}${opv != null ? `<br><span class="sub">vs ${esc(fmt(opv, "x"))}</span>` : ""}</td>`;
       if (l === "Δ ROAS") return `<td>${orv != null && opv ? deltaHtml(orv / opv - 1, "roas") : '<span class="flat">–</span>'}</td>`;
       return "<td></td>";
     }).join("")}</tr>`);
   }
-  const head = `<tr><th class="text" scope="col">${TR.group === "funnel" ? "Channel · stage · product · campaign · ad set · ad" : "Channel · campaign · ad set · ad"}</th>${cols.map((c) => `<th scope="col">${c[0]}</th>`).join("")}</tr>`;
+  const TIP = { "Platform revenue": "platform_revenue", "Platform ROAS": "platform_roas", "Platform purchases": "platform_purchases", "Cost / purchase": "cpp" };
+  const head = `<tr><th class="text" scope="col">${TR.group === "funnel" ? "Channel · stage · product · campaign · ad set · ad" : "Channel · campaign · ad set · ad"}</th>${cols.map((c) => `<th scope="col">${TIP[c[0]] ? mHead(TIP[c[0]], c[0]) : esc(c[0])}</th>`).join("")}</tr>`;
   return `<div class="table-wrap" style="max-height:${opts.maxHeight || "75vh"}"><table class="tree"><thead>${head}</thead><tbody>${out.join("")}</tbody></table></div>
     <p class="legend-note">Click a row to open what is under it. Share is of the row above. Δ compares per-day averages${RG.mode === "aw" ? "" : "; ROAS counts sales campaigns only"}.</p>`;
 }
@@ -320,22 +322,27 @@ function trMatrixHtml() {
   }
   if (!prods.size) return "";
   const stTot = Object.fromEntries(TR_STAGES.map((s) => [s, meta.kids.get("st:" + s)]));
-  const rows = [...prods.entries()].sort((x, y) => (x[1].order - y[1].order) || (y[1].spend - x[1].spend));
+  const all = [...prods.entries()].sort((x, y) => (x[1].order - y[1].order) || (y[1].spend - x[1].spend));
+  const rows = TR.showZero ? all : all.filter(([, e]) => e.spend >= 1);
+  const zero = all.length - all.filter(([, e]) => e.spend >= 1).length;
   const cellOf = (n, key) => {
     if (!n || !n.a.spend) return '<td class="mx-empty">–</td>';
     const r = trRoas(n.a), pr = n.hasPrev ? trRoas(n.p) : null;
-    return `<td><button type="button" class="mx" data-open="${esc(key)}"><b>${esc(fmt(n.a.spend, "inr", true))}</b><span>${r == null ? "–" : esc(fmt(r, "x"))}${pr != null && r != null ? ` ${deltaHtml(r / pr - 1, "roas")}` : ""}</span></button></td>`;
+    const ch = pr && r != null ? deltaHtml(r / pr - 1, "roas", (n.p.pspend || 0) < METRIC_RULES.min_spend) : "";
+    return `<td><button type="button" class="mx" data-open="${esc(key)}"><b>${esc(fmt(n.a.spend, "inr", true))}</b><span>${r == null ? "–" : esc(fmt(r, "x"))}${ch ? ` ${ch}` : ""}</span></button></td>`;
   };
   const head = `<tr><th class="text" scope="col">Product</th>${TR_STAGES.map((s) => `<th scope="col">${s}</th>`).join("")}<th scope="col">All stages</th></tr>`;
   const body = rows.map(([k, e]) => `<tr><td class="text">${esc(e.label)}</td>${TR_STAGES.map((s) => cellOf(e.cells[s], `meta|st:${s}|${k}`)).join("")}<td><b>${esc(fmt(e.spend, "inr", true))}</b></td></tr>`).join("");
   const foot = `<tr class="total"><td class="text">All products</td>${TR_STAGES.map((s) => cellOf(stTot[s], `meta|st:${s}`)).join("")}<td><b>${esc(fmt(TR_STAGES.reduce((t, s) => t + (stTot[s] ? stTot[s].a.spend : 0), 0), "inr", true))}</b></td></tr>`;
   return `<div class="table-wrap"><table class="matrix"><thead>${head}</thead><tbody>${body}${foot}</tbody></table></div>
-    <p class="legend-note">Each cell: spend, then Meta ROAS and its change. Click a cell to open those campaigns, ad sets and ads in the table above.</p>`;
+    ${zero ? `<button type="button" class="more-link" data-mx-zero>${TR.showZero ? "Hide" : "Show"} ${zero} product${zero === 1 ? "" : "s"} with no spend</button>` : ""}
+    <p class="legend-note">Each cell: spend, then Meta Platform ROAS and its change. Click a cell to open those campaigns, ad sets and ads in the tree.</p>`;
 }
 function trMatrixBind(hostId, treeId) {
   const host = document.getElementById(hostId);
   if (!host) return;
   host.addEventListener("click", (ev) => {
+    if (ev.target.closest("[data-mx-zero]")) { TR.showZero = !TR.showZero; host.innerHTML = trMatrixHtml(); return; }
     const b = ev.target.closest("button[data-open]");
     if (!b) return;
     const parts = b.dataset.open.split("|");
@@ -346,61 +353,94 @@ function trMatrixBind(hostId, treeId) {
   });
 }
 
-// ------------------------------------------ Shopify: where the orders came from
-function trChannelHtml(g) {
+// ------------------------------------------ channel reconciliation
+/* One row per channel: what it cost and what its platform claims, beside what
+   Shopify credits it with (last click, orders placed). Channels with orders but
+   no sessions sit in an expandable "Unattributed / other" group. The channel
+   rows plus a collapsed "cancellations, returns and edits" row add up to
+   Shopify's own Orders and Total sales, the headline. */
+const TR_SPEND = {
+  "Meta Ads": { spend: "meta_spend", value: "meta_perf_value", pspend: "meta_perf_spend" },
+  "Google Ads": { spend: "google_spend", value: "google_perf_value", pspend: "google_perf_spend" },
+  "Reddit Ads": { spend: "reddit_spend", value: null },
+  Affiliate: { spend: "affiliate_spend", value: "affiliate_revenue", pspend: "affiliate_spend" },
+  CRM: { spend: "crm_spend", value: "crm_revenue", pspend: "crm_spend" },
+};
+const TR_UNATTRIBUTED = ["Not in GoKwik", "Organic Search"];
+let trRid = 0;
+function trReconHtml(g, opts = {}) {
   const p = state.pages.channel_days;
   if (!p || !p.rows) return `<p class="na">Data unavailable: the channel breakdown has not been built yet.</p>`;
-  const want = RG.mode === "all" ? null : RG.mode === "aw" ? p.kinds.indexOf("awareness") : p.kinds.indexOf("perf");
-  const sum = (days) => {
+  const mode = opts.mode || RG.mode;
+  const want = mode === "all" ? null : mode === "aw" ? p.kinds.indexOf("awareness") : p.kinds.indexOf("perf");
+  const sum = (days, keep) => {
     const set = new Set(days || []), m = new Map();
     for (const r of p.rows) {
-      if (!set.has(r[0]) || (want !== null && r[2] !== want)) continue;
+      if (!set.has(r[0]) || !keep(r[2])) continue;
       const a = m.get(r[1]) || m.set(r[1], [0, 0, 0, 0]).get(r[1]);
       a[0] += r[3]; a[1] += r[4]; a[2] += r[5]; a[3] += r[6];
     }
     return m;
   };
-  const C = sum(g.cur), Pm = g.prev && g.prev.length ? sum(g.prev) : null;
+  const inView = (k) => want === null || k === want;
+  const C = sum(g.cur, inView), P = g.prev && g.prev.length ? sum(g.prev, inView) : null;
+  const w = g.w, pw = g.pw, cd = w.days, pd = pw ? pw.days : 0;
+  const spendOf = (name, win) => { const s = TR_SPEND[name]; return s && win ? win[s.spend] : null; };
+  const roasOf = (name, win) => { const s = TR_SPEND[name]; return s && s.value && win && win[s.pspend] ? win[s.value] / win[s.pspend] : null; };
+  const mk = (label, a, b) => ({
+    label, s: a[0], o: a[2], gmv: a[3], cvr: a[0] && a[2] <= a[0] ? a[2] / a[0] : null,
+    spend: spendOf(label, w), pspend: pw ? spendOf(label, pw) : null,
+    value: mode === "aw" || !TR_SPEND[label] || !TR_SPEND[label].value ? null : w[TR_SPEND[label].value],
+    roas: mode === "aw" ? null : roasOf(label, w), proas: mode === "aw" || !pw ? null : roasOf(label, pw),
+    pgmv: b ? b[3] : null, reddit: label === "Reddit Ads",
+  });
+  let rows = [...new Set([...C.keys(), ...(P ? P.keys() : [])])].map((i) => mk(p.channels[i], C.get(i) || [0, 0, 0, 0], P ? P.get(i) : null))
+    .filter((r) => r.s || r.o || r.spend);
+  // channels with spend but no Shopify rows in view still show (their spend is real)
+  for (const name of Object.keys(TR_SPEND)) if (!rows.some((r) => r.label === name) && spendOf(name, w)) rows.push(mk(name, [0, 0, 0, 0], null));
+  const un = rows.filter((r) => TR_UNATTRIBUTED.includes(r.label));
+  rows = rows.filter((r) => !TR_UNATTRIBUTED.includes(r.label)).sort((x, y) => y.gmv - x.gmv || (y.spend || 0) - (x.spend || 0));
+  const add = (list) => list.reduce((t, r) => ({ s: t.s + (r.s || 0), o: t.o + (r.o || 0), gmv: t.gmv + (r.gmv || 0) }), { s: 0, o: 0, gmv: 0 });
+  const rid = "rc" + ++trRid;
+  const out = [...rows];
+  if (un.length) { const t = add(un); out.push({ label: "Unattributed / other", ...t, cvr: null, _grp: true, kids: un }); }
+  // awareness and Reach visits are their own row in Performance, so the table adds up to the store
+  if (mode === "perf") {
+    const aw = add([...sum(g.cur, (k) => k !== want).values()].map((a) => ({ s: a[0], o: a[2], gmv: a[3] })));
+    if (aw.s || aw.o) out.push({ label: "Awareness and Reach visits", ...aw, cvr: null, spend: null });
+  }
+  const placed = add(out);
+  const full = !opts.compact, hasP = !!pw;
+  const money = (v) => (v == null ? '<span class="na">–</span>' : esc(mFormat("currency", v)));
+  const cols = [
+    { label: "Channel", text: true, render: (r) => esc(r.label) },
+    { label: mHead("channel_spend", "Spend"), render: (r) => money(r.spend) },
+    ...(full && hasP ? [{ label: "Δ spend", render: (r) => (r.spend != null && r.pspend ? deltaHtml(rgAvgChange(r.spend, cd, r.pspend, pd), "spend", r.pspend < METRIC_RULES.min_spend) : '<span class="flat">–</span>') }] : []),
+    ...(full ? [{ label: mHead("platform_revenue"), render: (r) => (r.reddit ? '<span class="sub">No platform attribution</span>' : money(r.value)) }] : []),
+    { label: mHead("platform_roas"), render: (r) => (r.reddit ? '<span class="sub">No platform attribution</span>' : r.blended != null ? `${esc(mFormat("ratio", r.blended))}<br><span class="sub">Blended ROAS</span>` : r.roas == null ? '<span class="na">–</span>' : esc(mFormat("ratio", r.roas)) + (full && r.proas ? ` <span class="sub">${deltaHtml(r.roas / r.proas - 1, "roas", r.pspend < METRIC_RULES.min_spend)}</span>` : "")) },
+    { label: mHead("lc_sessions", "Sessions"), render: (r) => (r.s == null ? '<span class="na">–</span>' : esc(mFormat("count", r.s))) },
+    { label: mHead("lc_orders", "Orders"), render: (r) => esc(mFormat("count", Math.round(r.o)) ?? "–") },
+    { label: mHead("lc_sales", "Sales (last click)"), render: (r) => money(r.gmv) + (full && hasP && r.pgmv ? ` <span class="sub">${deltaHtml(rgAvgChange(r.gmv, cd, r.pgmv, pd), "gmv")}</span>` : "") },
+    { label: mHead("cvr"), render: (r) => (r.cvr == null ? '<span class="na">–</span>' : esc(mFormat("percent", r.cvr))) },
+  ];
+  const tr = (r, cls, extra = "") => `<tr class="${cls}" ${extra}>${cols.map((c) => `<td class="${c.text ? "text" : ""}">${c.render(r)}</td>`).join("")}</tr>`;
+  const body = [];
+  for (const r of out) {
+    if (r._grp) {
+      body.push(tr(r, "grp", `data-grp="${rid}g" tabindex="0" role="button" aria-expanded="false" title="Orders with no matching visit: no GoKwik record, or tagged differently from the visit"`));
+      for (const k of r.kids) body.push(tr(k, "child", `data-parent="${rid}g" hidden`));
+    } else body.push(tr(r, ""));
+  }
+  const ready = mode !== "aw" && w.orders != null && w.gmv != null;
+  body.push(tr({ label: "Channels (orders placed)", ...placed, cvr: placed.s ? placed.o / placed.s : null, spend: w.all_spend }, "total"));
+  if (ready) {
+    body.push(`<tr class="recon-toggle" data-recon="${rid}" tabindex="0" role="button" aria-expanded="false"><td class="text" colspan="${cols.length}">▸ Reconcile to Shopify: cancellations, returns and edits</td></tr>`);
+    body.push(tr({ label: "Cancellations, returns and edits", s: null, o: w.orders - placed.o, gmv: w.gmv - placed.gmv, cvr: null }, "recon", `data-rid="${rid}" hidden`));
+    body.push(tr({ label: "Total · Shopify's report (the headline)", s: placed.s, o: w.orders, gmv: w.gmv, cvr: placed.s ? w.orders / placed.s : null, spend: w.perf_all_spend, blended: w.roas }, "total recon", `data-rid="${rid}" hidden`));
+  }
+  const head = `<tr>${cols.map((c) => `<th class="${c.text ? "text" : ""}" scope="col">${c.label}</th>`).join("")}</tr>`;
   const sDays = new Set(p.session_days), oDays = new Set(p.order_days);
   const missS = (g.cur || []).filter((d) => !sDays.has(d)), missO = (g.cur || []).filter((d) => !oDays.has(d));
-  const totG = [...C.values()].reduce((t, a) => t + a[3], 0), totS = [...C.values()].reduce((t, a) => t + a[0], 0);
-  const cd = g.w.days, pd = g.pw ? g.pw.days : 0;
-  const rows = [...C.entries()].map(([i, a]) => {
-    const b = Pm ? Pm.get(i) : null;
-    return { label: p.channels[i], s: a[0], atc: a[1], o: a[2], gmv: a[3], share: totG ? a[3] / totG : null, cvr: a[0] && a[2] <= a[0] ? a[2] / a[0] : null, // more orders than visits: the two are tagged differently, so no rate
-
-      dS: b ? rgAvgChange(a[0], cd, b[0], pd) : null, dG: b ? rgAvgChange(a[3], cd, b[3], pd) : null, pcvr: b && b[0] && b[2] <= b[0] ? b[2] / b[0] : null };
-  }).filter((r) => r.s || r.o).sort((x, y) => y.gmv - x.gmv || y.s - x.s);
-  const pc = (v) => (v == null ? '<span class="na">–</span>' : esc(fmt(v, "pct")));
-  const cols = [
-    { label: "Channel (UTM, last click)", text: true, render: (r) => esc(r.label) },
-    { label: "Sessions", render: (r) => (r.s == null ? '<span class="flat">–</span>' : esc(fmt(r.s, "int"))) }, { label: "Δ sessions", render: (r) => (g.pw && r.dS !== undefined ? deltaHtml(r.dS, "sessions") : '<span class="flat">–</span>') },
-    { label: "Orders", render: (r) => esc(fmt(Math.round(r.o), "int")) },
-    { label: "GMV", render: (r) => esc(fmt(r.gmv, "inr")) }, { label: "Δ GMV", render: (r) => (g.pw && r.dG !== undefined ? deltaHtml(r.dG, "gmv") : '<span class="flat">–</span>') },
-    { label: "Share of GMV", render: (r) => pc(r.share) },
-    { label: "Conversion", render: (r) => pc(r.cvr) + (r.pcvr != null ? `<br><span class="sub">vs ${esc(fmt(r.pcvr, "pct"))}</span>` : "") },
-  ];
-  const tot = { label: "All channels", s: totS, o: [...C.values()].reduce((t, a) => t + a[2], 0), gmv: totG, share: totG ? 1 : null, _class: "total" };
-  /* Reconcile to the headline (Shopify's own Orders and Total sales, as on
-     D-1): the channels count orders as placed; Shopify's report also counts
-     cancelled orders and nets off returns. In the Performance view the
-     awareness and Reach visits are a row of their own, so the table adds up
-     to the whole store like every other tab. */
-  const extra = [];
-  if (RG.mode !== "aw" && g.w && g.w.orders != null && g.w.gmv != null) {
-    if (RG.mode === "perf") {
-      let o = 0, gm = 0, s = 0;
-      const set = new Set(g.cur || []);
-      for (const r of p.rows) if (set.has(r[0]) && r[2] !== want) { s += r[3]; o += r[5]; gm += r[6]; }
-      if (o || gm || s) extra.push({ label: "Awareness and Reach visits", s, o, gmv: gm, share: null, cvr: null });
-    }
-    const placedO = tot.o + extra.reduce((t, r) => t + r.o, 0), placedG = tot.gmv + extra.reduce((t, r) => t + r.gmv, 0);
-    extra.push({ label: "Cancelled orders and returns (Shopify's report)", s: null, o: g.w.orders - placedO, gmv: g.w.gmv - placedG, share: null, cvr: null, _adj: true });
-    tot.label = "Total (Shopify's report, as on D-1)"; tot.o = g.w.orders; tot.gmv = g.w.gmv;
-    tot.s = totS + extra.reduce((t, r) => t + (r.s || 0), 0);
-  }
-  tot.cvr = tot.s ? tot.o / tot.s : null;
   const note = [missS.length ? `Sessions are missing for ${rgListDays(missS)}.` : "", missO.length ? `Orders by channel are missing for ${rgListDays(missO)}.` : ""].filter(Boolean).join(" ");
-  return (note ? `<div class="banner">Data unavailable: ${esc(note)}</div>` : "") + table(cols, [...rows, ...extra, tot], { maxHeight: "60vh" }) +
-    `<p class="legend-note">Orders and GMV as Shopify credits them, by the UTM of the visit that converted, so organic and direct are here too. This will not match what Meta and Google report for themselves (the next table).</p>`;
+  return (note ? `<div class="banner">Data unavailable: ${esc(note)}</div>` : "") + `<div class="table-wrap" ${opts.maxHeight ? `style="max-height:${opts.maxHeight}"` : ""}><table><thead>${head}</thead><tbody>${body.join("")}</tbody></table></div>`;
 }

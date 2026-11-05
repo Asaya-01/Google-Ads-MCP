@@ -12,7 +12,7 @@ const ASK_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true
 const ASK_SUGG = {
   d1: ["Summarise yesterday for the founder in five bullets", "Why did conversion move against the comparison?", "Which channel lost the most sessions, and which campaigns drove it?"],
   overview: ["How are these dates tracking against the comparison?", "What is driving the change in GMV: traffic, conversion or AOV?", "How much did we spend for every rupee of revenue?"],
-  daily: ["Which day in this range was the best, and why?", "Show orders and CVR day by day for the last 7 days", "Which days had data missing?"],
+  funnel: ["Which day in this range was the best, and why?", "Show orders and CVR day by day for the last 7 days", "Which days had data missing?"],
   marketing: ["Which Meta campaigns had the best ROAS on these dates?", "Split Meta spend by funnel stage and product", "How did Google Non-brand PMax do by product?"],
   products: ["Which products grew the most against the comparison?", "How did the basket mix (1, 2, 3+ items) change?", "Top 10 products by revenue on these dates"],
   live: ["How is today tracking against a typical day?", "Is today's spend on pace with yesterday?", "What is today's conversion rate so far?"],
@@ -22,7 +22,7 @@ const ASK_SUGG = {
 
 function askContext() {
   const tab = (state.config && state.config.tabs || []).find((t) => t.id === state.tab);
-  const ctx = { tab: state.tab, tab_label: tab ? tab.label : state.tab, view: RG.mode };
+  const ctx = { tab: state.tab, tab_label: tab ? tab.label : state.tab, view: state.tab === "marketing" || state.tab === "live" ? RG.scope : "perf" };
   try {
     if (RG.eng && RG.from && RG.to) {
       Object.assign(ctx, { from: RG.from, to: RG.to, range_label: rgRangeLabel(), compare: RG.cmp.mode, latest_day: RG.eng.last });
@@ -119,6 +119,7 @@ function askToggle(open) {
   ASK.open = open == null ? !ASK.open : open;
   ASK.el.hidden = !ASK.open;
   ASK.fab.setAttribute("aria-expanded", String(ASK.open));
+  document.body.classList.toggle("ask-open", ASK.open); // wide screens make room for the panel
   if (ASK.open) { askRender(); ASK.el.querySelector("textarea").focus(); } else ASK.fab.focus();
 }
 
@@ -345,7 +346,9 @@ function askMount() {
     <div class="ask-log" aria-live="polite"></div>
     <div class="ask-foot"><form class="ask-form"><textarea rows="1" placeholder="Ask about any number on the dashboard…" aria-label="Your question" maxlength="2000"></textarea><button type="button" class="ask-mic" aria-pressed="false">${ASK_MIC_ICON}</button><button type="submit" class="ask-send">Ask</button></form>
       <p class="ask-note">Uses the tab, dates and view you're on. Enter to send, or click the mic to talk.</p></div>`;
-  document.body.append(fab, el);
+  // docked in the header (never over the page's tables); the panel opens as a side panel
+  const slot = document.getElementById("ask-slot");
+  if (slot) { fab.classList.add("docked"); slot.append(fab); document.body.append(el); } else document.body.append(fab, el);
   ASK.el = el; ASK.fab = fab;
   fab.addEventListener("click", () => askToggle(true));
   const ta = el.querySelector("textarea");

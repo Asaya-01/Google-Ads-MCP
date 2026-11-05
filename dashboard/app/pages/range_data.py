@@ -144,6 +144,12 @@ def products(ctx: Context) -> dict:
     types: list[str] = []
     type_index: dict[str, int] = {}
     type_rows: dict[tuple, list] = {}
+    # variants (shade, scent, size) under each product, by SKU: the Products
+    # tab expands a product into these; their sums are the product's row
+    titles = (catalog or {}).get("variant_titles") or {}
+    variants: list[dict] = []
+    vindex: dict[tuple, int] = {}
+    vagg: dict[tuple, list] = {}
     for r in ctx.data.get("products") or []:
         t = r["product_type"] or ""
         if t not in type_index:
@@ -168,6 +174,17 @@ def products(ctx: Context) -> dict:
         a = agg.setdefault((r["date"], index[pid]), [0, 0.0, 0.0, 0, 0.0])
         a[0] += r["units"]
         a[1] += r["revenue"]
+        sku = (r.get("sku") or "").strip()
+        vk = (index[pid], sku)
+        if vk not in vindex:
+            vt = titles.get(sku, "")
+            vindex[vk] = len(variants)
+            variants.append(
+                {"p": index[pid], "sku": sku, "label": "" if vt == "Default Title" else vt}
+            )
+        v = vagg.setdefault((r["date"], vindex[vk]), [0, 0.0])
+        v[0] += r["units"]
+        v[1] += r["revenue"]
         mrp = _mrp(r, catalog)
         if mrp:
             a[2] += mrp * r["units"]
@@ -188,6 +205,9 @@ def products(ctx: Context) -> dict:
         "rows": rows,
         "types": types,
         "type_rows": trows,
+        "variants": variants,
+        # [date, variant, units, revenue]
+        "vrows": [[d, vi, v[0], round(v[1], 2)] for (d, vi), v in sorted(vagg.items())],
         "mrp_available": bool(catalog),
     }
 

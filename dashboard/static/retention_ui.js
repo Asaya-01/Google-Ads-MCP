@@ -120,11 +120,12 @@ function rFunnel(r) {
 // ---------------------------------------------------------------- shell and controls
 function retShell(p) {
   RET.meta = p || {};
-  $main.innerHTML = `
+  (document.getElementById("ret-host") || $main).innerHTML = `
     <section class="card ret-controls">
-      <div class="section-head"><h2>Who to follow</h2><span class="sub" id="r-built"></span></div>
-      <div class="ret-row"><div class="ret-lab">Customers acquired in</div><div class="seg" id="r-presets"></div></div>
-      <div class="ret-dates">
+      <div class="section-head"><h2>Cohorts: who to follow</h2><span class="sub" id="r-built"></span></div>
+      <div class="ret-row"><div class="ret-lab">Customers acquired in the dates picked at the top</div><button type="button" class="rg-btn" id="r-12m">Use the last 12 months</button></div>
+      <div class="ret-row" hidden><div class="ret-lab">Customers acquired in</div><div class="seg" id="r-presets"></div></div>
+      <div class="ret-dates" hidden>
         <label>From <input type="date" id="r-from"></label>
         <label>To <input type="date" id="r-to"></label>
         <div class="ret-slider"><div class="rail"><div class="railfill" id="r-fill"></div></div>
@@ -611,12 +612,31 @@ function retMethod() {
     ${rTable([{ t: "Product title" }, { t: "Revenue (Rs)", n: 1 }], oth, { empty: "Nothing is sitting in the Other bucket." })}`;
 }
 
+/* Retention: "Are customers coming back?" New vs repeat orders for the
+   picked dates, then the cohort explorer, whose acquisition window is the
+   same picked dates (one time frame per screen). */
 R.retention = async (p) => {
-  $main.innerHTML = '<section class="card"><p class="empty" id="r-load">Loading the customer history. It is a few MB and only loads once.</p></section>';
-  if (!RET.eng) {
-    try { RET.census = await retLoadCensus(); retInit(); }
-    catch (err) { $main.innerHTML = `<section class="card"><div class="section-head"><h2>Retention</h2></div><p class="na">Data unavailable: ${esc(err.message)}</p></section>`; return; }
-  }
-  retShell(p);
-  retSync(true);
+  RG.tab = "retention";
+  $main.innerHTML = `<div id="rg-body"><p class="empty">Loading…</p></div><div id="ret-host"><section class="card"><p class="empty" id="r-load">Loading the customer history. It is a few MB and only loads once.</p></section></div>`;
+  rgShell(async () => {
+    setSub(rgBar()); rgBind();
+    const c = RG.eng.compare(RG.from, RG.to, RG.cmp), g = rgPick(c);
+    document.getElementById("rg-body").innerHTML = g
+      ? rgSec("New vs repeat orders", "orders by customers ordering for the first time and by those who ordered before", `<div class="kpis">${["new_orders", "repeat_orders", "new_share"].map((id) => rgKpi(id, g)).join("")}</div>`, { comp: "new-vs-repeat" })
+      : rgNone();
+    if (!RET.eng) {
+      try { RET.census = await retLoadCensus(); retInit(); }
+      catch (err) { const h = document.getElementById("ret-host"); if (h) h.innerHTML = `<section class="card"><div class="section-head"><h2>Cohorts</h2></div><p class="na">Data unavailable: ${esc(err.message)}</p></section>`; return; }
+    }
+    if (state.tab !== "retention") return;
+    const e = RET.eng, clamp = (d) => Math.max(0, Math.min(e.NDAYS, d));
+    RET.A = clamp(e.dateToDay(RG.from)); RET.B = clamp(e.dateToDay(RG.to));
+    if (RET.B - RET.A < 6) RET.A = Math.max(0, RET.B - 6);
+    retShell(p);
+    $r("r-12m").addEventListener("click", () => {
+      RG.to = RG.eng.last; RG.from = RG.eng.addDays(RG.to, -364); RG.preset = "custom";
+      rgChanged();
+    });
+    retSync(true);
+  });
 };

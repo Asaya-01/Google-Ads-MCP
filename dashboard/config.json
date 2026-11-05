@@ -9,16 +9,516 @@
     "dataset": "asaya-data-room-487110.Maplemonk"
   },
 
+  "display": {
+    "_about": "How changes are shown everywhere: under flat_below (a share, 0.02 = 2%) a change is grey; a comparison with fewer than min_orders orders, or under min_spend rupees of spend, shows n/m instead of a percentage.",
+    "flat_below": 0.02,
+    "min_orders": 20,
+    "min_spend": 5000
+  },
+
+  "product_map": {
+    "_about": "Every Shopify product (keyed on its product ID: titles change) under one house code and short name, used on every tab: rows read 'CODE · Short name'. Packs, sizes and old listings of one product sit under it as variants (the value is the variant's name; empty = the main listing). Freebie, merch, book and gummies products are never counted, so they are not here. A product sold but missing here shows as 'Unmapped' and raises a warning in Data health.",
+    "products": [
+      {
+        "code": "UAS",
+        "name": "Even Tone Underarm Mist",
+        "ids": {
+          "9813999190329": "",
+          "15415543267641": "",
+          "10136775033145": "50 ml",
+          "10077278110009": "Pack of 2"
+        }
+      },
+      {
+        "code": "ITB",
+        "name": "Fade Forward Inner Thigh & Bum Roll-On",
+        "ids": {
+          "10107079721273": ""
+        }
+      },
+      {
+        "code": "ASS",
+        "name": "Advanced Spot Targeting Serum",
+        "ids": {
+          "9512852291897": "",
+          "10077272932665": "Pack of 2",
+          "9667178430777": "Challenge"
+        }
+      },
+      {
+        "code": "HOT",
+        "name": "Hint of Tint SPF 50",
+        "ids": {
+          "9834489119033": ""
+        }
+      },
+      {
+        "code": "EEC",
+        "name": "Even Evermore Crème",
+        "ids": {
+          "9648174924089": "",
+          "10057407004985": "All skin types",
+          "10077290856761": "Pack of 2"
+        }
+      },
+      {
+        "code": "KNE",
+        "name": "Tone Restore Knee-Neck-Elbow Cream",
+        "ids": {
+          "9747086246201": "",
+          "10167116824889": "Pack of 2"
+        }
+      },
+      {
+        "code": "SLSS",
+        "name": "Spot Light Sunscreen SPF 50",
+        "ids": {
+          "9729707671865": "",
+          "9786772062521": "",
+          "9951773950265": "",
+          "10167117021497": "Pack of 2",
+          "9861747573049": "Hathway"
+        }
+      },
+      {
+        "code": "Spot Gel",
+        "name": "Advanced Spot Targeting Gel",
+        "ids": {
+          "9901651788089": ""
+        }
+      },
+      {
+        "code": "Peel",
+        "name": "Super Fade Regenerative Peel",
+        "ids": {
+          "10215663042873": ""
+        }
+      },
+      {
+        "code": "GFS",
+        "name": "Glow Forward Radiance Serum",
+        "ids": {
+          "10343582073145": ""
+        }
+      },
+      {
+        "code": "Scrub",
+        "name": "Fresh Start Smoothening Scrub",
+        "ids": {
+          "10175902941497": ""
+        }
+      },
+      {
+        "code": "RRN",
+        "name": "Rise Renewed Night Cream",
+        "ids": {
+          "10318340194617": ""
+        }
+      },
+      {
+        "code": "NIA",
+        "name": "10% Niacinamide & 1% Alpha Arbutin Serum",
+        "ids": {
+          "9512848752953": ""
+        }
+      },
+      {
+        "code": "VC10",
+        "name": "10% Vitamin C & 5% Niacinamide Serum",
+        "ids": {
+          "9512849965369": ""
+        }
+      },
+      {
+        "code": "VC15",
+        "name": "15% Vitamin C + E Serum",
+        "ids": {
+          "9512849277241": ""
+        }
+      },
+      {
+        "code": "KOJ",
+        "name": "2% Kojic Acid & 1% Alpha Arbutin Serum",
+        "ids": {
+          "9592849269049": "",
+          "10167117119801": "Pack of 2"
+        }
+      },
+      {
+        "code": "SAL",
+        "name": "2% Salicylic Acid & 5% Niacinamide Serum",
+        "ids": {
+          "9512846131513": "",
+          "9865688351033": "ONDC"
+        }
+      },
+      {
+        "code": "MPC",
+        "name": "5% Multi Peptide Complex Serum",
+        "ids": {
+          "9512848326969": "",
+          "9847792107833": "Mini Glow"
+        }
+      },
+      {
+        "code": "ALM",
+        "name": "Air-Light Sunscreen Mist",
+        "ids": {
+          "9893263147321": "",
+          "10077264347449": "Pack of 2"
+        }
+      },
+      {
+        "code": "ADS",
+        "name": "Aqua Dew Sunscreen",
+        "ids": {
+          "9316486119737": ""
+        }
+      },
+      {
+        "code": "BLB",
+        "name": "BOBA Lip Balm",
+        "ids": {
+          "10024215937337": ""
+        }
+      },
+      {
+        "code": "DTC",
+        "name": "D-Tan Face Cleanser",
+        "ids": {
+          "9391623209273": "",
+          "9919006736697": "Offer price",
+          "9851573666105": "Offer price",
+          "9680836690233": "Offer price"
+        }
+      },
+      {
+        "code": "DCS",
+        "name": "Daily Clear Salicylic Face Cleanser",
+        "ids": {
+          "9939315425593": ""
+        }
+      },
+      {
+        "code": "ETC",
+        "name": "Even Tone Face Cleanser",
+        "ids": {
+          "9661385572665": "",
+          "10336055198009": ""
+        }
+      },
+      {
+        "code": "GLC",
+        "name": "Glow & Lift Crème",
+        "ids": {
+          "9649009787193": "",
+          "10057407136057": "All skin types"
+        }
+      },
+      {
+        "code": "GIO",
+        "name": "Glow-in-One Sunscreen",
+        "ids": {
+          "9316655726905": ""
+        }
+      },
+      {
+        "code": "IMG",
+        "name": "Intense Moisture Gel",
+        "ids": {
+          "9027977937209": "",
+          "8678983106873": "",
+          "9579883626809": "Set of 2"
+        }
+      },
+      {
+        "code": "LHC",
+        "name": "Lush Hand Cream",
+        "ids": {
+          "9026104688953": ""
+        }
+      },
+      {
+        "code": "MSG",
+        "name": "Matte Sheerscreen Gel",
+        "ids": {
+          "9061501632825": ""
+        }
+      },
+      {
+        "code": "MCC",
+        "name": "Moisture Cocoon Crème",
+        "ids": {
+          "9061496291641": "",
+          "8963578724665": "",
+          "10057407562041": "For dry skin"
+        }
+      },
+      {
+        "code": "MSC",
+        "name": "Moisture Splash Face Cleanser",
+        "ids": {
+          "9711698673977": ""
+        }
+      },
+      {
+        "code": "MRA",
+        "name": "MultiRepair Age Serum",
+        "ids": {
+          "9042493440313": ""
+        }
+      },
+      {
+        "code": "NLG",
+        "name": "New Light Gel Face Moisturiser",
+        "ids": {
+          "10175899042105": ""
+        }
+      },
+      {
+        "code": "OFB",
+        "name": "Oil-Free Barrier+ Crème",
+        "ids": {
+          "10057406808377": "",
+          "9648210772281": ""
+        }
+      },
+      {
+        "code": "ORC",
+        "name": "Overnight Revive Crème",
+        "ids": {
+          "9624410980665": ""
+        }
+      },
+      {
+        "code": "PBS",
+        "name": "Pigment Balance Serum",
+        "ids": {
+          "9640682979641": ""
+        }
+      },
+      {
+        "code": "REP",
+        "name": "Radiance Exfoliating Powder",
+        "ids": {
+          "9661385900345": ""
+        }
+      },
+      {
+        "code": "RAD",
+        "name": "Radiance Serum",
+        "ids": {
+          "9616986800441": ""
+        }
+      },
+      {
+        "code": "SMS",
+        "name": "Sheer Milk Sunscreen",
+        "ids": {
+          "9765078958393": ""
+        }
+      },
+      {
+        "code": "SSM",
+        "name": "Sheerscreen Mist",
+        "ids": {
+          "8963497918777": "",
+          "9846931718457": "",
+          "9579794170169": "Set of 2"
+        }
+      },
+      {
+        "code": "SDM",
+        "name": "Sun Drip Mineral Sunscreen",
+        "ids": {
+          "10115037397305": ""
+        }
+      },
+      {
+        "code": "TPC",
+        "name": "Time Perfect Crème",
+        "ids": {
+          "9624409342265": ""
+        }
+      },
+      {
+        "code": "TFDUO",
+        "name": "Target & Fade Duo",
+        "ids": {
+          "10163957203257": ""
+        }
+      },
+      {
+        "code": "ESDUO",
+        "name": "Even Skin Duo",
+        "ids": {
+          "10163956744505": ""
+        }
+      },
+      {
+        "code": "TRIO",
+        "name": "Even-tone Body Trio",
+        "ids": {
+          "10311149912377": ""
+        }
+      },
+      {
+        "code": "H2T",
+        "name": "Head to Toe Anti Pigmentation Set",
+        "ids": {
+          "10022529630521": "Care Set",
+          "9996129403193": "",
+          "10026525491513": "For Even Tone"
+        }
+      },
+      {
+        "code": "FFD",
+        "name": "Fade & Fresh Duo",
+        "ids": {
+          "9972206567737": ""
+        }
+      },
+      {
+        "code": "GED",
+        "name": "Get Even Duo",
+        "ids": {
+          "10290423759161": ""
+        }
+      },
+      {
+        "code": "SFD",
+        "name": "Spot Fade Duo",
+        "ids": {
+          "10173716824377": ""
+        }
+      },
+      {
+        "code": "TPD",
+        "name": "Tone & Protect Duo",
+        "ids": {
+          "9895064404281": ""
+        }
+      },
+      {
+        "code": "3SS",
+        "name": "3-Step Spot Diminishing Set",
+        "ids": {
+          "9687451566393": ""
+        }
+      },
+      {
+        "code": "APS",
+        "name": "Anti-Pigmentation Set",
+        "ids": {
+          "9996122751289": "",
+          "10022533071161": "With pouch",
+          "9976342708537": "Advanced",
+          "10076552266041": "4-Step Advanced"
+        }
+      },
+      {
+        "code": "ETRS",
+        "name": "Even Tone Restore Set",
+        "ids": {
+          "9829282775353": "",
+          "10104722096441": ""
+        }
+      },
+      {
+        "code": "RDS",
+        "name": "Rapid Dark Spot Correction Set",
+        "ids": {
+          "10085619269945": "",
+          "10104721932601": "Acne & Dark Spot"
+        }
+      },
+      {
+        "code": "TFK",
+        "name": "Travel Kit",
+        "ids": {
+          "10102656794937": "Travel Friendly Kit",
+          "10070165913913": "4 minis + pouch",
+          "10076551479609": "Travel Ready Kit"
+        }
+      },
+      {
+        "code": "BDE",
+        "name": "Better Daily Essentials",
+        "ids": {
+          "10133045444921": ""
+        }
+      },
+      {
+        "code": "CGT",
+        "name": "Correct & Glow Trio",
+        "ids": {
+          "10321401807161": ""
+        }
+      },
+      {
+        "code": "FFT",
+        "name": "Fresh Face Trio",
+        "ids": {
+          "10333026844985": ""
+        }
+      },
+      {
+        "code": "GGT",
+        "name": "The Glow-Getter Trio",
+        "ids": {
+          "10333026582841": ""
+        }
+      },
+      {
+        "code": "SETS",
+        "name": "Other sets and gift boxes",
+        "ids": {
+          "9687452483897": "",
+          "9687449338169": "",
+          "10076553052473": "",
+          "9847044112697": "",
+          "9141823603001": "",
+          "9996128321849": "",
+          "9674391322937": "",
+          "9996119834937": "",
+          "9768850817337": "",
+          "10102657417529": "",
+          "10068719927609": "",
+          "10163958546745": "",
+          "9087898059065": "",
+          "9765906121017": "",
+          "9068496748857": "",
+          "9141825536313": "",
+          "9358150402361": "",
+          "10194362007865": "",
+          "10102651355449": "",
+          "9146243318073": "",
+          "9146286342457": "",
+          "9764911186233": "",
+          "9937422811449": "",
+          "9571433939257": "",
+          "9107363430713": "",
+          "9976492785977": "",
+          "9107397673273": "",
+          "10111161565497": "",
+          "10111153373497": "",
+          "9088082477369": "",
+          "9107402719545": ""
+        }
+      }
+    ]
+  },
+
   "tabs": [
-    {"id": "overview",  "label": "Overview",  "phase": 1, "enabled": true},
     {"id": "live",      "label": "Today",     "phase": 1, "enabled": true},
-    {"id": "daily",     "label": "Daily",     "phase": 1, "enabled": true},
+    {"id": "overview",  "label": "Overview",  "phase": 1, "enabled": true},
+    {"id": "funnel",    "label": "Funnel",    "phase": 1, "enabled": true},
     {"id": "marketing", "label": "Marketing", "phase": 1, "enabled": true},
     {"id": "products",  "label": "Products",  "phase": 1, "enabled": true},
-    {"id": "region",    "label": "Region",    "phase": 1, "enabled": true},
-    {"id": "d1",        "label": "D-1",       "phase": 1, "enabled": true},
     {"id": "retention", "label": "Retention", "phase": 1, "enabled": true},
+    {"id": "region",    "label": "Region",    "phase": 1, "enabled": true},
     {"id": "health",    "label": "Data health", "phase": 1, "enabled": true},
+    {"id": "d1",        "label": "D-1 Report", "phase": 1, "enabled": true, "report": true},
     {"id": "traffic",   "label": "Traffic",   "phase": 2, "enabled": false},
     {"id": "webapp",    "label": "Web & App", "phase": 2, "enabled": false},
     {"id": "calendar",  "label": "Calendar",  "phase": 2, "enabled": false},
@@ -45,6 +545,7 @@
   },
 
   "live": {
+    "flag_spend_without_return": {"_about": "Today's campaign tables flag a campaign with at least min_spend rupees spent and no platform value yet, once it is after_hour (IST). Platforms attribute late: a watch flag, not a verdict.", "min_spend": 3000, "after_hour": 14},
     "typical_weeks": 8,
     "typical_days": 4,
     "min_typical_days": 2,

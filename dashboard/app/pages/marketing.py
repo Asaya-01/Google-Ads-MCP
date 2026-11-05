@@ -80,10 +80,11 @@ def build(ctx: Context) -> dict:
         "notes": [
             _google_source_note(ctx),
             "Meta is pulled from the Marketing API for Asaya Sales (act_666565859450360) and Asaya Top Funnel "
-            "(act_1040064540569018) only. Google comes from GOOGLEADS_CONSOLIDATED.",
-            "ROAS = GMV / performance spend on every channel (Meta, Google and Reddit sales campaigns, CRM, affiliates); awareness and Reach spend are never in it. A campaign's ROAS is what its platform reports. "
-            "Platform ROAS is each platform's own attributed purchase value / its spend, on sales campaigns only: "
-            "Awareness campaigns are left out of both the value and the spend.",
+            "(act_1040064540569018) only.",
+            "Blended ROAS = Total sales / Performance spend on every channel (Meta, Google and Reddit sales "
+            "campaigns, CRM, affiliates); awareness and Reach spend are never in it. Platform ROAS is each "
+            "platform's own attributed purchase value / its spend, on sales campaigns only. Platforms "
+            "over-attribute, so their revenue adds up to more than Shopify's Total sales.",
         ],
         "zero_spend_days": [
             {"date": d, "reason": why}

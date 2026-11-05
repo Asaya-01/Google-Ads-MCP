@@ -236,7 +236,7 @@ tr.live-subrow td { font-size: 13px; }
 .sc-hero .value { color: var(--accent); }
 
 /* The date bar: a slim strip pinned under the tab bar */
-#rg-slot { position: sticky; top: calc(var(--bar-h, 58px) + env(safe-area-inset-top, 0px) + 8px); z-index: 6; margin: 0; }
+#rg-slot { margin: 0; }
 /* the tab body: cards stacked with the same gap as the page */
 #rg-body { display: grid; gap: 16px; min-width: 0; }
 #rg-body > * { min-width: 0; margin-block: 0; }

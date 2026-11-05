@@ -149,16 +149,21 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
 /*__RETENTION_CSS__*/
 /*__RANGE_CSS__*/
 /*__ASK_CSS__*/
+/*__UI_CSS__*/
 </style>
 <script>try { if (localStorage.getItem("asaya-theme") === "dark") document.documentElement.setAttribute("data-theme", "dark"); } catch (e) { /* storage blocked: stay light */ }</script>
 
-<header class="bar">
+<header class="bar" id="bar">
   <div class="bar-inner">
     <div class="brand"><h1>asaya</h1><span>D2C</span></div>
     <nav class="tabs" id="tabs" aria-label="Dashboard tabs"></nav>
-    <div class="meta-line" id="meta-line"></div>
-    <button type="button" class="theme-toggle" id="theme-toggle" aria-pressed="false"></button>
+    <div class="bar-right">
+      <span id="status-pill"></span>
+      <span id="ask-slot"></span>
+      <button type="button" class="theme-toggle" id="theme-toggle" aria-pressed="false"></button>
+    </div>
   </div>
+  <div class="bar-sub" id="bar-sub" hidden><div class="bar-sub-inner" id="rg-slot"></div></div>
 </header>
 <main id="main"><p class="empty">Loading the dashboard…</p></main>
 
@@ -219,37 +224,31 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
   new MutationObserver(queueFit).observe($main, { childList: true, subtree: true });
   window.addEventListener("resize", queueFit);
   $main.addEventListener("toggle", queueFit, true);
+  /* expandable rows in any table: a group's children, and the collapsed
+     "Reconcile to Shopify" rows */
+  const rowToggle = (row) => {
+    const grp = row.dataset.grp, rid = row.dataset.recon;
+    const open = row.getAttribute("aria-expanded") !== "true";
+    row.setAttribute("aria-expanded", String(open)); row.classList.toggle("open", open);
+    if (grp) row.closest("tbody").querySelectorAll(`tr[data-parent="${grp}"]`).forEach((r) => { r.hidden = !open; });
+    if (rid) { row.closest("tbody").querySelectorAll(`tr[data-rid="${rid}"]`).forEach((r) => { r.hidden = !open; }); row.firstElementChild.textContent = (open ? "▾" : "▸") + row.firstElementChild.textContent.slice(1); }
+  };
+  $main.addEventListener("click", (ev) => { const r = ev.target.closest("tr[data-grp], tr[data-recon]"); if (r) rowToggle(r); });
+  $main.addEventListener("keydown", (ev) => { if ((ev.key === "Enter" || ev.key === " ") && ev.target.matches("tr[data-grp], tr[data-recon]")) { ev.preventDefault(); rowToggle(ev.target); } });
 
   // ------------------------------------------------------------ formatting
   const inGroup = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  function inrCompact(v) {
-    const a = Math.abs(v);
-    if (a >= 1e7) return "Rs " + (v / 1e7).toFixed(2) + " Cr";
-    if (a >= 1e5) return "Rs " + (v / 1e5).toFixed(2) + " L";
-    return "Rs " + inGroup.format(v);
-  }
+  // one formatter and one delta colour rule, from the metric registry (metrics.js)
+  const inrCompact = (v) => mCompactInr(v);
+  const FMT_OF = { inr: "currency", inr2: "currency2", int: "count", num: "count", pct: "percent", x: "ratio", pp: "pp" };
   function fmt(v, unit, compact) {
     if (v === null || v === undefined || Number.isNaN(v)) return null;
-    switch (unit) {
-      case "inr": return compact ? inrCompact(v) : "Rs " + inGroup.format(v);
-      case "inr2": return "Rs " + v.toFixed(2);
-      case "int": return inGroup.format(v);
-      case "num": return inGroup.format(Math.round(v));
-      case "pct": return (v * 100).toFixed(2) + "%";
-      case "x": return v.toFixed(2) + "x";
-      default: return String(v);
-    }
+    return FMT_OF[unit] ? mFormat(FMT_OF[unit], v, compact) : String(v);
   }
-  const NEUTRAL_DELTA = new Set(["cps", "spend", "meta_spend", "google_spend", "perf_spend", "sessions", "awareness_sessions", "reddit_spend", "crm_aff_spend", "total_spend", "perf_sessions"]);
-  function deltaHtml(d, key) {
-    if (d === null || d === undefined) return '<span class="flat">–</span>';
-    if (Math.abs(d) < 0.00005) d = 0;
-    const pct = (d >= 0 ? "+" : "") + (d * 100).toFixed(2) + "%";
-    const arrow = d > 0 ? "▲" : d < 0 ? "▼" : "";
-    const cls = NEUTRAL_DELTA.has(key) || d === 0 ? "flat" : d > 0 ? "up" : "down";
-    return `<span class="${cls}">${arrow} ${pct}</span>`;
-  }
+  const NEUTRAL_DELTA = new Set(["spend", "meta_spend", "google_spend", "perf_spend", "sessions", "awareness_sessions", "reddit_spend", "crm_aff_spend", "total_spend", "perf_sessions", "all_spend", "affiliate_spend", "crm_spend", "units"]);
+  const deltaDir = (key) => (METRICS[key] ? METRICS[key].dir : NEUTRAL_DELTA.has(key) || /spend$/.test(key || "") ? "neutral" : /^(cps|cpp|cpm|cpc|cost|landed)/.test(key || "") ? "lower" : "higher");
+  function deltaHtml(d, key, small) { return mDeltaHtml(key, d, { dir: deltaDir(key), small }); }
   function cell(v, unit, reason) {
     const s = fmt(v, unit);
     if (s !== null) return esc(s);
@@ -268,7 +267,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       grid: { color: css("--line"), drawTicks: false },
       border: { color: css("--axis") },
       ticks: { color: css("--muted"), font: { family: css("--font-body"), size: 11 }, padding: 6,
-        callback: (v) => unit === "inr" ? inrCompact(v).replace("Rs ", "") : unit === "pct" ? (v * 100).toFixed(1) + "%" : unit === "x" ? v.toFixed(1) + "x" : inGroup.format(v) },
+        callback: (v) => unit === "inr" ? inrCompact(v) : unit === "pct" ? (v * 100).toFixed(1) + "%" : unit === "x" ? v.toFixed(1) + "x" : inGroup.format(v) },
     };
   }
   function baseChart(canvas, cfg, unit) {
@@ -293,18 +292,6 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     state.charts.push(chart);
   }
   const barStyle = { borderRadius: { topLeft: 4, topRight: 4 }, borderSkipped: "bottom", maxBarThickness: 24, borderWidth: 0 };
-  function phaseBars(canvas, rows, key, unit, label) {
-    baseChart(canvas, {
-      type: "bar",
-      data: {
-        labels: rows.map((r) => dayLabel(r.date)),
-        datasets: [{
-          label, data: rows.map((r) => r[key]), ...barStyle,
-          backgroundColor: rows.map((r) => r.phase === "sale" ? css("--series-2") : css("--series-1")),
-        }],
-      },
-    }, unit);
-  }
   const legend = (items) => `<div class="chart-legend">${items.map(([v, l]) => `<span><i style="background:var(${v})"></i>${esc(l)}</span>`).join("")}</div>`;
 
   // ------------------------------------------------------------ data
@@ -322,35 +309,44 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
 
   // ------------------------------------------------------------ shell
   function renderTabs() {
-    document.getElementById("tabs").innerHTML = state.config.tabs
-      .map((t) => `<a href="#${t.id}" ${t.id === state.tab ? 'aria-current="page"' : ""}>${esc(t.label)}</a>`).join("");
+    const link = (t) => `<a href="#${t.id}" class="${t.report ? "report" : ""}" ${t.id === state.tab ? 'aria-current="page"' : ""}>${esc(t.label)}</a>`;
+    const tabs = state.config.tabs;
+    document.getElementById("tabs").innerHTML = tabs.filter((t) => !t.report).map(link).join("")
+      + (tabs.some((t) => t.report) ? `<span class="tabs-gap" aria-hidden="true"></span>${tabs.filter((t) => t.report).map(link).join("")}` : "");
   }
+  /* One data status pill in the header, for every tab: green when every source
+     is in, amber naming what is late. It opens Data health. */
+  const SRC_LABEL = { shopify_orders: "Shopify orders", shopify_order_items: "Shopify order lines", shopify_sessions: "Shopify sessions", gokwik_funnel: "GoKwik", gokwik_orders: "GoKwik orders", google_ads: "Google Ads", meta_ads: "Meta", meta: "Meta" };
   function renderMeta(page) {
-    const s = state.status || {};
-    const parts = [];
-    if (page?.as_of) parts.push(`D-1 <strong>${dayLabel(page.as_of)}</strong>`);
-    if (page?.generated_at) parts.push(`refreshed ${new Date(page.generated_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} IST`);
-    if (s.complete === false) parts.push(`<span class="chip pending">Waiting on ${Object.keys(s.missing || {}).length} source(s)</span>`);
-    if (embedded) parts.push('<span class="chip pending">Preview build</span>');
-    document.getElementById("meta-line").innerHTML = parts.join(" · ");
+    const s = state.status || {}, el = document.getElementById("status-pill");
+    if (!el) return;
+    const late = Object.keys(s.missing || {}), un = Object.keys(s.unavailable || {});
+    const latest = (k) => ((s.checks || []).find((c) => c.source === k) || {}).latest_date;
+    const when = page?.generated_at ? `refreshed ${new Date(page.generated_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} IST` : "";
+    let cls = "ok", text = "All sources fresh";
+    if (!state.status) { cls = "unknown"; text = "Source status unknown"; }
+    else if (late.length) {
+      cls = "late";
+      const k = late[0], d = latest(k);
+      text = late.length === 1 ? `${SRC_LABEL[k] || k.replace(/_/g, " ")} late${d ? " · " + dayLabel(d) : ""}` : `${late.length} sources late`;
+    } else if (un.length) { cls = "late"; text = un.length === 1 ? `${un[0].replace(/^sheet_/, "").replace(/_/g, " ")} unavailable` : `${un.length} inputs unavailable`; }
+    const tip = [s.as_of ? `Data for D-1 ${dayLabel(s.as_of)}` : "", when, embedded ? "Preview build" : "", ...late.map((k) => `${SRC_LABEL[k] || k}: ${s.missing[k]}`), ...un.map((k) => `${k.replace(/_/g, " ")}: ${s.unavailable[k]}`)].filter(Boolean).join("\n");
+    el.innerHTML = `<a class="spill ${cls}" href="#health" title="${esc(tip)}"><i aria-hidden="true"></i>${esc(text)}</a>`;
   }
-  function statusStrip() {
-    const s = state.status;
-    if (!s || !s.checks) return "";
-    const missing = s.missing || {};
-    const chips = s.checks.map((c) => {
-      const bad = missing[c.source];
-      return `<span class="chip ${bad ? "missing" : "ok"}" title="${esc(bad || "latest " + c.latest_date)}">${esc(c.source.replace(/_/g, " "))} · ${esc(c.latest_date ? dayLabel(c.latest_date) : "none")}</span>`;
-    });
-    if (missing.shopify_sessions) chips.push(`<span class="chip missing" title="${esc(missing.shopify_sessions)}">shopify sessions</span>`);
-    Object.entries(s.unavailable || {}).forEach(([k, v]) => chips.push(`<span class="chip pending" title="${esc(v)}">${esc(k.replace(/_/g, " "))}: unavailable</span>`));
-    return `<div class="status" aria-label="Data sources">${chips.join("")}</div>`;
+  /* The second header row: the date picker on range tabs, a fixed line on
+     Today and the D-1 Report, nothing elsewhere. */
+  function setSub(html) {
+    const sub = document.getElementById("bar-sub"), slot = document.getElementById("rg-slot");
+    if (!sub || !slot) return;
+    slot.innerHTML = html || "";
+    sub.hidden = !html;
   }
   function notes(page) {
     return page.notes?.length ? `<ul class="notes">${page.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : "";
   }
   function table(columns, rows, opts = {}) {
-    const head = columns.map((c) => `<th class="${c.text ? "text" : ""}" scope="col">${esc(c.label)}</th>`).join("");
+    // a label may carry its own (i) tooltip markup (mHead); plain text is escaped
+    const head = columns.map((c) => `<th class="${c.text ? "text" : ""}" scope="col">${/<span class="tip"/.test(c.label) ? c.label : esc(c.label)}</th>`).join("");
     const body = rows.map((r) => `<tr class="${r._class || ""}">${columns.map((c) => {
       if (c.render) return `<td class="${c.text ? "text" : ""}">${c.render(r)}</td>`;
       return `<td>${cell(r[c.key], c.unit, r.na?.[c.key])}</td>`;
@@ -361,62 +357,9 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
   // ------------------------------------------------------------ tabs
   const R = {};
 
-  // Ten-second view: checkout health plus Meta, Google and Shopify returns.
-  function spark(points, colour) {
-    const nums = points.map((q) => q.v).filter((v) => v !== null && v !== undefined);
-    if (nums.length < 2) return "";
-    const W = 200, H = 44, pad = 5, lo = Math.min(...nums), span = (Math.max(...nums) - lo) || 1, n = points.length - 1;
-    const x = (i) => pad + (i * (W - 2 * pad)) / n, y = (v) => H - pad - ((v - lo) / span) * (H - 2 * pad);
-    let d = "", pen = false;
-    points.forEach((q, i) => { if (q.v === null || q.v === undefined) { pen = false; return; } d += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(q.v).toFixed(1) + " "; pen = true; });
-    const colW = (W - 2 * pad) / n;
-    let bands = "", from = null;
-    points.forEach((q, i) => {
-      const sale = q.phase === "sale";
-      if (sale && from === null) from = i;
-      if ((!sale || i === points.length - 1) && from !== null) {
-        const to = sale ? i : i - 1;
-        bands += `<rect x="${Math.max(0, x(from) - colW / 2).toFixed(1)}" y="0" width="${(Math.min(W, x(to) + colW / 2) - Math.max(0, x(from) - colW / 2)).toFixed(1)}" height="${H}" fill="var(--accent-wash)"/>`;
-        from = null;
-      }
-    });
-    const last = points[points.length - 1];
-    const dot = last.v === null || last.v === undefined ? "" : `<circle cx="${x(n).toFixed(1)}" cy="${y(last.v).toFixed(1)}" r="4" fill="${colour}" stroke="var(--surface)" stroke-width="2"/>`;
-    return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Last 14 days; shaded days were sale days">${bands}<path d="${d}" fill="none" stroke="${colour}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>${dot}</svg>`;
-  }
-  const STATUS = { ok: ["Healthy", "✓"], watch: ["Watch", "!"], problem: ["Problem", "✕"], unknown: ["No data", "–"] };
-  function pulseHtml(p) {
-    const pl = p.pulse;
-    if (!pl) return "";
-    const co = pl.checkout, [word, icon] = STATUS[co.status] || STATUS.unknown;
-    const pct1 = (v) => (v === null || v === undefined ? "n/a" : (v * 100).toFixed(1) + "%");
-    const stepRows = co.steps.map((st) => `<div class="steprow"><span>${esc(st.label)}${st.counts ? "" : ' <span class="sub">(context, not in the verdict)</span>'}</span><strong>${esc(pct1(st.value))}</strong><span class="sub">${st.delta === null ? "no baseline" : deltaHtml(st.delta, "rate")} · typical ${esc(pct1(st.baseline))}</span></div>`).join("");
-    const checkout = `<article class="pcard checkout ${esc(co.status)}">
-      <div class="plabel">Checkout</div>
-      <div class="status-pill ${esc(co.status)}"><span class="ico" aria-hidden="true"><b>${icon}</b></span><span>${word}</span></div>
-      <div class="vs">${esc(co.reason)}</div>
-      <details class="steps"><summary>See the steps</summary>${stepRows}</details>
-      <div class="psub">GoKwik funnel steps against a typical ${esc(pl.kind)} day</div>
-    </article>`;
-    const colours = { meta_sales_roas: "var(--series-1)", google_sales_roas: "var(--series-2)", perf_roas: "var(--accent)" };
-    // no ROAS in the Awareness view
-    const cards = pl.cards.filter((c) => !(RG.mode === "aw" && c.key === "roas")).map((c) => `<article class="pcard">
-      <div class="plabel">${esc(c.label)}</div>
-      ${c.value === null || c.value === undefined ? `<div class="na">Data unavailable: ${esc(c.na || "not available")}</div>`
-        : `<div class="hero">${esc(fmt(c.value, "x"))}</div>
-           <div class="vs">${deltaHtml(c.delta, c.key)}<span>vs typical ${esc(pl.kind)} day ${esc(fmt(c.baseline, "x") ?? "n/a")}</span></div>
-           ${spark(c.spark, colours[c.key] || "var(--accent)")}
-           <div class="pfoot"><span>7 days ${esc(fmt(c.last7, "x") ?? "n/a")}</span><span>Month ${esc(fmt(c.mtd, "x") ?? "n/a")}</span>${c.mer !== null && c.mer !== undefined ? `<span>MER ${esc(fmt(c.mer, "x"))}</span>` : ""}</div>`}
-      <div class="psub">${esc(c.sub)}</div>
-    </article>`).join("");
-    return `<section class="card">
-      <div class="section-head"><h2>Yesterday at a glance</h2><span class="sub">always D-1 (${esc(dayLabel(p.as_of))}), not the dates picked below · a ${esc(pl.kind)} day · ${esc(pl.baseline_note)}</span></div>
-      <div class="pulse">${checkout}${cards}</div>
-      ${statusStrip()}
-    </section>`;
-  }
-
+  /*__METRICS__*/
   /*__RANGE_UI__*/
+  /*__RANGE_FUNNEL__*/
   /*__RANGE_TABS__*/
   /*__RANGE_TREE__*/
   /*__RANGE_BASKET__*/
@@ -424,8 +367,17 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
   /*__RANGE_REGION__*/
   /*__ASK__*/
 
-  R.health = (p) => {
+  /* Data health: "Can I trust these numbers?" Source status, data checks,
+     the sale calendar, known exceptions, the metric dictionary and every
+     methodology note, in one place. */
+  R.health = async (p) => {
     const hhmm = (iso) => iso ? new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" }) : null;
+    $main.innerHTML = '<p class="empty">Loading…</p>';
+    const pg = {};
+    for (const t of ["overview", "funnel", "marketing", "products", "region", "d1", "days", "product_days"]) { try { pg[t] = await loadPage(t); } catch (e) { pg[t] = null; } }
+    if (state.tab !== "health") return;
+    const st = state.status || {}, labels = p.source_labels || {};
+    // 1. sources
     const srcCols = [
       { label: "Source", text: true, render: (r) => `<strong>${esc(r.label)}</strong><br><span class="sub">${esc(r.origin)}</span>` },
       { label: "Status", text: true, render: (r) => (r.state === "ok" ? '<span class="chip ok">Arrived</span>' : '<span class="chip missing">Waiting</span>') + (r.note ? `<br><span class="sub">${esc(r.note)}</span>` : "") },
@@ -433,40 +385,77 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       { label: "D-1 rows", render: (r) => esc(fmt(r.d1_rows, "int") ?? "–") },
       { label: "Arrived (IST)", render: (r) => esc(hhmm(r.arrived_at) || "–") },
     ];
+    const waiting = (p.waiting_on || []).map((k) => labels[k] || k.replace(/_/g, " ")).join(", ");
+    const head = p.complete
+      ? `<div class="ck"><span class="spill ok"><i></i>All sources are in for ${esc(dayLabel(p.as_of))}</span>${p.attempts ? `<span class="why">${p.attempts} refresh runs so far</span>` : ""}</div>`
+      : `<div class="ck"><span class="spill late"><i></i>Waiting on ${esc(waiting)}</span><span class="why">Each run rebuilds the pages with whatever is present; an alert email goes out if this is still open by mid-morning.</span></div>`;
+    const un = Object.entries(st.unavailable || {});
+    const inputs = un.length ? table([{ label: "Input", text: true, render: (r) => `<strong>${esc(r[0].replace(/^sheet_/, "sheet: ").replace(/_/g, " "))}</strong>` }, { label: "What is wrong", text: true, render: (r) => esc(r[1]) }], un) : '<p class="sub">Every other input (spend sheets, sale calendar, APIs) is in.</p>';
+    // 2. checks
     const recCols = [
       { label: "Check", text: true, render: (r) => esc(r.label) },
       { label: "Ours", render: (r) => esc(fmt(r.ours, r.unit, true) ?? "–") },
       { label: "Source says", render: (r) => esc(fmt(r.theirs, r.unit, true) ?? "–") },
-      { label: "Difference", render: (r) => r.diff === null || r.diff === undefined ? "–" : esc(fmt(r.diff, r.unit, true) ?? "–") + (r.diff_pct === null || r.diff_pct === undefined ? "" : ` <span class="sub">(${(r.diff_pct * 100).toFixed(2)}%)</span>`) },
-      { label: "Result", text: true, render: (r) => r.ok === true ? '<span class="chip ok">Matches</span>'
-          : r.ok === false ? `<span class="chip missing" title="${esc(r.note || "")}">Differs${r.block ? " · holds the day open" : ""}</span>`
-          : `<span class="chip pending" title="${esc(r.note || "")}">Not checked</span>` },
+      { label: "Difference", render: (r) => (r.diff == null ? "–" : esc(fmt(r.diff, r.unit, true) ?? "–") + (r.diff_pct == null ? "" : ` <span class="sub">(${(r.diff_pct * 100).toFixed(2)}%)</span>`)) },
+      { label: "Result", text: true, render: (r) => r.ok === true ? '<span class="chip ok">Matches</span>' : r.ok === false ? `<span class="chip missing" title="${esc(r.note || "")}">Differs${r.block ? " · holds the day open" : ""}</span>` : `<span class="chip pending" title="${esc(r.note || "")}">Not checked</span>` },
     ];
-    const labels = p.source_labels || {};
+    const chk = (pg.marketing || {}).classification_check, m = chk ? chk.google_match : null;
+    const gcheck = !m ? '<p class="na">Data unavailable: built with the Marketing page.</p>' : `<p><b>${esc(mFormat("percent", m.match_rate) ?? "n/a")}</b> of Google sessions with a campaign ID match a known campaign (${inGroup.format(m.matched)} of ${inGroup.format(m.with_campaign_id)}, ${esc(dayLabel(m.start))}–${esc(dayLabel(m.end))}); ${esc(mFormat("percent", m.no_id_share) ?? "n/a")} of Google sessions carry no campaign ID; ${inGroup.format(m.awareness)} sessions are on awareness IDs (${chk.google_awareness_ids} of ${chk.google_known_ids} known IDs).</p>
+      ${chk.unclassified_google_ids.length ? table([{ label: "Unclassified Google ID", text: true, render: (r) => `${r.name ? esc(r.name) : '<span class="na">Name not found in Google Ads</span>'}<br><span class="sub">ID ${esc(r.campaign_id)}</span>` }, { key: "sessions", label: "Sessions", unit: "int" }, { label: "Last seen", render: (r) => esc(r.dates.at(-1)) }], chk.unclassified_google_ids) + '<p class="legend-note">Counted as performance until they sync; an alert fires for IDs seen yesterday.</p>' : '<p class="sub">No unclassified Google campaign IDs.</p>'}`;
+    // products sold in the last 30 days that the product map does not know
+    const pd = pg.product_days, unmapped = [];
+    if (pd) {
+      const last = pd.rows.length ? pd.rows[pd.rows.length - 1][0] : null, from = last ? new Date(Date.parse(last) - 29 * 864e5).toISOString().slice(0, 10) : null, sold = new Map();
+      for (const r of pd.rows) if (r[0] >= from) sold.set(r[1], (sold.get(r[1]) || 0) + r[2]);
+      for (const [i, u] of sold) if (u > 0 && !pmProduct(pd.names[i].id)) unmapped.push({ id: pd.names[i].id, label: pd.names[i].label, units: u });
+    }
+    const pmap = unmapped.length ? `<div class="ck"><span class="spill late"><i></i>${unmapped.length} product${unmapped.length === 1 ? "" : "s"} not in the product map</span><span class="why">They show as "Unmapped" on Products. Add each Shopify product ID to config.json → product_map.</span></div>`
+      + table([{ label: "Product (as on the order line)", text: true, render: (r) => esc(r.label) }, { label: "Shopify product ID", text: true, render: (r) => `<code>${esc(r.id)}</code>` }, { key: "units", label: "Units, last 30 days", unit: "int" }], unmapped.sort((x, y) => y.units - x.units))
+      : '<div class="ck"><span class="spill ok"><i></i>Every product sold in the last 30 days is in the product map</span></div>';
+    // 3. sale calendar
+    let cal = '<p class="na">Data unavailable: the day-by-day page is not built.</p>';
+    const D = pg.days;
+    if (D && D.dates) {
+      const runs = [];
+      D.dates.forEach((d, i) => { const ph = D.phase[i]; const last = runs[runs.length - 1]; if (last && last.ph === ph) { last.to = d; last.n++; } else runs.push({ ph, from: d, to: d, n: 1, note: D.phase_note ? D.phase_note[i] : null }); });
+      const recent = runs.filter((r) => r.to >= D.dates[Math.max(0, D.dates.length - 75)]).reverse();
+      const ov = Object.entries(state.config.phase_overrides || {});
+      cal = table([{ label: "Days", text: true, render: (r) => esc(r.from === r.to ? dayLabel(r.from) : `${dayLabel(r.from)} – ${dayLabel(r.to)}`) }, { label: "Kind", text: true, render: (r) => phaseChip(r.ph, r.note) }, { key: "n", label: "Days", unit: "int" }], recent, { maxHeight: "40vh" })
+        + `<p class="legend-note">Sale and BAU days come from hourly order detection and the team's sale calendar, which wins on every day it covers (source: ${esc(D.phase_source || "detection")}). ${ov.length ? `Overrides in config.json: ${ov.map(([d, v]) => `${d} → ${v}`).join(", ")}.` : "No overrides in config.json (phases.overrides)."}</p>`;
+    }
+    // 4. known exceptions
+    const exc = [];
+    for (const z of (pg.marketing || {}).zero_spend_days || []) exc.push({ day: z.date, what: `Google spend is zero: ${z.reason}` });
+    for (const [f, days] of Object.entries((D && D.estimated) || {})) if (days && days.length) exc.push({ day: days[days.length - 1], what: `${f.replace(/_/g, " ")} is estimated for ${days.length} day${days.length === 1 ? "" : "s"} (${days.slice(-3).map(dayLabel).join(", ")}${days.length > 3 ? ", …" : ""}): the sheet is not filled yet` });
+    const excHtml = exc.length ? table([{ label: "Day", text: true, render: (r) => esc(dayLabel(r.day)) }, { label: "Exception", text: true, render: (r) => esc(r.what) }], exc.sort((x, y) => (x.day < y.day ? 1 : -1))) : '<p class="sub">None.</p>';
+    // 5. metric dictionary
+    const TAB = Object.fromEntries(state.config.tabs.map((t) => [t.id, t.label]));
+    const dict = table([
+      { label: "Metric", text: true, render: (r) => `<strong>${esc(r.label)}</strong>` },
+      { label: "Definition", text: true, render: (r) => esc(r.def) },
+      { label: "Formula", text: true, render: (r) => esc(r.formula || "") },
+      { label: "Source", text: true, render: (r) => esc(r.source || "") },
+      { label: "Home tab", text: true, render: (r) => `<a href="#${esc(r.home)}">${esc(TAB[r.home] || r.home)}</a>` },
+    ], Object.values(METRICS), { maxHeight: "60vh", full: true });
+    // 6. methodology notes from every tab
+    const NOTE_TABS = [["overview", "Overview"], ["funnel", "Funnel"], ["marketing", "Marketing"], ["products", "Products"], ["region", "Region"], ["d1", "D-1 Report"]];
+    const method = NOTE_TABS.filter(([t]) => pg[t] && pg[t].notes && pg[t].notes.length).map(([t, l]) => `<h3>${esc(l)}</h3>${notes(pg[t])}`).join("") + `<h3>Data health</h3>${notes(p)}`;
+    // 7. history
     const histCols = [
       { label: "Day", text: true, render: (r) => `<strong>${esc(dayLabel(r.day))}</strong>` },
-      { label: "Complete (IST)", render: (r) => r.complete ? esc(hhmm(r.completed_at) || "yes") : '<span class="cell-na" title="Not complete when last run">–</span>' },
+      { label: "Complete (IST)", render: (r) => (r.complete ? esc(hhmm(r.completed_at) || "yes") : '<span class="cell-na" title="Not complete when last run">–</span>') },
       ...Object.entries(labels).map(([k, l]) => ({ label: l, render: (r) => esc(hhmm(r.arrived?.[k]) || "–") })),
     ];
-    const waiting = (p.waiting_on || []).map((k) => labels[k] || k.replace(/_/g, " ")).join(", ");
-    const head = p.complete
-      ? `<p><span class="chip ok">All sources are in for ${esc(dayLabel(p.as_of))}</span> <span class="sub">${p.attempts ?? "?"} runs so far</span></p>`
-      : `<div class="banner">Waiting on: ${esc(waiting)}. Each run rebuilds the pages with whatever is present, and an email goes out from 10:00 IST if this is still open.</div>`;
     $main.innerHTML = `
-      <section class="card">
-        <div class="section-head"><h2>Sources for D-1</h2><span class="sub">${esc(dayLabel(p.as_of))}</span></div>
-        ${head}
-        ${table(srcCols, p.sources)}
-      </section>
-      <section class="card">
-        <div class="section-head"><h2>Cross-checks</h2><span class="sub">Our copy against each source's own total</span></div>
-        ${p.reconcile?.length ? table(recCols, p.reconcile) : '<p class="na">No cross-check has run yet for this day.</p>'}
-      </section>
-      <section class="card">
-        <div class="section-head"><h2>Last days</h2><span class="sub">When each source first had the day</span></div>
-        ${table(histCols, p.history || [])}
-      </section>
-      <section class="card">${notes(p)}</section>`;
+      ${rgSec("Sources", `for D-1, ${esc(dayLabel(p.as_of))}`, head + table(srcCols, p.sources, { full: true }) + `<h3>Other inputs</h3>` + inputs)}
+      ${rgSec("Data checks", "our copy against each source, and the mappings the tabs rely on", `<h3>Cross-checks</h3>${p.reconcile?.length ? table(recCols, p.reconcile, { full: true }) : '<p class="na">No cross-check has run yet for this day.</p>'}<h3>Google sessions ↔ campaigns</h3>${gcheck}<h3>Product map</h3>${pmap}`)}
+      <div class="cols-2">
+        ${rgSec("Sale calendar", "which days are BAU and which are sale", cal)}
+        ${rgSec("Known exceptions", "days whose numbers need a footnote", excHtml)}
+      </div>
+      ${rgFold("Metric dictionary", "every metric: what it is, how it is worked out, where it comes from, which tab owns it", dict, { open: true })}
+      ${rgFold("Methodology", "how each tab's numbers are built", `<div class="method">${method}</div>`)}
+      ${rgFold("Arrival history", "when each source first had the day, last 8 days", table(histCols, p.history || []))}`;
   };
 
   /*__RETENTION_UI__*/
@@ -488,151 +477,102 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     try {
       const page = await getJSON("/api/page/live");
       if (page && page.generated_at !== state.pages.live?.generated_at) {
-        state.pages.live = page; destroyCharts(); R.live(page);
+        state.pages.live = page; destroyCharts(); R.live(page); renderMeta(page);
       }
     } catch (e) { /* keep showing the last good view; the age label says how old it is */ }
   }
+  /* Today: "Are we on pace right now?" Always live (no date picker): six
+     numbers so far today against a typical same-weekday day of the same kind
+     at the same time (or yesterday at the same time), the running total
+     through the day, spend pacing, the campaigns, and the checkout. */
+  const LIVE_KPI = [["orders", "orders"], ["gmv", "total_sales"], ["aov", "aov"], ["total_spend", "perf_spend"], ["roas", "blended_roas"], ["cvr", "cvr"]];
   R.live = (p) => {
     clearInterval(state.liveTimer); clearInterval(state.liveTick);
     state.liveTimer = setInterval(liveRefresh, (p.refresh_seconds || 180) * 1000);
     state.liveTick = setInterval(liveTick, 20000);
-    const sh = p.shopify, vsKey = LIVE.base === "typical" ? "vs_typical" : "vs_yesterday";
-    const baseKey = LIVE.base === "typical" ? "typical" : "yesterday";
-    const baseLabel = sh ? (LIVE.base === "typical" ? sh.typical_label : sh.yesterday_label) : "";
-    const chips = p.sources.map((s) => `<span class="chip ${s.ok ? "ok" : "missing"}" title="${esc(s.reason || s.note)}">${esc(s.label)} · ${s.as_of ? esc(liveWhen(s.as_of)) : "no data"}</span>`).join("");
-    const head = `<section class="card">
-      <div class="section-head"><h2>Today · ${esc(p.weekday)} ${esc(dayLabel(p.today))}</h2>
-        <span class="sub">updated <span id="live-age"></span> · refreshes itself every ${Math.round((p.refresh_seconds || 180) / 60)} min · D-1 stays on the other tabs</span></div>
-      <div class="banner" id="live-stale" hidden>This view is more than 30 minutes old, so the live refresh may be failing. The numbers below are the last good ones.</div>
-      <div class="status" aria-label="Data sources and freshness">${chips}</div>
-      <div class="live-ctls"><div class="live-ctl"><span class="sub">Campaigns</span><div class="seg" id="live-mode" role="group" aria-label="Campaign type">${RG_MODES.map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${RG.mode === k}">${l}</button>`).join("")}</div></div>
-      ${sh ? `<div class="live-ctl"><span class="sub">Compare today so far with</span>
-        <div class="seg" id="live-base"><button type="button" data-b="typical" aria-pressed="${LIVE.base === "typical"}">${esc(sh.typical_label)}</button><button type="button" data-b="yesterday" aria-pressed="${LIVE.base === "yesterday"}">Yesterday, same time</button></div></div>` : ""}</div>
-    </section>`;
-    const tiles = sh ? `<section class="card"><div class="section-head"><h2>So far today</h2><span class="sub">each figure compared at the same time of day</span></div>
-      <div class="tiles">${sh.tiles.map((t) => `<div class="tile">
-        <div class="label">${esc(t.label)}</div>
-        ${t.value === null || t.value === undefined ? `<div class="na">Data unavailable: ${esc(t.na || "not available")}</div>`
-          : `<div class="value">${esc(fmt(t.value, t.unit, true))}</div>
-             <div class="foot">${deltaHtml(t[vsKey], t.key)}<span>vs ${esc(fmt(t[baseKey], t.unit, true) ?? "n/a")}</span></div>`}
-      </div>`).join("")}</div></section>`
-      : `<section class="card"><div class="section-head"><h2>So far today</h2></div><p class="na">Data unavailable: ${esc(p.unavailable.shopify_orders || "Shopify orders not available")}</p></section>`;
-    // the team's daily sheet, row for row: sales, performance spends, ROAS and CPS, traffic and conversion
-    const sc = p.scorecard;
-    const cmpOf = (it) => {
-      if (it.value == null) return "";
-      if (it.yesterday != null || it.typical != null || it.key === "perf_sessions" || it.key === "cvr_perf") {
-        const typ = LIVE.base === "typical", v = typ ? it.typical : it.yesterday, d = typ ? it.vs_typical : it.vs_yesterday;
-        return v == null ? `<span>no ${typ ? "typical day" : "same time yesterday"} to compare yet</span>` : `${deltaHtml(d, it.key)}<span>vs ${esc(fmt(v, it.unit, true))}</span>`;
-      }
-      if (it.ref && it.ref.value != null) {
-        if (it.ref.share !== undefined) return it.ref.share == null ? "" : `<span>${(it.ref.share * 100).toFixed(0)}% ${esc(it.ref.label)} (${esc(fmt(it.ref.value, it.unit, true))})</span>`;
-        return `${deltaHtml(it.ref.value ? it.value / it.ref.value - 1 : null, it.key)}<span>vs ${esc(it.ref.label)} ${esc(fmt(it.ref.value, it.unit))}</span>`;
-      }
-      return "";
+    const sh = p.shopify, sc = p.scorecard, typ = LIVE.base === "typical";
+    const items = new Map(); for (const gr of (sc ? sc.groups : [])) for (const it of gr.items) items.set(it.key, it);
+    const baseLabel = sh ? (typ ? sh.typical_label : sh.yesterday_label) : "";
+    // the second header row: live, how fresh, what today is compared with
+    setSub(`<div class="sub-line"><span class="live-dot" aria-hidden="true"></span><b>Live · ${esc(p.weekday)} ${esc(dayLabel(p.today))}</b><span class="rg-dim">updated <span id="live-age"></span> · refreshes every ${Math.round((p.refresh_seconds || 180) / 60)} min</span>
+      ${sh ? `<span class="rg-dim">compared with</span><div class="seg" id="live-base" role="group" aria-label="Compare today with"><button type="button" data-b="typical" aria-pressed="${typ}">${esc(sh.typical_label)}</button><button type="button" data-b="yesterday" aria-pressed="${!typ}">Yesterday, same time</button></div>` : ""}</div>`);
+    const kpi = ([key, id]) => {
+      const it = items.get(key);
+      if (!it) return kpiCard(id, { value: null, na: (p.unavailable && p.unavailable.shopify_orders) || "not available yet" });
+      if (it.value == null) return kpiCard(id, { value: null, na: it.na });
+      if (key === "total_spend") return kpiCard(id, { value: it.value, est: it.estimate ? "Includes estimated Reddit, CRM and affiliate spend: the sheets are filled the next day" : "", sub: it.ref && it.ref.share != null ? `${Math.round(it.ref.share * 100)}% ${it.ref.label} (${mVal(id, it.ref.value, true)})` : "" });
+      if (key === "roas") return kpiCard(id, { value: it.value, prev: it.ref ? it.ref.value ?? null : null, change: it.ref && it.ref.value ? it.value / it.ref.value - 1 : null, tipExtra: it.ref ? `Compared with ${it.ref.label}.` : "", est: "Built on estimated Reddit, CRM and affiliate spend" });
+      const v = typ ? it.typical : it.yesterday, d = typ ? it.vs_typical : it.vs_yesterday;
+      return kpiCard(id, { value: it.value, prev: v ?? null, change: d, small: id !== "cvr" && v != null && (items.get("orders")[typ ? "typical" : "yesterday"] || 0) < METRIC_RULES.min_orders });
     };
-    const scTile = (it) => `<div class="tile sc-tile${it.key === "roas" ? " sc-hero" : ""}">
-        <div class="label">${esc(it.label)}${it.estimate ? ' <span class="chip pending">est.</span>' : ""}</div>
-        ${it.value == null ? `<div class="na">Data unavailable: ${esc(it.na)}</div>` : `<div class="value">${esc(fmt(it.value, it.unit === "int" ? "num" : it.unit))}</div><div class="foot">${cmpOf(it)}</div>`}
-        ${it.note ? `<div class="sc-note">${esc(it.note)}</div>` : ""}</div>`;
-    const scoreNote = `<p class="legend-note" style="margin:10px 0 0">Orders, GMV and sessions are the whole store: Shopify cannot split live traffic by campaign type. Spends, ROAS and CPS are performance only.${RG.mode === "all" ? " Awareness and Reach spend are in the table below, never in ROAS." : ""}</p>`;
-    const score = sc ? `<section class="card"><div class="section-head"><h2>So far today</h2><span class="sub">compared with ${esc(LIVE.base === "typical" && sh ? sh.typical_label : "yesterday")} at the same time; spends against yesterday's full day; ROAS and CPS against yesterday's final</span></div>
-      ${sc.groups.map((g) => `<div class="sc-group"><h3>${esc(g.title)}</h3>${g.note ? `<p class="sc-gnote">${esc(g.note)}</p>` : ""}<div class="tiles sc-row">${g.items.map(scTile).join("")}</div></div>`).join("")}
-      ${sc.perf_compare_note ? `<p class="legend-note">${esc(sc.perf_compare_note)}</p>` : ""}${scoreNote}</section>` : null;
-    const chart = sh ? `<section class="card"><div class="section-head"><h2>Through the day</h2>
-        <div class="seg" id="live-metric">${[["gmv", "GMV"], ["orders", "Orders"], ["sessions", "Sessions"]].map(([k, l]) => `<button type="button" data-m="${k}" aria-pressed="${LIVE.metric === k}">${l}</button>`).join("")}</div></div>
-      ${legend([["--accent", "Today"], ["--muted", baseLabel]])}
-      <div class="chart-box"><canvas id="c-live" aria-label="Running total through the day, today against the comparison"></canvas></div></section>` : "";
-    // one view of the page per campaign type (Performance / Awareness / All)
-    const V = (p.views && p.views[RG.mode]) || { spend_breakdown: p.spend_breakdown, cards: p.cards };
-    const awCards = () => {
-      const a = (p.views && p.views.aw && p.views.aw.totals) || {};
-      const m = { spend: a.meta_spend || 0 }, g = { spend: a.google_spend || 0 }, t = { spend: a.spend || 0, impr: a.impressions || 0, clicks: a.clicks || 0 };
-      const card = (label, v, sub) => `<article class="pcard"><div class="plabel">${esc(label)}</div>${v == null ? '<div class="na">Data unavailable: no awareness delivery reported yet</div>' : `<div class="hero">${esc(v)}</div>`}<div class="psub">${esc(sub)}</div></article>`;
-      return `<section class="card"><div class="section-head"><h2>Awareness so far today</h2><span class="sub">delivery and cost of delivery; platforms report with a delay</span></div><div class="pulse">
-        ${card("Awareness spend", t.spend ? fmt(t.spend, "inr", true) : null, `Meta ${fmt(m.spend, "inr", true)} · Google ${fmt(g.spend, "inr", true)}`)}
-        ${card("Impressions", t.impr ? fmt(t.impr, "int") : null, "Meta + Google awareness campaigns")}
-        ${card("CPM", t.impr ? fmt((t.spend / t.impr) * 1000, "inr") : null, "spend per 1,000 impressions")}
-        ${card("CTR", t.impr ? fmt(t.clicks / t.impr, "pct") : null, "clicks / impressions")}</div></section>`;
-    };
-    const cards = RG.mode === "aw" ? awCards() : score ? "" : `<section class="card"><div class="section-head"><h2>Returns so far today</h2><span class="sub">vs yesterday's final · ad platforms report late, so today reads low</span></div>
-      <div class="pulse">${(V.cards || p.cards).map((c) => `<article class="pcard">
-        <div class="plabel">${esc(c.label)}</div>
-        ${c.value === null || c.value === undefined ? `<div class="na">Data unavailable: ${esc(c.na || "not available")}</div>`
-          : `<div class="hero">${esc(fmt(c.value, "x"))}</div>
-             <div class="vs">${deltaHtml(c.delta, c.key)}<span>vs yesterday ${esc(fmt(c.yesterday, "x") ?? "n/a")}</span></div>`}
-        <div class="psub">${esc(c.sub)}</div></article>`).join("")}</div></section>`;
+    const strip = `<section class="card"><div class="kpis six">${LIVE_KPI.map(kpi).join("")}</div><div class="banner" id="live-stale" hidden>This view is more than 30 minutes old, so the live refresh may be failing. The numbers are the last good ones.</div></section>`;
+    const chart = sh ? rgSec("Through the day", "running total, today against the comparison", `${legend([["--accent", "Today"], ["--muted", baseLabel + " (dashed)"]])}<div class="chart-box"><canvas id="c-live" aria-label="Running total through the day"></canvas></div>`,
+      { ctl: `<div class="seg" id="live-metric">${[["gmv", "Total sales"], ["orders", "Orders"], ["sessions", "Sessions"]].map(([k, l]) => `<button type="button" data-m="${k}" aria-pressed="${LIVE.metric === k}">${l}</button>`).join("")}</div>` }) : "";
+    // spend pacing: sales campaigns against yesterday's full day; the campaign view acts here
+    const pace = ["meta_spend", "google_spend", "reddit_spend", "crm_aff_spend"].map((k) => items.get(k)).filter(Boolean).map((it) => kpiCard("channel_spend", {
+      label: it.label === "Meta spends" ? "Meta" : it.label, value: it.value, na: it.na, est: it.estimate ? it.note || "estimated" : "",
+      sub: it.ref && it.ref.share != null ? `${Math.round(it.ref.share * 100)}% ${it.ref.label} (${mVal("channel_spend", it.ref.value, true)})` : "" })).join("");
+    const V = (p.views && p.views[RG.scope]) || {};
     const sb = V.spend_breakdown || [];
-    const sbTitle = { perf: "Performance spend so far today", aw: "Awareness spend so far today", all: "Spend so far today, all campaigns" }[RG.mode] || "Spend so far today";
-    const sbSub = RG.mode === "aw" ? "awareness campaigns only, from the platforms' APIs" : RG.mode === "perf" ? "sales campaigns only; Meta and Google are real, affiliate, CRM and Reddit are estimates" : "each platform split into Performance, Awareness and Reach; affiliate, CRM and Reddit are estimates";
-    const breakdown = sb.length ? `<section class="card"><div class="section-head"><h2>${esc(sbTitle)}</h2><span class="sub">${esc(sbSub)}</span></div>
-      ${table([
-        { label: "Channel", text: true, render: (r) => esc(r.label) },
-        { label: "So far today", render: (r) => (r.value == null ? '<span class="cell-na" title="Data unavailable: ' + esc(r.note) + '">n/a</span>' : esc(fmt(r.value, "inr")) + (r.kind === "estimate" && r.label !== "All channels" ? ' <span class="chip pending">estimate</span>' : "")) },
-        { label: "How", text: true, render: (r) => `<span class="sub">${esc(r.note)}</span>` },
-      ], sb.map((r) => ({ ...r, _class: r.label === "All channels" ? "total" : r.level ? "live-subrow" : "" })))}</section>` : "";
-    const gk = p.gokwik;
-    const pct1 = (v) => (v === null || v === undefined ? "n/a" : (v * 100).toFixed(1) + "%");
-    const checkout = `<section class="card"><div class="section-head"><h2>Checkout (GoKwik)</h2>
-        <span class="sub">${gk.na ? "" : `as loaded ${gk.age_minutes === null || gk.age_minutes === undefined ? "" : gk.age_minutes + " min ago"} · rates against the last ${gk.typical_days} days`}</span></div>
-      ${gk.na ? `<p class="na">Data unavailable: ${esc(gk.na)}</p>`
-        : `${gk.stale ? '<div class="banner">The latest GoKwik load is old, so these rates are not current.</div>' : ""}
-           ${table([
-             { label: "Step", text: true, render: (r) => esc(r.label) },
-             { label: "Customers", render: (r) => esc(fmt(r.count, "int") ?? "n/a") },
-             { label: "Step rate", render: (r) => r.rate === null ? '<span class="na">–</span>' : esc(pct1(r.rate)) },
-             { label: "Typical", render: (r) => r.typical === null ? '<span class="na">–</span>' : esc(pct1(r.typical)) },
-             { label: "vs typical", render: (r) => r.delta === null ? '<span class="flat">–</span>' : deltaHtml(r.delta, "rate") },
-           ], gk.steps)}
-           <p class="legend-note">Overall checkout conversion ${esc(pct1(gk.overall))} against a typical ${esc(pct1(gk.overall_typical))}.</p>`}
-    </section>`;
+    const breakdown = RG.scope === "perf" ? `<div class="kpis">${pace}</div>` : sb.length ? table([
+      { label: "Channel", text: true, render: (r) => esc(r.label) },
+      { label: "So far today", render: (r) => (r.value == null ? `<span class="cell-na" title="Data unavailable: ${esc(r.note)}">n/a</span>` : esc(fmt(r.value, "inr")) + (r.kind === "estimate" && r.label !== "All channels" ? ' <span class="chip pending">est.</span>' : "")) },
+    ], sb.map((r) => ({ ...r, _class: r.label === "All channels" ? "total" : r.level ? "live-subrow" : "" }))) : '<p class="na">No spend reported yet today.</p>';
+    const spend = rgSec("Spend today", RG.scope === "perf" ? "sales campaigns, as a share of yesterday's full day" : "by platform and campaign type", breakdown, { ctl: rgScopeSeg("live-scope") });
+    // campaigns: sorted by spend; a big spend with no platform value late in the day is flagged
+    const F = state.config.live_flag || {}, minS = F.min_spend ?? 3000, after = F.after_hour ?? 14;
+    const hourNow = +new Date(p.generated_at).toLocaleString("en-GB", { hour: "2-digit", hour12: false, timeZone: "Asia/Kolkata" });
     const adTable = (title, blk) => {
-      if (blk.na && !blk.today) return `<section class="card"><div class="section-head"><h2>${esc(title)}</h2></div><p class="na">Data unavailable: ${esc(blk.na)}</p></section>`;
-      const t = blk.today || {}, y = blk.yesterday || {};
-      const kindOf = { perf: "perf", aw: "awareness" }[RG.mode];
-      const pick = (d) => (kindOf ? (d.by_kind ? d.by_kind[kindOf].spend : null) : d.spend);
-      const vSpend = pick(t), ySpend = pick(y), vPct = vSpend != null && ySpend ? vSpend / ySpend : null;
-      const rows = blk.campaigns.filter((c) => rgKeep(c.kind || c.awareness)).map((c) => ({ ...c }));
-      return `<section class="card"><div class="section-head"><h2>${esc(title)}</h2>
-        <span class="sub">${kindOf ? (kindOf === "perf" ? "sales-campaign " : "awareness ") : ""}spend ${esc(fmt(vSpend, "inr", true) ?? "n/a")}${vPct == null ? "" : ` · ${(vPct * 100).toFixed(0)}% of yesterday's`}</span></div>
-        ${table([
-          { label: "Campaign", text: true, render: (r) => `${esc(r.campaign)}${r.awareness ? ' <span class="sub">Awareness, not in ROAS</span>' : r.kind === "social" ? ' <span class="sub">Social (Reach), not in ROAS</span>' : ""}` },
-          { label: "Spend", render: (r) => esc(fmt(r.spend, "inr") ?? "n/a") },
-          { label: "Value", render: (r) => esc(fmt(r.value, "inr") ?? "n/a") },
-          ...(RG.mode === "aw" ? [] : [{ label: "Platform ROAS", render: (r) => r.roas === null ? '<span class="na">–</span>' : esc(fmt(r.roas, "x")) }]),
-        ], rows, { maxHeight: "50vh" })}</section>`;
+      if (blk.na && !blk.today) return rgSec(title, "", `<p class="na">Source late: ${esc(blk.na)}</p>`);
+      const rows = blk.campaigns.filter((c) => rgKeep(c.kind || c.awareness, RG.scope)).sort((x, y) => (y.spend || 0) - (x.spend || 0));
+      const flagged = (r) => hourNow >= after && (r.spend || 0) >= minS && !r.value && !r.awareness && r.kind !== "social";
+      const n = rows.filter(flagged).length;
+      return rgSec(title, n ? `${n} campaign${n === 1 ? "" : "s"} with spend and no return yet` : "sorted by spend", table([
+        { label: "Campaign", text: true, render: (r) => `<span class="trunc" title="${esc(r.campaign)}">${esc(r.campaign)}</span>${r.awareness ? ' <span class="sub">Awareness</span>' : r.kind === "social" ? ' <span class="sub">Reach</span>' : ""}${flagged(r) ? ` <span class="chip pending" title="Spent ₹${inGroup.format(minS)} or more with no platform value after ${after}:00. Platforms attribute late: a watch flag, not a verdict.">⚑ no return yet</span>` : ""}` },
+        { label: "Spend", render: (r) => esc(fmt(r.spend, "inr") ?? "n/a") },
+        { label: mHead("platform_revenue", "Platform value"), render: (r) => esc(fmt(r.value, "inr") ?? "n/a") },
+        ...(RG.scope === "aw" ? [] : [{ label: mHead("platform_roas"), render: (r) => (r.roas === null ? '<span class="na">–</span>' : esc(fmt(r.roas, "x"))) }]),
+      ], rows, { maxHeight: "50vh", full: true }));
     };
-    const wholeStore = `<p class="legend-note" style="margin:6px 0 0">${RG.mode === "aw" ? "These are for the whole store." : "Whole store, awareness traffic included."} Shopify cannot split live sessions and orders by campaign type, so the day-by-day tabs are the place for that split.</p>`;
-    const awOnly = `<section class="card"><div class="section-head"><h2>Awareness</h2></div><p class="na">Live sessions, orders and checkout cannot be split by campaign type, so they are not shown in this view. Below: what the awareness campaigns have spent and delivered so far today. For awareness traffic and orders, use the Overview, Daily or Marketing tabs.</p></section>`;
-    $main.innerHTML = head + (RG.mode === "aw" ? awOnly : (score || tiles.replace("</section>", wholeStore + "</section>")) + chart) + cards + (RG.mode === "perf" && score ? "" : breakdown) + (RG.mode === "aw" ? "" : checkout) + `<div class="grid-2">${adTable("Meta campaigns today", p.meta)}${adTable("Google Ads campaigns today", p.google)}</div><section class="card">${notes(p)}</section>`;
+    const gk = p.gokwik;
+    const checkout = gk.na
+      ? rgSec("Checkout (GoKwik)", "", `<div class="ck"><span class="spill late"><i></i>Source late${gk.as_of ? " · last loaded " + esc(liveWhen(gk.as_of)) : ""}</span><span class="why">${esc(gk.na)}</span></div>`)
+      : rgSec("Checkout (GoKwik)", `as loaded ${gk.age_minutes == null ? "" : gk.age_minutes + " min ago"} · against the last ${gk.typical_days} days`, `${gk.stale ? `<div class="ck"><span class="spill late"><i></i>Source late</span><span class="why">The latest GoKwik load is old, so these rates are not current.</span></div>` : ""}
+        ${table([
+          { label: "Step", text: true, render: (r) => esc(r.label) },
+          { label: "Customers", render: (r) => esc(fmt(r.count, "int") ?? "n/a") },
+          { label: "Step rate", render: (r) => (r.rate === null ? '<span class="na">–</span>' : esc(mFormat("percent", r.rate))) },
+          { label: "Typical", render: (r) => (r.typical === null ? '<span class="na">–</span>' : esc(mFormat("percent", r.typical))) },
+          { label: "vs typical", render: (r) => (r.delta === null ? '<span class="flat">–</span>' : deltaHtml(r.delta, "rate")) },
+        ], gk.steps)}`);
+    $main.innerHTML = strip + chart + spend + `<div class="cols-2">${adTable("Meta campaigns today", p.meta)}${adTable("Google Ads campaigns today", p.google)}</div>` + checkout;
     liveTick();
-    document.getElementById("live-mode")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-mode]"); if (b) rgSetMode(b.dataset.mode); });
+    rgScopeBind("live-scope");
     document.getElementById("live-base")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-b]"); if (b) { LIVE.base = b.dataset.b; destroyCharts(); R.live(p); } });
     document.getElementById("live-metric")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-m]"); if (b) { LIVE.metric = b.dataset.m; destroyCharts(); R.live(p); } });
     const canvas = document.getElementById("c-live");
     if (canvas && sh) {
       const ser = sh.curves.series[LIVE.metric], unit = LIVE.metric === "gmv" ? "inr" : "int";
       const labels = sh.curves.hours.map((h) => (h % 12 || 12) + (h < 12 ? "a" : "p"));
-      const compare = ser[LIVE.base === "typical" ? "typical" : "yesterday"];
-      baseChart(canvas, {
-        type: "line",
-        data: { labels, datasets: [
-          { label: baseLabel, data: compare || [], borderColor: css("--muted"), borderDash: [5, 4], borderWidth: 2, pointRadius: 0, tension: 0.25 },
-          { label: "Today", data: ser.today, borderColor: css("--accent"), backgroundColor: css("--accent"), borderWidth: 2.5, pointRadius: 0, tension: 0.25, spanGaps: false },
-        ] },
-      }, unit);
+      baseChart(canvas, { type: "line", data: { labels, datasets: [
+        { label: baseLabel, data: ser[typ ? "typical" : "yesterday"] || [], borderColor: css("--muted"), borderDash: [5, 4], borderWidth: 2, pointRadius: 0, tension: 0.25 },
+        { label: "Today", data: ser.today, borderColor: css("--accent"), backgroundColor: css("--accent"), borderWidth: 2.5, pointRadius: 0, tension: 0.25, spanGaps: false },
+      ] } }, unit);
     }
   };
 
   // ------------------------------------------------------------ routing
   async function show() {
     const ids = state.config.tabs.map((t) => t.id);
+    const ALIAS = { daily: "funnel" }; // old links keep working
+    if (ALIAS[location.hash.slice(1)]) { history.replaceState(null, "", "#" + ALIAS[location.hash.slice(1)]); }
     const want = location.hash.slice(1);
     state.tab = ids.includes(want) ? want : ids[0];
     renderTabs();
     destroyCharts();
     clearInterval(state.liveTimer); clearInterval(state.liveTick);
     $main.innerHTML = '<p class="empty">Loading…</p>';
+    setSub("");
     try {
       const page = await loadPage(state.tab);
       if (!page) throw new Error("This tab has not been built yet.");
@@ -678,6 +618,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       $main.innerHTML = `<section class="card"><h2>The dashboard is not reachable</h2><p>${esc(e.message)}</p></section>`;
       return;
     }
+    Object.assign(METRIC_RULES, state.config.display || {});
     askMount();
     if (!location.hash) { try { const t = localStorage.getItem("asaya-dash-tab"); if (t) history.replaceState(null, "", "#" + t); } catch (e) { /* storage blocked */ } }
     show();
@@ -696,7 +637,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
   const paintToggle = () => {
     const dark = document.documentElement.getAttribute("data-theme") === "dark";
     themeBtn.setAttribute("aria-pressed", String(dark));
-    themeBtn.innerHTML = dark ? "<span aria-hidden=\"true\">☀</span> Light" : "<span aria-hidden=\"true\">☾</span> Dark";
+    themeBtn.innerHTML = dark ? "<span aria-hidden=\"true\">☀</span> <span class=\"tt\">Light</span>" : "<span aria-hidden=\"true\">☾</span> <span class=\"tt\">Dark</span>";
     themeBtn.title = dark ? "Switch to the light theme" : "Switch to the dark theme";
   };
   themeBtn.addEventListener("click", () => {

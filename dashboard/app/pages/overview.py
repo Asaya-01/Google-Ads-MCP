@@ -91,8 +91,10 @@ def build(ctx: Context) -> dict:
         "phase_panel": phase_rows,
         "trend": trend,
         "notes": [
-            "GMV is Shopify Total sales at order level on valid orders (no tests, no cancellations, "
-            "no ASAYASS sample or ASAYAINF influencer orders). Refunds and returns are not subtracted.",
+            "Total sales is Shopify's own Total sales (the Sales report, as on the D-1 Report): gross sales "
+            "minus discounts and returns, plus shipping and taxes, on valid orders (tests, ASAYASS samples and "
+            "ASAYAINF influencer orders left out). Cancelled orders still count as orders, and returns come off "
+            "on the day they are processed, so past days can move slightly.",
             "Pick any dates and any comparison above. Sale days are only compared with sale days and BAU "
             "days with BAU days; changes use per-day averages, so periods of different lengths are fair.",
         ],
