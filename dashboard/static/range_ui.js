@@ -484,7 +484,8 @@ async function rgShell(render) {
 
 R.overview = (p) => {
   RG.tab = "overview";
-  $main.innerHTML = `${pulseHtml(p)}<div id="rg-slot"><p class="empty">Loading the date picker…</p></div><div id="rg-body"></div><section class="card">${notes(p)}</section>`;
+  // no "Yesterday at a glance" here: yesterday is the D-1 tab's job
+  $main.innerHTML = `<div id="rg-slot"><p class="empty">Loading the date picker…</p></div><div id="rg-body"></div><section class="card">${notes(p)}</section>`;
   rgShell(() => {
     document.getElementById("rg-slot").innerHTML = rgBar();
     rgBind();
