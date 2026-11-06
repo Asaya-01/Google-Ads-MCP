@@ -153,7 +153,10 @@ function prTables(pd, g) {
   into(C, "a"); into(P, "b");
   const totalRev = [...C.values()].reduce((t, a) => t + a.rev, 0);
   // variants: the listing's variant (pack, size) and the SKU's own (shade, scent)
-  const vagg = (set) => { const m = new Map(); if (!set || !pd.vrows) return m; for (const [d, vi, u, r] of pd.vrows) { if (!set.has(d)) continue; const v = vmap[vi], gi = groupOf(v.p); const lab = v.full ? v.label : [gi.variant, v.label].filter(Boolean).join(" · ") || "Main listing"; const k = gi.key + "|" + lab; const a = m.get(k) || m.set(k, { gk: gi.key, lab, units: 0, rev: 0 }).get(k); a.units += u; a.rev += r; } return m; };
+  const vagg = (set) => { const m = new Map(); if (!set || !pd.vrows) return m; for (const [d, vi, u, r] of pd.vrows) { if (!set.has(d)) continue; const v = vmap[vi], gi = groupOf(v.p); const lab = v.full ? v.label : [gi.variant, v.label].filter(Boolean).join(" · ") || "Main listing"; const k = gi.key + "|" + lab; const a = m.get(k) || m.set(k, { gk: gi.key, lab, units: 0, rev: 0, opts: {} }).get(k); a.units += u; a.rev += r; if (v.opt) a.opts[v.opt] = (a.opts[v.opt] || 0) + u; } return m; };
+  // under a pack row: its shade / fragrance mix, by units
+  const mixOf = (v) => { const e = Object.entries(v.opts || {}).sort((x, y) => y[1] - x[1]); return e.length > 1 ? e.map(([o, u]) => `${o} ${Math.round((u / v.units) * 100)}%`).join(" · ") : ""; };
+  const packNo = (lab) => { const m = /^Pack of (\d+)/.exec(lab); return m ? +m[1] : null; };
   const VC = vagg(cur), VP = vagg(prev);
   const row = (x) => ({ ...x, units: x.a.units, rev: x.a.rev, share: totalRev ? x.a.rev / totalRev : null, mrpUnit: x.a.uwm ? x.a.mrpv / x.a.uwm : null, landed: prLanded(x.a),
     dUnits: has && x.b.units ? rgAvgChange(x.a.units, cd, x.b.units, pdays) : null, dRev: has && x.b.rev ? rgAvgChange(x.a.rev, cd, x.b.rev, pdays) : null });
@@ -162,7 +165,7 @@ function prTables(pd, g) {
   const mapped = live.filter((r) => !r.unmapped), unm = live.filter((r) => r.unmapped);
   const na = pd.mrp_available ? null : "Shopify product MRPs were not pulled";
   const cols = [
-    { label: "Product", text: true, render: (r) => (r.code ? pmLabel(r.code, r.name) : `<span class="trunc" title="${esc(r.name)}">${esc(r.name)}</span>`) },
+    { label: "Product", text: true, render: (r) => (r.code ? pmLabel(r.code, r.name) : `<span class="trunc" title="${esc(r.name)}">${esc(r.name)}</span>${r.mix ? `<br><span class="sub">${esc(r.mix)}</span>` : ""}`) },
     { label: mHead("units"), render: (r) => esc(mFormat("count", r.units)) },
     ...(has ? [{ label: "Δ units", render: (r) => deltaHtml(r.dUnits, "units", r.b && r.b.units < METRIC_RULES.min_orders) }] : []),
     { label: mHead("product_revenue", "Revenue"), render: (r) => esc(mFormat("currency", r.rev)) },
@@ -175,11 +178,12 @@ function prTables(pd, g) {
   const body = [];
   let n = 0;
   for (const r of mapped) {
-    const kids = [...VC.values()].filter((v) => v.gk === r.key).sort((x, y) => y.rev - x.rev);
+    // pack rows in pack order (Pack of 1, Pack of 2); shade or fragrance rows by revenue
+    const kids = [...VC.values()].filter((v) => v.gk === r.key).sort((x, y) => (packNo(x.lab) != null && packNo(y.lab) != null ? packNo(x.lab) - packNo(y.lab) || x.lab.localeCompare(y.lab) : y.rev - x.rev));
     const id = "pv" + ++n;
     if (kids.length > 1) {
       body.push(tr(r, "grp", `data-grp="${id}" tabindex="0" role="button" aria-expanded="false"`));
-      for (const v of kids) { const pv = VP.get(r.key + "|" + v.lab); body.push(tr({ child: true, name: v.lab, units: v.units, rev: v.rev, share: totalRev ? v.rev / totalRev : null, b: pv, dUnits: has && pv && pv.units ? rgAvgChange(v.units, cd, pv.units, pdays) : null, dRev: has && pv && pv.rev ? rgAvgChange(v.rev, cd, pv.rev, pdays) : null }, "child", `data-parent="${id}" hidden`)); }
+      for (const v of kids) { const pv = VP.get(r.key + "|" + v.lab); body.push(tr({ child: true, name: v.lab, mix: mixOf(v), units: v.units, rev: v.rev, share: totalRev ? v.rev / totalRev : null, b: pv, dUnits: has && pv && pv.units ? rgAvgChange(v.units, cd, pv.units, pdays) : null, dRev: has && pv && pv.rev ? rgAvgChange(v.rev, cd, pv.rev, pdays) : null }, "child", `data-parent="${id}" hidden`)); }
     } else body.push(tr(r, ""));
   }
   if (unm.length) {

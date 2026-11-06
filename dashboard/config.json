@@ -435,6 +435,8 @@
   },
 
   "product_map": {
+    "sold_in_packs": ["UAS", "ITB", "ASS", "EEC", "KNE", "SLSS", "Spot Gel", "SSM", "KOJ"],
+    "sold_in_packs_note": "Products sold as Pack of 1 and Pack of 2: the Products tab splits them by pack. The Shopify catalog decides this on every refresh; this list is the backstop when the catalog pull fails (a SKU-less order line on one of these is its pack of 2).",
     "_about": "Every Shopify product (keyed on its product ID: titles change) under one house code and short name, used on every tab: rows read 'CODE · Short name'. Packs, sizes and old listings of one product sit under it as variants (the value is the variant's name; empty = the main listing). Freebie, merch, book and gummies products are never counted, so they are not here. A product sold but missing here shows as 'Unmapped' and raises a warning in Data health.",
     "products": [
       {
