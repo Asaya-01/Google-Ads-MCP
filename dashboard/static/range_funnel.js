@@ -133,8 +133,8 @@ R.funnel = (p) => {
         ${rgSec("Checkout steps", "GoKwik's checkout, step by step, against the comparison", fnCheckout(g), { comp: "checkout-steps" })}
       </div>
       ${rgSec("Funnel rates by channel", "Shopify last click; rates only (spend and sales are on Marketing)", fnRates(g, "channel", "Channel"), { link: rgLink("marketing", "Spend and sales by channel"), comp: "funnel-rates-by-channel" })}
-      ${rgSec("Day by day", `${rows.length} day${rows.length === 1 ? "" : "s"}, newest first; hover “n/a” for the reason`, table(cols, rows, { maxHeight: "60vh", full: true }), { ctl: '<button type="button" class="rg-btn" id="fn-csv">Download full daily CSV</button>', comp: "daily-table" })}
-      ${rgFold("Funnel by source, campaign or landing page", "sessions through to orders for any of the three", `${dseg}<div id="fn-drill-body">${fnRates(g, FN.drill, drills.find((d) => d[0] === FN.drill)[1])}</div>`, { comp: "funnel-drill" })}`;
+      ${rgSec("Funnel by source, campaign or landing page", "sessions through to orders; pick which", `<div id="fn-drill-body">${fnRates(g, FN.drill, drills.find((d) => d[0] === FN.drill)[1])}</div>`, { ctl: dseg, comp: "funnel-drill" })}
+      ${rgSec("Day by day", `${rows.length} day${rows.length === 1 ? "" : "s"}, newest first; hover “n/a” for the reason`, table(cols, rows, { maxHeight: "60vh", full: true }), { ctl: '<button type="button" class="rg-btn" id="fn-csv">Download full daily CSV</button>', comp: "daily-table" })}`;
     document.getElementById("fn-csv").addEventListener("click", () => fnCsv(p, rows));
     document.getElementById("fn-drill").addEventListener("click", (ev) => {
       const b = ev.target.closest("button[data-d]"); if (!b) return;

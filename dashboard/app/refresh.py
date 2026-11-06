@@ -282,6 +282,18 @@ def collect(
             " (showing the last good copy)" if labels else ""
         )
     data["phase_calendar"] = labels
+    # the media plan's daily targets (Target vs achieved); the last good copy if a read fails
+    try:
+        plan, why = sheets.load_plan(cfg)
+    except Exception as exc:  # never fail the refresh over the targets
+        plan, why = {}, f"{type(exc).__name__}: {exc}"
+    if plan:
+        store.put_json("cache/media_plan.json", plan)
+    else:
+        plan = store.get_json("cache/media_plan.json") or {}
+    if why:
+        data["unavailable"]["media_plan"] = f"Media plan: {why}" + (" (showing the last good copy)" if plan else "")
+    data["media_plan"] = plan
     data["google_id_names"] = _google_id_names(cfg, data, store, gsrc)
     data["reconcile"] = _reconcile(
         cfg, data, d1, d1_date, gsrc, shop, token, missing

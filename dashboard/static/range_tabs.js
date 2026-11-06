@@ -153,7 +153,7 @@ function prTables(pd, g) {
   into(C, "a"); into(P, "b");
   const totalRev = [...C.values()].reduce((t, a) => t + a.rev, 0);
   // variants: the listing's variant (pack, size) and the SKU's own (shade, scent)
-  const vagg = (set) => { const m = new Map(); if (!set || !pd.vrows) return m; for (const [d, vi, u, r] of pd.vrows) { if (!set.has(d)) continue; const v = vmap[vi], gi = groupOf(v.p); const lab = [gi.variant, v.label].filter(Boolean).join(" · ") || "Main listing"; const k = gi.key + "|" + lab; const a = m.get(k) || m.set(k, { gk: gi.key, lab, units: 0, rev: 0 }).get(k); a.units += u; a.rev += r; } return m; };
+  const vagg = (set) => { const m = new Map(); if (!set || !pd.vrows) return m; for (const [d, vi, u, r] of pd.vrows) { if (!set.has(d)) continue; const v = vmap[vi], gi = groupOf(v.p); const lab = v.full ? v.label : [gi.variant, v.label].filter(Boolean).join(" · ") || "Main listing"; const k = gi.key + "|" + lab; const a = m.get(k) || m.set(k, { gk: gi.key, lab, units: 0, rev: 0 }).get(k); a.units += u; a.rev += r; } return m; };
   const VC = vagg(cur), VP = vagg(prev);
   const row = (x) => ({ ...x, units: x.a.units, rev: x.a.rev, share: totalRev ? x.a.rev / totalRev : null, mrpUnit: x.a.uwm ? x.a.mrpv / x.a.uwm : null, landed: prLanded(x.a),
     dUnits: has && x.b.units ? rgAvgChange(x.a.units, cd, x.b.units, pdays) : null, dRev: has && x.b.rev ? rgAvgChange(x.a.rev, cd, x.b.rev, pdays) : null });

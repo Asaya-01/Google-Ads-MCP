@@ -15,7 +15,7 @@
 const GV = {
   scope: "perf", seg: "all", types: [], skus: [], status: "all", min: null, q: "",
   vt: new Set(), mx: "g_roas", g: "camp", cols: "eff", custom: [], cmpv: false,
-  xf: { sku: null, st: null }, exp: new Set(), tabs: {}, dr: null,
+  xf: { sku: null, st: null }, exp: new Set(), expAll: true, tabs: {}, dr: null,
   dm: ["g_roas", "g_cost"], dg: "d", drange: "picked", dview: "chart", sort: { col: null, dir: -1 },
   tf: "all", ix: null, net: new Map(), tables: {}, fsort: {}, more: false, leak: null,
 };
@@ -52,7 +52,9 @@ function gvFromUrl() {
   GV.cmpv = get("cv", "0") === "1";
   const xf = (get("xf", "") || "").split("|");
   GV.xf = { sku: xf[0] || null, st: xf[1] || null };
-  GV.exp = new Set((get("exp", "") || "").split("~").filter(Boolean));
+  // open by default: every campaign shows its ad groups until rows are collapsed
+  GV.expAll = !q.has("exp");
+  GV.exp = new Set((get("exp", "") || "").split("~").filter((x) => x && x !== "-"));
   GV.tabs = Object.fromEntries((get("gt", "") || "").split("~").filter(Boolean).map((x) => [x.slice(0, x.lastIndexOf("=")), x.slice(x.lastIndexOf("=") + 1)]));
   GV.tf = get("tf", "all");
   const dr = get("dr", ""); GV.dr = dr ? { lvl: dr.split(":")[0], id: dr.split(":").slice(1).join(":") } : null;
@@ -71,8 +73,8 @@ function gvToUrl() {
   if (GV.cols === "custom" && GV.custom.length) p.set("cc", GV.custom.join(","));
   if (GV.cmpv) p.set("cv", "1");
   if (GV.xf.sku || GV.xf.st) p.set("xf", `${GV.xf.sku || ""}|${GV.xf.st || ""}`);
-  if (GV.exp.size) p.set("exp", [...GV.exp].join("~"));
-  const gt = Object.entries(GV.tabs).filter(([k]) => GV.exp.has(k)).map(([k, v]) => `${k}=${v}`);
+  if (!GV.expAll) p.set("exp", GV.exp.size ? [...GV.exp].join("~") : "-");
+  const gt = Object.entries(GV.tabs).filter(([k]) => gvOpen(k)).map(([k, v]) => `${k}=${v}`);
   if (gt.length) p.set("gt", gt.join("~"));
   put("tf", GV.tf, "all");
   if (GV.dr) { p.set("dr", `${GV.dr.lvl}:${GV.dr.id}`); p.set("dm", GV.dm.join(",")); put("dg", GV.dg, "d"); put("drg", GV.drange, "picked"); put("dv", GV.dview, "chart"); }
@@ -512,6 +514,15 @@ function gvWatch(pr, ok) {
 }
 
 // ---------------------------------------------------------------- explorer
+/* Rows are open by default down to the ad groups / asset groups; their
+   keyword, search-term, product and asset tabs open on click. */
+function gvOpen(key, lvl) { return GV.exp.has(key) || (GV.expAll && (lvl ? lvl !== "grp" : !/(^|\/)grp:/.test(key))); }
+function gvToggle(key) {
+  if (GV.expAll) { // materialise the default before changing one row
+    const T = GV._tree; GV.exp = new Set(T ? [...T.nodes.values()].filter((n) => n.lvl !== "grp").map((n) => n.key) : []); GV.expAll = false;
+  }
+  if (GV.exp.has(key)) GV.exp.delete(key); else GV.exp.add(key);
+}
 function gvKeyOf(lvl, ci) { const C = GV.ix.C[ci]; return lvl === "type" ? C.type : lvl === "seg" ? C.seg : lvl === "sku" ? C.sku : ci; }
 function gvLabel(lvl, k) {
   const ix = GV.ix;
@@ -577,7 +588,7 @@ function gvValid(n, pr) {
   return out;
 }
 function gvExplorer(pr, ok) {
-  const ix = GV.ix, T = gvTree(pr, ok), cols = gvColsNow(), nc = pr.cur.length, np = pr.prev.length, last = gvLast14(pr.cur);
+  const ix = GV.ix, T = (GV._tree = gvTree(pr, ok)), cols = gvColsNow(), nc = pr.cur.length, np = pr.prev.length, last = gvLast14(pr.cur);
   const prim = GV.scope === "aw" ? "g_cost" : "g_roas", min = GV.min == null ? ix.P.config.min_cost_default : GV.min;
   const sortKey = (n) => (GV.sort.col && METRICS[GV.sort.col] ? gvVal(GV.sort.col, n.a) ?? -Infinity : n.a.cost);
   const sorted = (list) => [...list].sort((x, y) => (GV.sort.col === "name" ? gvLabel(x.lvl, x.k).localeCompare(gvLabel(y.lvl, y.k)) * GV.sort.dir : (sortKey(y) - sortKey(x)) * (GV.sort.col ? -GV.sort.dir : 1)));
@@ -588,8 +599,8 @@ function gvExplorer(pr, ok) {
   };
   const rows = [];
   const emit = (n) => {
-    if (n.a.cost < min && !GV.exp.has(n.key)) return;
-    const children = T.kids.get(n.key) || [], open = GV.exp.has(n.key), label = gvLabel(n.lvl, n.k), warn = gvValid(n, pr);
+    if (n.a.cost < min && !gvOpen(n.key)) return;
+    const children = T.kids.get(n.key) || [], open = gvOpen(n.key, n.lvl), label = gvLabel(n.lvl, n.k), warn = gvValid(n, pr);
     const isGrp = n.lvl === "grp", G = isGrp ? ix.G[n.k] : null, C = n.lvl === "camp" ? ix.C[n.k] : isGrp ? ix.C[G.camp] : null;
     const lvlName = isGrp ? (G.kind === "asg" ? "Asset group" : "Ad group") : GV_LVL[n.lvl];
     const canOpen = isGrp || children.length;
@@ -876,7 +887,8 @@ function gvDraw() {
   const custom = GV.cols === "custom" ? `<details class="mv-picker"><summary>Pick columns (${GV.custom.length}/8)</summary><div>${Object.keys(METRICS).filter((x) => METRICS[x].gv && !(GV.scope === "aw" && GV_PERF_ONLY.has(x))).map((x) => `<label><input type="checkbox" data-gcc="${x}" ${GV.custom.includes(x) ? "checked" : ""}> ${esc(METRICS[x].label)}</label>`).join("")}</div></details>` : "";
   const missing = pr.missing.length ? `<p class="legend-note">Google data is not available for ${esc(rgListDays(pr.missing))}; those days are left out.</p>` : "";
   const un = Object.values(P.unavailable || {});
-  const xctl = `${groupSel}${presets}<label class="mv-cv"><input type="checkbox" id="gv-cv" ${GV.cmpv ? "checked" : ""}> Show comparison values</label>`;
+  const anyClosed = !GV.expAll;
+  const xctl = `<button type="button" class="rg-btn" data-expall="${anyClosed ? "1" : "0"}">${anyClosed ? "Expand all" : "Collapse all"}</button>${groupSel}${presets}<label class="mv-cv"><input type="checkbox" id="gv-cv" ${GV.cmpv ? "checked" : ""}> Show comparison values</label>`;
   host.innerHTML = gvFilterBar(P) + `
     ${gvSecT("kpis", GV.scope === "aw" ? "Awareness" : "Performance", "the campaigns in view; per-day comparison against the matched period", K.html + missing + (un.length ? `<p class="legend-note">${un.map(esc).join(" · ")}</p>` : ""), K.spec, { comp: "google-kpis" })}
     ${SP ? gvSecT("split", "Brand vs Non-brand", "blended Google ROAS hides the split: what brand demand and non-brand prospecting each return", SP.html, SP.spec, { comp: "google-split" }) : ""}
@@ -911,7 +923,8 @@ function gvBind() {
     const xc = t.closest("[data-xclear]"); if (xc) { GV.xf[xc.dataset.xclear] = null; return gvRedraw(); }
     const pc = t.closest("#gv-cols button[data-v]"); if (pc) { GV.cols = pc.dataset.v; return gvRedraw(); }
     const so = t.closest("[data-sort]"); if (so) { const c = so.dataset.sort; GV.sort = GV.sort.col === c ? { col: c, dir: -GV.sort.dir } : { col: c, dir: -1 }; return gvRedraw(); }
-    const tg = t.closest("[data-tog]"); if (tg) { const k = tg.dataset.tog; if (GV.exp.has(k)) GV.exp.delete(k); else GV.exp.add(k); return gvRedraw(); }
+    const tg = t.closest("[data-tog]"); if (tg) { gvToggle(tg.dataset.tog); return gvRedraw(); }
+    const ea = t.closest("[data-expall]"); if (ea) { GV.expAll = ea.dataset.expall === "1"; GV.exp = new Set(); return gvRedraw(); }
     const ptab = t.closest("[data-ptab]"); if (ptab) { GV.tabs[ptab.dataset.ptab] = ptab.dataset.v; return gvRedraw(); }
     const tf = t.closest("[data-tf]"); if (tf) { GV.tf = tf.dataset.tf; return gvRedraw(); }
     if (t.closest('[data-act="more"]')) { GV.more = !GV.more; return gvRedraw(); }
@@ -922,7 +935,7 @@ function gvBind() {
   });
   host.addEventListener("change", (ev) => {
     const t = ev.target;
-    if (t.id === "gv-g") { GV.g = t.value; GV.exp = new Set(); return gvRedraw(); }
+    if (t.id === "gv-g") { GV.g = t.value; GV.exp = new Set(); GV.expAll = true; return gvRedraw(); }
     if (t.id === "gv-cv") { GV.cmpv = t.checked; return gvRedraw(); }
     if (t.id === "gv-min") { GV.min = Math.max(0, +t.value || 0); return gvRedraw(); }
     if (t.dataset.sku) { const v = t.dataset.sku; GV.skus = t.checked ? [...new Set([...GV.skus, v])] : GV.skus.filter((x) => x !== v); return gvRedraw(); }
@@ -934,7 +947,7 @@ function gvBind() {
     const row = ev.target.closest && ev.target.closest("tr.mv-row, tr[data-open]");
     if (!row) return;
     if (ev.key === "ArrowDown" || ev.key === "ArrowUp") { ev.preventDefault(); const sib = ev.key === "ArrowDown" ? row.nextElementSibling : row.previousElementSibling; if (sib && sib.tabIndex >= 0) sib.focus(); }
-    else if (ev.key === "Enter" && row.dataset.k) { ev.preventDefault(); const k = row.dataset.k; if (GV.exp.has(k)) GV.exp.delete(k); else GV.exp.add(k); gvRedraw(); document.querySelector(`#gv-x tr.mv-row[data-k="${CSS.escape(k)}"]`)?.focus(); }
+    else if (ev.key === "Enter" && row.dataset.k) { ev.preventDefault(); const k = row.dataset.k; gvToggle(k); gvRedraw(); document.querySelector(`#gv-x tr.mv-row[data-k="${CSS.escape(k)}"]`)?.focus(); }
     else if (ev.key === " " || (ev.key === "Enter" && row.dataset.open)) { ev.preventDefault(); const v = row.dataset.dr || row.dataset.open; if (v) { GV.dr = { lvl: v.split(":")[0], id: v.split(":").slice(1).join(":") }; gvRedraw(); } }
   });
 }

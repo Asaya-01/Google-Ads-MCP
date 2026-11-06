@@ -1193,6 +1193,22 @@
       "note": "Ask Claude's mic: Google Cloud Speech-to-Text in this project (app/voice.py), with the dashboard's vocabulary boosted. Falls back to the browser's own speech recognition if the API is not reachable."
     }
   },
+  "media_plan": {
+    "_about": "Target vs achieved: the daily Target Spend and Target GMV of each channel block in the monthly media-plan workbooks ('Target vs Achieved' tab; the same workbooks as SPEND_SHEET_REDDIT). Only targets are read: achieved is the dashboard's own numbers, so it matches every tab. The store row compares Total sales with Performance spend; channel rows compare their performance spend with their platform-attributed revenue (Meta, Google), or the revenue their sheet records (CRM, affiliates). Reddit has no revenue.",
+    "sheet_env": "SPEND_SHEET_REDDIT",
+    "tab": "Target vs Achieved",
+    "date_format": ["%d-%b-%Y", "%d-%b-%y"],
+    "blocks": {"store": "SHOPIFY", "meta": "META", "google": "GOOGLE", "reddit": "REDDIT", "crm_flow": "CRM FLOW", "crm_broadcast": "CRM BROADCAST", "affiliate": "AFFILIATES"},
+    "achieved": {
+      "store": {"label": "Store (all channels)", "spend": "perf_all_spend", "revenue": "gmv", "revenue_label": "Total sales"},
+      "meta": {"label": "Meta", "spend": "meta_perf_spend", "revenue": "meta_perf_value", "revenue_label": "Platform revenue"},
+      "google": {"label": "Google", "spend": "google_perf_spend", "revenue": "google_perf_value", "revenue_label": "Platform conv. value"},
+      "reddit": {"label": "Reddit", "spend": "reddit_spend", "revenue": null, "revenue_label": "No revenue source"},
+      "crm_flow": {"label": "CRM flow", "spend": "crm_flow_spend", "revenue": "crm_flow_revenue", "revenue_label": "Revenue (CRM sheet)"},
+      "crm_broadcast": {"label": "CRM broadcast", "spend": "crm_broadcast_spend", "revenue": "crm_broadcast_revenue", "revenue_label": "Revenue (CRM sheet)"},
+      "affiliate": {"label": "Affiliates", "spend": "affiliate_spend", "revenue": "affiliate_revenue", "revenue_label": "Revenue (affiliate sheet)"}
+    }
+  },
   "google_view": {
     "_about": "Marketing › Google. Tags (computed once in app/google_model.py): scope from the awareness rule; sub_type = taxonomy.google_groups (the Marketing tree's split); segment Brand for brand_sub_types, else Non-brand; campaign_type from Google's channel type (or from the sub_type while the status report is off); SKU from the ad group or asset group name, then the campaign name (the shared meta_view.sku_codes, whole tokens), and per product from the Shopping product report (item shopify_zz_<product id>_<variant id>, mapped through product_map) where that report is on. Conversions and value are the purchase action only (conversion-action category in purchase_categories); other actions (an awareness campaign's add-to-cart) are kept apart. Conversions are by click (interaction) date, data-driven attribution.",
     "purchase_categories": ["PURCHASE"],

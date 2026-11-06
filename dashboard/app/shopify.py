@@ -347,6 +347,7 @@ class Shopify:
         }"""
         by_sku: dict[str, float] = {}
         titles: dict[str, str] = {}
+        variants: dict[str, list] = {}
         by_product: dict[str, set] = {}
         types: dict[str, int] = {}
         products_seen: set[str] = set()
@@ -364,6 +365,9 @@ class Shopify:
                     by_sku[v["sku"].strip()] = mrp
                 if v.get("sku") and v.get("title"):
                     titles[v["sku"].strip()] = v["title"]
+                variants.setdefault(pid, []).append(
+                    [(v.get("sku") or "").strip(), v.get("title") or ""]
+                )
                 by_product.setdefault(pid, set()).add(mrp)
                 if pid not in products_seen:
                     products_seen.add(pid)
@@ -386,6 +390,11 @@ class Shopify:
             # Variant title per SKU ("Berry Crush / 100 ml"), used by the
             # retention census to tell fragrances, shades and packs apart.
             "variant_titles": titles,
+            # Every listing's variants as [sku, title]: an order line names
+            # only its product and SKU, so this tells which variant (pack,
+            # size, shade) it was; a variant with no SKU is found as the
+            # listing's only SKU-less one.
+            "variants_by_product": variants,
         }
 
     def orders_count_through(self, day: str) -> int:

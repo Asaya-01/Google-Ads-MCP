@@ -81,7 +81,7 @@ R.d1 = (p) => {
   RG.tab = "d1";
   $main.innerHTML = `<div id="rg-body"><p class="empty">Loading…</p></div>`;
   rgShell(async () => {
-    try { for (const pg of ["channel_days", "product_days", "campaign_days", "meta_tree", "google_tree"]) await loadPage(pg); } catch (err) { /* sections say what is missing */ }
+    for (const pg of ["channel_days", "product_days", "campaign_days", "meta_tree", "google_tree", "plan_days"]) { try { await loadPage(pg); } catch (err) { /* sections say what is missing */ } }
     if (state.tab !== "d1") return;
     const e = RG.eng, d1 = p.as_of && e.inData([p.as_of]).length ? p.as_of : e.last;
     const D = d1Day(d1), kw = D.kind === "sale" ? "sale" : "BAU";
@@ -119,7 +119,7 @@ R.d1 = (p) => {
       </div>
       ${rgSec("Channels", "spend, Platform ROAS and Shopify last-click results, one row per channel", recon, { link: rgLink("marketing", "Full channel table"), comp: "d1-channel-summary" })}
       ${rgSec("Meta by stage", "TOF, MOF, BOF and Catalog: spend and Platform ROAS", stages, { link: rgLink("marketing?sub=meta", "Meta view"), comp: "d1-meta-stages" })}
-      ${p.targets ? rgSec("Target vs achieved", "this month against the media plan", rgTargets(p.targets)) : ""}
+      ${rgSec("Target vs achieved", `this month so far (${esc(rgSpan(e.monthStart(d1), d1))}) against the media plan`, rgTargets(e.monthStart(d1), d1), { comp: "d1-targets" })}
       <section class="card">${d1Links()}</section>`;
     document.getElementById("d1-view").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-v]"); if (b && b.dataset.v !== D1.view) { D1.view = b.dataset.v; destroyCharts(); R.d1(p); } });
     document.getElementById("d1-phase")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-ph]"); if (b) { MK.phase = b.dataset.ph; R.d1(p); } });

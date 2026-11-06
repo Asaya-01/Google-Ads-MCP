@@ -397,3 +397,73 @@ def load_all(cfg: dict) -> tuple[dict, dict]:
             failed[name] = f"{type(exc).__name__}: {exc}"
     apply_follow(out, specs)
     return out, failed
+
+
+# ------------------------------------------------------------------ the media plan
+
+
+def plan_columns(rows: list[list], label: str) -> tuple[int, int | None, int | None] | None:
+    """A channel block's (header row, Target Spend column, Target GMV
+    column) in the monthly "Target vs Achieved" tab, found by the block's
+    name above them (the columns move from month to month)."""
+    want = label.strip().upper()
+    for r in range(min(len(rows), 6)):
+        for c, cell in enumerate(rows[r]):
+            if str(cell).strip().upper() != want:
+                continue
+            for hr in range(r, min(len(rows), r + 4)):
+                spend = gmv = None
+                for k in range(c, min(c + 12, len(rows[hr]))):
+                    t = str(rows[hr][k]).lower()
+                    if "target" in t and "spend" in t and spend is None:
+                        spend = k
+                    if "target" in t and ("gmv" in t or "revenue" in t) and "net" not in t and gmv is None:
+                        gmv = k
+                if spend is not None or gmv is not None:
+                    return hr, spend, gmv
+    return None
+
+
+def parse_plan(rows: list[list], spec: dict) -> dict[str, dict]:
+    """{date: {block key: [target spend, target GMV]}} from one workbook."""
+    out: dict[str, dict] = {}
+    for key, label in spec["blocks"].items():
+        found = plan_columns(rows, label)
+        if not found:
+            continue
+        hr, sc, gc = found
+        state: dict = {}
+        for row in rows[hr + 1 :]:
+            if not row:
+                continue
+            day = parse_date(row[0], spec["date_format"], state)
+            if not day:
+                continue
+            spend = to_number(row[sc]) if sc is not None and sc < len(row) else None
+            gmv = to_number(row[gc]) if gc is not None and gc < len(row) else None
+            if spend is None and gmv is None:
+                continue
+            out.setdefault(day.isoformat(), {})[key] = [spend, gmv]
+    return out
+
+
+def load_plan(cfg: dict) -> tuple[dict, str | None]:
+    """The monthly targets from every media-plan workbook: ({date: {block:
+    [spend, gmv]}}, reason it could not be read or None). Only the Target
+    columns are read; achieved numbers come from the dashboard's own data."""
+    spec = cfg.get("media_plan")
+    if not spec:
+        return {}, None
+    raw = os.environ.get(spec["sheet_env"]) or ""
+    ids = [x.strip() for x in raw.split(",") if x.strip()]
+    if not ids:
+        return {}, f"no media-plan workbooks set ({spec['sheet_env']})"
+    out: dict[str, dict] = {}
+    errors = []
+    for i in ids:
+        try:
+            for day, blocks in parse_plan(fetch_rows(i, spec["tab"], 1), spec).items():
+                out.setdefault(day, {}).update(blocks)
+        except Exception as exc:
+            errors.append(f"{type(exc).__name__}: {exc}")
+    return out, "; ".join(errors) or None

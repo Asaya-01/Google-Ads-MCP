@@ -283,6 +283,7 @@ def test_every_phase1_tab_builds_and_serialises(built_without_meta):
         "google_search",
         "google_products",
         "google_assets",
+        "plan_days",
         "drill_days",
         "region",
         "region_days",

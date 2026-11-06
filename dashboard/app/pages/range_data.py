@@ -46,6 +46,7 @@ def _google_campaign(name: str, aware: bool, cfg: dict) -> dict:
     }
 
 
+from .. import variants as variants_mod
 from .products import _mrp
 
 
@@ -147,6 +148,21 @@ def products(ctx: Context) -> dict:
     # variants (shade, scent, size) under each product, by SKU: the Products
     # tab expands a product into these; their sums are the product's row
     titles = (catalog or {}).get("variant_titles") or {}
+    by_pid = (catalog or {}).get("variants_by_product")
+    # the product map's listing name and house code for each Shopify product
+    pm_listing, pm_code = {}, {}
+    for p in ctx.cfg.get("product_map", {}).get("products", []):
+        for pid, name in (p.get("ids") or {}).items():
+            pm_listing[str(pid)], pm_code[str(pid)] = name or "", p["code"]
+    # products sold in more than one pack size: their labels say the pack
+    multi: set[str] = set()
+    for pid, rows in (by_pid or {}).items():
+        packs = {variants_mod.parse(t, pm_listing.get(pid, ""))["pack"] for _, t in rows}
+        if max(packs, default=1) > 1:
+            multi.add(pm_code.get(pid, pid))
+    for pid, name in pm_listing.items():
+        if variants_mod.parse("", name)["pack"] > 1:
+            multi.add(pm_code[pid])
     variants: list[dict] = []
     vindex: dict[tuple, int] = {}
     vagg: dict[tuple, list] = {}
@@ -177,11 +193,20 @@ def products(ctx: Context) -> dict:
         sku = (r.get("sku") or "").strip()
         vk = (index[pid], sku)
         if vk not in vindex:
-            vt = titles.get(sku, "")
             vindex[vk] = len(variants)
-            variants.append(
-                {"p": index[pid], "sku": sku, "label": "" if vt == "Default Title" else vt}
-            )
+            if by_pid is not None:
+                # the full, readable label: "Pack of 2 · 50 g each"
+                listing = pm_listing.get(pid, "")
+                vt = variants_mod.find_title(pid, sku, catalog)
+                lab = variants_mod.label(
+                    variants_mod.parse(vt or "", listing), listing, pm_code.get(pid, pid) in multi
+                ) if vt is not None or listing else "Variant not in the Shopify catalog"
+                variants.append({"p": index[pid], "sku": sku, "label": lab, "full": True})
+            else:  # catalog from before variants were kept: the old labels
+                vt = titles.get(sku, "")
+                variants.append(
+                    {"p": index[pid], "sku": sku, "label": "" if vt == "Default Title" else vt}
+                )
         v = vagg.setdefault((r["date"], vindex[vk]), [0, 0.0])
         v[0] += r["units"]
         v[1] += r["revenue"]

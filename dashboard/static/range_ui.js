@@ -384,14 +384,43 @@ function rgDayChart(canvasId, key, unit, label) {
 }
 const rgDayLegend = () => legend([["--series-1", "BAU day"], ["--series-2", "Sale day"], ...(rgCmpDays().length ? [["--ink-2", "Comparison (dashed)"]] : [])]);
 
-/* Target vs achieved: waiting for the media-plan pull. Built against its final
-   shape so it only needs wiring:
-   { month, sales: {target, achieved}, spend: {target, achieved}, roas: {target, achieved},
-     pacing: [{date, budget, actual}] } */
-function rgTargets(t) {
-  if (!t) return `<div class="placeholder"><b>Target vs achieved</b>Monthly Total sales, spend and ROAS targets ("Target vs Achieved") and daily pacing ("Day wise Budget") appear here once the media-plan sheet is pulled.</div>`;
-  const row = (id, label, x) => { const pct = x && x.target ? x.achieved / x.target : null; return `<tr><td class="text">${esc(label)}</td><td>${esc(mVal(id, x && x.target) ?? "–")}</td><td>${esc(mVal(id, x && x.achieved) ?? "–")}</td><td>${esc(mFormat("percent", pct) ?? "–")}</td></tr>`; };
-  return `<div class="table-wrap fit"><table><thead><tr><th class="text">${esc(t.month)}</th><th>Target</th><th>Achieved</th><th>Of target</th></tr></thead><tbody>${row("total_sales", "Total sales", t.sales)}${row("perf_spend", "Performance spend", t.spend)}${row("blended_roas", "Blended ROAS", t.roas)}</tbody></table></div>`;
+/* Target vs achieved: the media plan's daily targets (plan_days, from the
+   'Target vs Achieved' tab of the monthly workbooks) summed over the dates,
+   against the dashboard's own numbers for the same days, so achieved always
+   matches every other tab. The sheet's typed-in actuals are never used.
+   Ratios come from the summed numbers. */
+const RG_PLAN_ORDER = ["store", "meta", "google", "reddit", "crm_flow", "crm_broadcast", "affiliate"];
+function rgTargets(from, to) {
+  const P = state.pages.plan_days, D = RG.raw;
+  if (!P || !P.days || !Object.keys(P.days).length) return `<p class="na">Data unavailable: ${esc((P && P.na) || "the media-plan targets have not been read yet")}.</p>`;
+  const planDays = Object.keys(P.days).sort(), di = new Map(D.dates.map((d, i) => [d, i]));
+  const days = D.dates.filter((d) => d >= from && d <= to), planned = days.filter((d) => P.days[d]);
+  if (!planned.length) return `<p class="na">The media plan has no targets for ${esc(rgSpan(from, to))}; it covers ${esc(rgSpan(planDays[0], planDays[planDays.length - 1]))}.</p>`;
+  const sumF = (f, list) => { if (!f || !D.values[f]) return { v: null, miss: list.length }; let t = 0, miss = 0; for (const d of list) { const i = di.get(d), v = i == null ? null : D.values[f][i]; if (v == null) miss++; else t += v; } return { v: miss === list.length ? null : t, miss }; };
+  const sumP = (k, j, list) => { let t = 0, n = 0; for (const d of list) { const x = (P.days[d] || {})[k]; if (x && x[j] != null) { t += x[j]; n++; } } return n ? t : null; };
+  const pct = (a, t) => (a != null && t ? a / t : null);
+  const cls = (r, good) => (r == null ? "" : good === "neutral" ? "flat" : r >= 1 ? "up" : r >= 0.9 ? "flat" : "down");
+  const rows = RG_PLAN_ORDER.filter((k) => P.achieved[k] && planned.some((d) => P.days[d][k])).map((k) => {
+    const A = P.achieved[k], ts = sumP(k, 0, planned), tr = sumP(k, 1, planned), as = sumF(A.spend, planned), ar = A.revenue ? sumF(A.revenue, planned) : { v: null, miss: 0 };
+    return { k, A, ts, tr, as: as.v, ar: ar.v, miss: Math.max(as.miss, A.revenue ? ar.miss : 0), troas: ts ? (tr || 0) / ts : null, aroas: as.v && ar.v != null ? ar.v / as.v : null };
+  });
+  const money = (v) => esc(v == null ? "—" : mFormat("currency", v));
+  const pc = (r, good) => (r == null ? '<span class="cell-na">—</span>' : `<span class="${cls(r, good)}">${esc(mFormat("percent", r))}</span>`);
+  const body = rows.map((r) => `<tr class="${r.k === "store" ? "total" : ""}"><td class="text"><b>${esc(r.A.label)}</b><br><span class="sub">${esc(r.A.revenue_label)}</span>${r.miss ? ` <span class="mv-warn" title="${r.miss} of ${planned.length} days have no achieved number yet (a spend sheet not filled in)">⚠</span>` : ""}</td>
+    <td>${money(r.ts)}</td><td>${money(r.as)}</td><td>${pc(pct(r.as, r.ts), "neutral")}</td>
+    <td>${money(r.tr)}</td><td>${r.A.revenue ? money(r.ar) : '<span class="cell-na" title="No revenue source for this channel">—</span>'}</td><td>${r.A.revenue ? pc(pct(r.ar, r.tr), "higher") : '<span class="cell-na">—</span>'}</td>
+    <td>${esc(r.troas == null ? "—" : mFormat("ratio", r.troas))}</td><td>${r.aroas == null ? '<span class="cell-na">—</span>' : `<span class="${cls(r.troas ? r.aroas / r.troas : null, "higher")}">${esc(mFormat("ratio", r.aroas))}</span>`}</td></tr>`).join("");
+  // the whole month of `to`: where the store stands against the month's plan
+  const month = to.slice(0, 7), mDays = planDays.filter((d) => d.startsWith(month)), done = mDays.filter((d) => d <= to && di.has(d)), left = mDays.filter((d) => d > to);
+  let monthLine = "";
+  if (mDays.length && P.achieved.store) {
+    const S = P.achieved.store, mt = sumP("store", 1, mDays), ms = sumP("store", 0, mDays), ma = sumF(S.revenue, done).v, msa = sumF(S.spend, done).v;
+    const need = left.length && mt != null && ma != null ? Math.max(0, mt - ma) / left.length : null;
+    monthLine = `<p class="legend-note">${esc(new Date(month + "-01T00:00:00Z").toLocaleString("en-IN", { month: "long", timeZone: "UTC" }))} plan: Total sales <b>${money(mt)}</b>, ${money(ma)} achieved through ${esc(rgFmtDay(done[done.length - 1] || to, true))} (<b>${esc(mFormat("percent", pct(ma, mt)) ?? "—")}</b> of the month with ${done.length} of ${mDays.length} days gone); Performance spend <b>${money(ms)}</b>, ${money(msa)} spent (${esc(mFormat("percent", pct(msa, ms)) ?? "—")}).${need == null ? "" : need > 0 ? ` To reach the month: <b>${money(need)}</b> of Total sales a day over the ${left.length} day${left.length === 1 ? "" : "s"} left.` : " The month's Total sales target is already reached."}</p>`;
+  }
+  const cover = planned.length < days.length ? ` The plan covers ${planned.length} of the ${days.length} days picked; only those are compared.` : "";
+  return `<div class="table-wrap"><table><thead><tr><th class="text" scope="col">Channel</th><th scope="col">Target spend</th><th scope="col">Spend</th><th scope="col">Of target</th><th scope="col">Target revenue</th><th scope="col">Revenue</th><th scope="col">Of target</th><th scope="col">Target ROAS</th><th scope="col">ROAS</th></tr></thead><tbody>${body}</tbody></table></div>
+    ${monthLine}<p class="legend-note">Targets: the media-plan workbook's 'Target vs Achieved' tab, summed over ${esc(rgSpan(planned[0], planned[planned.length - 1]))}. Achieved: the dashboard's own numbers for the same days (Total sales from Shopify; Meta and Google revenue as their platforms attribute it; CRM and affiliate revenue from their sheets). Performance spend only.${cover}${P.na ? " " + esc(P.na) + "." : ""}</p>`;
 }
 
 async function rgShell(render) {
@@ -457,7 +486,7 @@ R.overview = (p) => {
   $main.innerHTML = `<div id="rg-body"><p class="empty">Loading…</p></div>`;
   rgShell(async () => {
     setSub(rgBar()); rgBind();
-    try { for (const pg of ["channel_days", "product_days"]) await loadPage(pg); } catch (err) { /* What changed says less */ }
+    for (const pg of ["channel_days", "product_days", "plan_days"]) { try { await loadPage(pg); } catch (err) { /* the sections say what is missing */ } }
     if (state.tab !== "overview") return;
     const e = RG.eng, c = e.compare(RG.from, RG.to, RG.cmp), g = rgPick(c);
     const host = document.getElementById("rg-body");
@@ -472,7 +501,7 @@ R.overview = (p) => {
       <section class="card" data-component="overview-kpis"><div class="kpis six">${kpis}</div>${g.note ? `<p class="legend-note">${esc(g.note)}</p>` : ""}</section>
       ${rgSec("What changed", "the biggest movers behind the change, each linked to its detail", changed, { comp: "what-changed" })}
       ${rgSec(OV.metric === "gmv" ? "Total sales per day" : "Orders per day", "each day of the picked dates", `${rgDayLegend()}<div class="chart-box"><canvas id="c-ov" aria-label="${OV.metric === "gmv" ? "Total sales" : "Orders"} per day"></canvas></div>`, { ctl: mseg, comp: "sales-per-day-chart" })}
-      ${(state.config.targets || {}).placeholder === false ? "" : rgTargets(p.targets || null)}`;
+      ${rgSec("Target vs achieved", `the media plan for ${esc(rgSpan(RG.from, RG.to))}, every day picked`, rgTargets(RG.from, RG.to), { comp: "targets" })}`;
     rgDayChart("c-ov", OV.metric, OV.metric === "gmv" ? "inr" : "int", OV.metric === "gmv" ? "Total sales" : "Orders");
     document.getElementById("ov-metric").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-m]"); if (b && b.dataset.m !== OV.metric) { OV.metric = b.dataset.m; destroyCharts(); R.overview(p); } });
   });

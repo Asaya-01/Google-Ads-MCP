@@ -433,6 +433,7 @@ def page(tab: str, user: str = Depends(current_user)):
         "google_search",
         "google_products",
         "google_assets",
+        "plan_days",
     }:
         raise HTTPException(404, "No such tab")
     payload = store().get_json(f"pages/{tab}.json")
