@@ -156,6 +156,7 @@ def products(ctx: Context) -> dict:
     # per house code: sold in more than one pack? in how many sizes?
     multi: set[str] = set()
     sizes: dict[str, set] = {}
+    single_size: dict[str, dict] = {}  # code -> {size: count} of single-pack variants
     for pid, rows in (by_pid or {}).items():
         code = pm_code.get(pid, pid)
         for sk, t in rows:
@@ -164,6 +165,9 @@ def products(ctx: Context) -> dict:
                 multi.add(code)
             if v["size"]:
                 sizes.setdefault(code, set()).add(v["size"])
+                if v["pack"] == 1 and not (variants_mod._sku_pack(sk) or 0) > 1:
+                    d = single_size.setdefault(code, {})
+                    d[v["size"]] = d.get(v["size"], 0) + 1
     for pid, name in pm_listing.items():
         if variants_mod.parse("", name)["pack"] > 1:
             multi.add(pm_code[pid])
@@ -202,9 +206,9 @@ def products(ctx: Context) -> dict:
             code = pm_code.get(pid, pid)
             res = variants_mod.resolve(pid, sku, catalog, pm_listing.get(pid, ""), code in multi)
             variants.append({
-                "p": index[pid], "sku": sku, "full": True,
-                "label": variants_mod.row_label(res, code in multi, len(sizes.get(code, ()))),
-                "pack": res["pack"], "opt": res["option"] if code in multi else "", "how": res["how"],
+                "p": index[pid], "sku": sku, "full": True, "code": code,
+                "pack": res["pack"], "size": res["size"], "opt": res["option"] if code in multi else "",
+                "how": res["how"], "_res": res,
             })
         v = vagg.setdefault((r["date"], vindex[vk]), [0, 0.0])
         v[0] += r["units"]
@@ -214,6 +218,19 @@ def products(ctx: Context) -> dict:
             a[2] += mrp * r["units"]
             a[3] += r["units"]
             a[4] += r["revenue"]
+    # labels once every line is resolved: a pack-of-2 line with no size
+    # takes the product's single-pack size ("50g" -> "50g x 2")
+    line_sizes: dict[str, list] = {}
+    for v in variants:
+        if "_res" in v and v["pack"] == 1 and v["size"]:
+            line_sizes.setdefault(v["code"], []).append(v["size"])
+    for v in variants:
+        if "_res" not in v:
+            continue
+        res, code = v.pop("_res"), v.pop("code")
+        seen, found = single_size.get(code) or {}, line_sizes.get(code) or []
+        base = max(seen, key=seen.get) if seen else (max(set(found), key=found.count) if found else None)
+        v["label"] = variants_mod.row_label(res, code in multi, base)
     rows = [
         [d, i, a[0], round(a[1], 2), round(a[2], 2), a[3], round(a[4], 2)]
         for (d, i), a in sorted(agg.items())

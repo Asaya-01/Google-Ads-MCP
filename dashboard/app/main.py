@@ -147,6 +147,7 @@ def public_config():
         ],
         "display": settings.config().get("display", {}),
         "product_map": settings.config().get("product_map", {}).get("products", []),
+        "sold_in_packs": settings.config().get("product_map", {}).get("sold_in_packs", []),
         "phase_overrides": settings.config().get("phases", {}).get("overrides", {}),
         "live_flag": settings.config().get("live", {}).get("flag_spend_without_return", {}),
         "checkout": {

@@ -141,6 +141,37 @@ function prKpis(pd, sl, g) {
     k("items_per_order", ipo, pipo, rel(ipo, pipo)), k("multi_item_share", mis, pmis, rel(mis, pmis)),
     kpiCard("landed_discount", { value: ld, prev: prev ? pld : null, change: rel(ld, pld), small, na: pd.mrp_available ? "no MRP for these units" : "Shopify product MRPs were not pulled" })].join("");
 }
+/* Variant labels from an older product_days page (before the pack fix):
+   the Shopify variant title by SKU and the product map's listing name. A
+   SKU-less line of a product sold in packs is its pack of 2; a pack of 2
+   with no size takes the single pack's size. Same rules as app/variants.py. */
+const PR_SIZE = /(\d+(?:\.\d+)?)\s*(ml|g)\b/i, PR_X = /\s*[x×]\s*(\d+)\s*$/i, PR_PACK = /pack\s*of\s*(\d+)/i;
+function prVariantLabels(pd, vmap, groupOf) {
+  const packs = new Set(state.config.sold_in_packs || []);
+  const parsed = vmap.map((v) => {
+    const gi = groupOf(v.p), multi = !!gi.code && packs.has(gi.code);
+    if (v.full) return { gk: gi.key, multi, label: v.label, opt: v.opt || "", done: true };
+    const listing = gi.variant || "", t = /^default title$/i.test(v.label || "") ? "" : (v.label || "").trim();
+    let pack = null, size = null; const opt = [];
+    for (let part of t.split("/").map((x) => x.trim()).filter(Boolean)) {
+      const pm = PR_PACK.exec(part); if (pm) { pack = +pm[1]; part = part.replace(PR_PACK, "").replace(/^[\s\-·]+|[\s\-·]+$/g, ""); if (!part) continue; }
+      const xm = PR_X.exec(part); if (xm) { pack = +xm[1]; part = part.replace(PR_X, ""); }
+      const sm = PR_SIZE.exec(part); if (sm && sm[0].length >= part.trim().length - 1) size = sm[1] + sm[2].toLowerCase(); else opt.push(part);
+    }
+    if (pack == null && PR_PACK.test(listing)) pack = +PR_PACK.exec(listing)[1];
+    if (!size && PR_SIZE.test(listing)) { const m = PR_SIZE.exec(listing); size = m[1] + m[2].toLowerCase(); }
+    if (pack == null) pack = !t && !listing && !v.sku && multi ? 2 : /(?:x\s*|pack\s*_?(?:of)?\s*_?|set\s*of\s*)2\s*$/i.test(v.sku || "") ? 2 : 1;
+    return { gk: gi.key, multi, pack, size, opt: opt.join(" · "), title: t };
+  });
+  // the single pack's size per product, for a pack of 2 that does not say its size
+  const base = new Map();
+  for (const x of parsed) if (!x.done && x.multi && x.pack === 1 && x.size) { const m = base.get(x.gk) || base.set(x.gk, new Map()).get(x.gk); m.set(x.size, (m.get(x.size) || 0) + 1); }
+  return parsed.map((x) => {
+    if (x.done) return x;
+    if (x.multi) { const b = base.get(x.gk), size = x.size || (b ? [...b.entries()].sort((a, c) => c[1] - a[1])[0][0] : null); return { ...x, label: size ? (x.pack === 1 ? size : `${size} x ${x.pack}`) : x.pack === 1 ? "Single" : `Pack of ${x.pack}`, opt: x.opt }; }
+    return { ...x, label: x.opt || x.size || x.title || "Single variant", opt: "" };
+  });
+}
 function prTables(pd, g) {
   const { cur, prev, cd, pd: pdays } = rgDaysOf(g);
   const has = !!prev;
@@ -152,11 +183,14 @@ function prTables(pd, g) {
   const into = (m, which) => { for (const [i, a] of m) { const gi = groupOf(i), x = groups.get(gi.key) || groups.set(gi.key, { ...gi, a: { units: 0, rev: 0, mrpv: 0, uwm: 0, rwm: 0 }, b: { units: 0, rev: 0, mrpv: 0, uwm: 0, rwm: 0 }, idx: new Set() }).get(gi.key); x.idx.add(i); for (const f in a) x[which][f] += a[f]; } };
   into(C, "a"); into(P, "b");
   const totalRev = [...C.values()].reduce((t, a) => t + a.rev, 0);
-  // variants: the listing's variant (pack, size) and the SKU's own (shade, scent)
-  const vagg = (set) => { const m = new Map(); if (!set || !pd.vrows) return m; for (const [d, vi, u, r] of pd.vrows) { if (!set.has(d)) continue; const v = vmap[vi], gi = groupOf(v.p); const lab = v.full ? v.label : [gi.variant, v.label].filter(Boolean).join(" · ") || "Main listing"; const k = gi.key + "|" + lab; const a = m.get(k) || m.set(k, { gk: gi.key, lab, units: 0, rev: 0, opts: {} }).get(k); a.units += u; a.rev += r; if (v.opt) a.opts[v.opt] = (a.opts[v.opt] || 0) + u; } return m; };
+  // variants: one row per pack ("30ml", "30ml x 2") for products sold in packs,
+  // else per shade or scent. Pages built since the pack fix carry the label;
+  // an older page is read the same way here from its raw pieces.
+  const vlab = prVariantLabels(pd, vmap, groupOf);
+  const vagg = (set) => { const m = new Map(); if (!set || !pd.vrows) return m; for (const [d, vi, u, r] of pd.vrows) { if (!set.has(d)) continue; const v = vmap[vi], gi = groupOf(v.p); const lab = vlab[vi].label; const k = gi.key + "|" + lab; const a = m.get(k) || m.set(k, { gk: gi.key, lab, units: 0, rev: 0, opts: {} }).get(k); a.units += u; a.rev += r; if (vlab[vi].opt) a.opts[vlab[vi].opt] = (a.opts[vlab[vi].opt] || 0) + u; } return m; };
   // under a pack row: its shade / fragrance mix, by units
   const mixOf = (v) => { const e = Object.entries(v.opts || {}).sort((x, y) => y[1] - x[1]); return e.length > 1 ? e.map(([o, u]) => `${o} ${Math.round((u / v.units) * 100)}%`).join(" · ") : ""; };
-  const packNo = (lab) => { const m = /^Pack of (\d+)/.exec(lab); return m ? +m[1] : null; };
+  const packNo = (lab) => { const m = /^(?:Pack of (\d+)|\S+ x (\d+)|(\d+(?:\.\d+)?(?:ml|g)|Single))$/.exec(lab); return m ? +(m[1] || m[2] || 1) : null; };
   const VC = vagg(cur), VP = vagg(prev);
   const row = (x) => ({ ...x, units: x.a.units, rev: x.a.rev, share: totalRev ? x.a.rev / totalRev : null, mrpUnit: x.a.uwm ? x.a.mrpv / x.a.uwm : null, landed: prLanded(x.a),
     dUnits: has && x.b.units ? rgAvgChange(x.a.units, cd, x.b.units, pdays) : null, dRev: has && x.b.rev ? rgAvgChange(x.a.rev, cd, x.b.rev, pdays) : null });
@@ -179,7 +213,7 @@ function prTables(pd, g) {
   let n = 0;
   for (const r of mapped) {
     // pack rows in pack order (Pack of 1, Pack of 2); shade or fragrance rows by revenue
-    const kids = [...VC.values()].filter((v) => v.gk === r.key).sort((x, y) => (packNo(x.lab) != null && packNo(y.lab) != null ? packNo(x.lab) - packNo(y.lab) || x.lab.localeCompare(y.lab) : y.rev - x.rev));
+    const kids = [...VC.values()].filter((v) => v.gk === r.key).sort((x, y) => (packNo(x.lab) != null && packNo(y.lab) != null ? x.lab.localeCompare(y.lab, undefined, { numeric: true }) : y.rev - x.rev));
     const id = "pv" + ++n;
     if (kids.length > 1) {
       body.push(tr(r, "grp", `data-grp="${id}" tabindex="0" role="button" aria-expanded="false"`));

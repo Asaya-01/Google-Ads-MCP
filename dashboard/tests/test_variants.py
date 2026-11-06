@@ -1,5 +1,5 @@
 """Variant rows on the Products tab: a product sold in packs is split by
-pack only (Pack of 1 / Pack of 2), with its shade or fragrance mix shown
+pack only ("50g" / "50g x 2"), with its shade or fragrance mix shown
 under each pack. The listings and variant titles below are Asaya's own
 catalog entries; units are made up."""
 
@@ -31,9 +31,11 @@ def line(pid, sku, units):
             "drop_reason": None, "line_count": units, "units": units, "revenue": 500.0 * units, "gross_sales": 500.0 * units}
 
 
-def labels(lines, catalog=CATALOG):
+def labels(lines, catalog=CATALOG, titles=None):
     data = _dataset(with_meta=True)
     data["catalog"] = {**data["catalog"], "variants_by_product": catalog} if catalog is not None else {**data["catalog"]}
+    if titles:
+        data["catalog"]["variant_titles"] = titles
     data["products"] = lines
     pages, _ = build_all(data, CFG, [t["id"] for t in settings.enabled_tabs()])
     pd = pages["product_days"]
@@ -46,19 +48,19 @@ def labels(lines, catalog=CATALOG):
 
 def test_kne_has_exactly_pack_of_1_and_pack_of_2():
     got = labels([line("9747086246201", "8906161981030", 623), line("9747086246201", "", 55), line("10167116824889", "", 1)])
-    assert got == {"Pack of 1": 623, "Pack of 2": 56}
+    assert got == {"50g": 623, "50g x 2": 56}
 
 
 def test_eec_draft_listing_folds_into_pack_of_1():
     got = labels([line("9648174924089", "8906161980750", 448), line("9648174924089", "", 35),
                   line("10077290856761", "", 1), line("10057407004985", "8906161980750", 4)])
-    assert got == {"Pack of 1": 452, "Pack of 2": 36}
+    assert got == {"50g": 452, "50g x 2": 36}
 
 
 def test_uas_packs_keep_the_size_when_there_are_two_sizes():
     got = labels([line("9813999190329", "8906161981436", 10), line("9813999190329", "Berry_Crush_packof2", 4),
                   line("9813999190329", "100 ml x 2", 3), line("10136775033145", "8906161981450", 2)])
-    assert got == {"Pack of 1 · 100 ml": 10, "Pack of 2 · 100 ml": 7, "Pack of 1 · 50 ml": 2}
+    assert got == {"100ml": 10, "100ml x 2": 7, "50ml": 2}
 
 
 def test_a_product_in_one_pack_is_split_by_shade():
@@ -67,9 +69,10 @@ def test_a_product_in_one_pack_is_split_by_shade():
 
 
 def test_without_the_catalog_the_rule_still_gives_the_packs():
-    # an old cached catalog: no per-listing variants; KNE has a pack-of-2 listing in the product map
-    got = labels([line("9747086246201", "8906161981030", 623), line("9747086246201", "", 55), line("10167116824889", "", 1)], catalog=None)
-    assert got == {"Pack of 1": 623, "Pack of 2": 56}
+    # an old cached catalog: no per-listing variants, only SKU -> title
+    got = labels([line("9747086246201", "8906161981030", 623), line("9747086246201", "", 55), line("10167116824889", "", 1)],
+                 catalog=None, titles={"8906161981030": "50 g"})
+    assert got == {"50g": 623, "50g x 2": 56}
 
 
 def test_sku_names_that_say_a_pack():
@@ -80,5 +83,6 @@ def test_sku_names_that_say_a_pack():
 
 def test_without_the_catalog_the_packs_list_still_splits_itb():
     # ITB has no pack-of-2 listing; its pack of 2 is a SKU-less variant
-    got = labels([line("10107079721273", "inner_thigh_bum_roll_on", 90), line("10107079721273", "", 10)], catalog=None)
-    assert got == {"Pack of 1": 90, "Pack of 2": 10}
+    got = labels([line("10107079721273", "inner_thigh_bum_roll_on", 90), line("10107079721273", "", 10)],
+                 catalog=None, titles={"inner_thigh_bum_roll_on": "70 ml"})
+    assert got == {"70ml": 90, "70ml x 2": 10}

@@ -1,6 +1,6 @@
 """Variant rows on the Products tab. Every product sold in more than one
-pack is split by pack only: "Pack of 1" and "Pack of 2" (plus the size when
-the product comes in more than one size: "Pack of 1 · 50 ml"). The shade or
+pack is split by pack only, named the team's way: "30ml" and "30ml x 2",
+"50g" and "50g x 2" (a product in two sizes gets a row per size too). The shade or
 fragrance mix is shown under each pack row, not as rows of its own. A
 product sold in one pack only is split by its shade or fragrance.
 
@@ -27,7 +27,8 @@ _SIZE = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*(ml|g|gm|gms|kg|l)\s*$", re.I)
 
 def _size(text: str) -> str:
     m = _SIZE.match(text)
-    return f"{m.group(1)} {m.group(2).lower().replace('gms', 'g').replace('gm', 'g')}" if m else text.strip()
+    # written the team's way: "30ml", "50g"
+    return f"{m.group(1)}{m.group(2).lower().replace('gms', 'g').replace('gm', 'g')}" if m else text.strip()
 
 
 def parse(title: str, listing: str = "") -> dict:
@@ -102,11 +103,16 @@ def resolve(pid: str, sku: str, catalog: dict | None, listing: str, multi: bool)
     return {"pack": pack, "option": "", "size": None, "how": how}
 
 
-def row_label(v: dict, multi: bool, sizes: int) -> str:
-    """The row a line falls in: its pack for a product sold in packs (with
-    the size when there is more than one), else its shade or fragrance."""
+def row_label(v: dict, multi: bool, base_size: str | None) -> str:
+    """The row a line falls in. A product sold in packs: its size, with
+    " x 2" for the pack of two ("30ml", "30ml x 2"); the size of the single
+    pack stands in when a line does not carry one. Otherwise its shade or
+    fragrance."""
     if multi:
-        return f"Pack of {v['pack']}" + (f" · {v['size']}" if sizes > 1 and v.get("size") else "")
+        size = v.get("size") or base_size
+        if not size:
+            return "Single" if v["pack"] == 1 else f"Pack of {v['pack']}"
+        return size if v["pack"] == 1 else f"{size} x {v['pack']}"
     if v.get("how") == "ambiguous":
         return "Variant not on the order line"
     return v.get("option") or v.get("size") or "Single variant"
