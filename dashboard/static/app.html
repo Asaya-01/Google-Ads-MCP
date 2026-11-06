@@ -593,14 +593,21 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
   }
 
   function signIn(message) {
+    // a failed redirect sign-in comes back as ?signin_error=...
+    const qe = new URLSearchParams(location.search).get("signin_error");
+    if (qe) { message = qe; history.replaceState(null, "", location.pathname + location.hash); }
     $main.innerHTML = `<div class="signin"><h2>Sign in to the Asaya dashboard</h2>
       <p class="sub">${esc(message && message !== "Sign in required" ? message : "Use your Google account. Access is limited to the people on the dashboard allowlist.")}</p>
-      <div id="gsi"></div></div>`;
+      <div id="gsi"></div><p class="sub" style="margin-top:12px">On a phone, if sign-in will not open, open this page in Safari or Chrome.</p></div>`;
     const s = document.createElement("script");
     s.src = "https://accounts.google.com/gsi/client";
+    // Phones and in-app browsers (opened from WhatsApp, Slack, the Claude app...)
+    // break Google's pop-up, so there the button redirects to Google and back.
+    const redirect = /Android|iPhone|iPad|iPod|Mobile|FBAN|FBAV|Instagram|Line\/|; wv\)|WhatsApp|Slack/i.test(navigator.userAgent);
     s.onload = () => {
       google.accounts.id.initialize({
         client_id: state.config.google_client_id,
+        ...(redirect ? { ux_mode: "redirect", login_uri: location.origin + "/auth/google/redirect" } : {}),
         callback: async (resp) => {
           const r = await fetch("/auth/google", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ credential: resp.credential }) });
           if (r.ok) { state.pages = {}; boot(); } else { signIn((await r.json().catch(() => ({}))).detail || "Sign-in failed"); }

@@ -159,17 +159,14 @@ def public_config():
     }
 
 
-@app.post("/auth/google")
-async def sign_in(request: Request):
+def _verified_email(credential: str) -> str:
+    """The allowlisted, verified email in a Google ID token, else an error."""
     from google.auth.transport import requests as google_requests
     from google.oauth2 import id_token
 
-    body = await request.json()
     client_id = settings.env("GOOGLE_OAUTH_CLIENT_ID")
     try:
-        claims = id_token.verify_oauth2_token(
-            body.get("credential", ""), google_requests.Request(), client_id
-        )
+        claims = id_token.verify_oauth2_token(credential or "", google_requests.Request(), client_id)
     except ValueError:
         raise HTTPException(401, "Google sign-in could not be verified")
     email = (claims.get("email") or "").lower()
@@ -177,7 +174,10 @@ async def sign_in(request: Request):
         raise HTTPException(401, "Google account email is not verified")
     if not is_allowed(email):
         raise HTTPException(403, f"{email} is not on the dashboard allowlist")
-    response = JSONResponse({"email": email})
+    return email
+
+
+def _with_session(response: Response, email: str) -> Response:
     response.set_cookie(
         COOKIE,
         serializer().dumps(email),
@@ -187,6 +187,34 @@ async def sign_in(request: Request):
         samesite="lax",
     )
     return response
+
+
+@app.post("/auth/google")
+async def sign_in(request: Request):
+    """Sign-in from the pop-up button (desktop browsers)."""
+    body = await request.json()
+    email = _verified_email(body.get("credential", ""))
+    return _with_session(JSONResponse({"email": email}), email)
+
+
+@app.post("/auth/google/redirect")
+async def sign_in_redirect(request: Request):
+    """Sign-in by redirect (phones and in-app browsers, where Google's pop-up
+    fails): Google posts the ID token here as a form. The g_csrf_token in
+    the form must match Google's cookie of the same name."""
+    from urllib.parse import parse_qs, quote
+
+    from fastapi.responses import RedirectResponse
+
+    form = {k: v[0] for k, v in parse_qs((await request.body()).decode("utf-8", "replace")).items()}
+    token = form.get("g_csrf_token")
+    if not token or token != request.cookies.get("g_csrf_token"):
+        return RedirectResponse("/?signin_error=" + quote("Sign-in could not be checked; please try again"), status_code=303)
+    try:
+        email = _verified_email(form.get("credential", ""))
+    except HTTPException as exc:
+        return RedirectResponse("/?signin_error=" + quote(str(exc.detail)), status_code=303)
+    return _with_session(RedirectResponse("/", status_code=303), email)
 
 
 @app.post("/auth/logout")
