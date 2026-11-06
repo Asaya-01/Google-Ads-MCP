@@ -139,6 +139,8 @@ def public_config():
     """What the page needs before sign-in: the OAuth client ID and tab list."""
     return {
         "brand": settings.config()["brand"],
+        # which code is running (set by deploy.sh), so an old deploy is easy to spot
+        "build": {k: settings.env(f"BUILD_{k.upper()}") for k in ("sha", "branch", "at")},
         "google_client_id": settings.env("GOOGLE_OAUTH_CLIENT_ID"),
         "dev_mode": bool(dev_user()),
         "tabs": [

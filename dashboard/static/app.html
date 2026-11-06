@@ -330,7 +330,8 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       const k = late[0], d = latest(k);
       text = late.length === 1 ? `${SRC_LABEL[k] || k.replace(/_/g, " ")} late${d ? " · " + dayLabel(d) : ""}` : `${late.length} sources late`;
     } else if (un.length) { cls = "late"; text = un.length === 1 ? `${un[0].replace(/^sheet_/, "").replace(/_/g, " ")} unavailable` : `${un.length} inputs unavailable`; }
-    const tip = [s.as_of ? `Data for D-1 ${dayLabel(s.as_of)}` : "", when, embedded ? "Preview build" : "", ...late.map((k) => `${SRC_LABEL[k] || k}: ${s.missing[k]}`), ...un.map((k) => `${k.replace(/_/g, " ")}: ${s.unavailable[k]}`)].filter(Boolean).join("\n");
+    const b = (state.config && state.config.build) || {};
+    const tip = [s.as_of ? `Data for D-1 ${dayLabel(s.as_of)}` : "", when, embedded ? "Preview build" : "", b.sha ? `Code: ${b.sha}${b.branch ? " (" + b.branch + ")" : ""}${b.at ? ", deployed " + b.at.replace("T", " ") : ""}` : "", ...late.map((k) => `${SRC_LABEL[k] || k}: ${s.missing[k]}`), ...un.map((k) => `${k.replace(/_/g, " ")}: ${s.unavailable[k]}`)].filter(Boolean).join("\n");
     el.innerHTML = `<a class="spill ${cls}" href="#health" title="${esc(tip)}"><i aria-hidden="true"></i>${esc(text)}</a>`;
   }
   /* The second header row: the date picker on range tabs, a fixed line on
@@ -449,7 +450,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       ...Object.entries(labels).map(([k, l]) => ({ label: l, render: (r) => esc(hhmm(r.arrived?.[k]) || "–") })),
     ];
     $main.innerHTML = `
-      ${rgSec("Sources", `for D-1, ${esc(dayLabel(p.as_of))}`, head + table(srcCols, p.sources, { full: true }) + `<h3>Other inputs</h3>` + inputs)}
+      ${rgSec("Sources", `for D-1, ${esc(dayLabel(p.as_of))}${(state.config.build || {}).sha ? ` · code ${esc(state.config.build.sha)}${state.config.build.branch ? " (" + esc(state.config.build.branch) + ")" : ""}${state.config.build.at ? ", deployed " + esc(state.config.build.at.replace("T", " ")) : ""}` : ""}`, head + table(srcCols, p.sources, { full: true }) + `<h3>Other inputs</h3>` + inputs)}
       ${rgSec("Data checks", "our copy against each source, and the mappings the tabs rely on", `<h3>Cross-checks</h3>${p.reconcile?.length ? table(recCols, p.reconcile, { full: true }) : '<p class="na">No cross-check has run yet for this day.</p>'}<h3>Google sessions ↔ campaigns</h3>${gcheck}<h3>Product map</h3>${pmap}`)}
       ${rgSec("Meta classification", "tag coverage, names to fix, validation and the tie-out (Marketing › Meta)", mvHealth(pg.meta_ads, D), { comp: "meta-coverage" })}
       ${rgSec("Google classification", "tag coverage, the purchase split, validation and the tie-out (Marketing › Google)", gvHealth(pg.google_ads, D), { comp: "google-coverage" })}

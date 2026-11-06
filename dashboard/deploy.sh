@@ -95,6 +95,21 @@ for s in shopify-client-id shopify-client-secret meta-system-user-token anthropi
   gcloud secrets versions describe latest --secret "$s" "${P[@]}" >/dev/null 2>&1 || MISSING+=("$s")
 done
 
+# Which code is going out: printed here and shown on the dashboard (status
+# pill and Data health), so a deploy of an old checkout is easy to spot.
+BUILD_SHA="$(git -C "$DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+BUILD_BRANCH="$(git -C "$DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+echo "==> Deploying commit ${BUILD_SHA} on branch ${BUILD_BRANCH}"
+if git -C "$DIR" fetch --quiet origin "$BUILD_BRANCH" 2>/dev/null; then
+  BEHIND="$(git -C "$DIR" rev-list --count "HEAD..origin/${BUILD_BRANCH}" 2>/dev/null || echo 0)"
+  if [[ "$BEHIND" != "0" ]]; then
+    echo "WARNING: this checkout is ${BEHIND} commit(s) behind origin/${BUILD_BRANCH}. Run: git pull origin ${BUILD_BRANCH}"
+  fi
+fi
+if [[ -n "$(git -C "$DIR" status --porcelain 2>/dev/null)" ]]; then
+  echo "NOTE: the checkout has local changes that are not committed; they go out too."
+fi
+
 echo "==> [6/9] Building the image"
 gcloud artifacts repositories describe "$AR_REPO" --location "$REGION" "${P[@]}" >/dev/null 2>&1 \
   || gcloud artifacts repositories create "$AR_REPO" --repository-format docker --location "$REGION" "${P[@]}"
@@ -106,6 +121,7 @@ gcloud builds submit "$DIR" --tag "$IMAGE" "${P[@]}"
 ENV_VARS="SNAPSHOT_BUCKET=${BUCKET}@@GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}"
 [[ -n "${ALERT_WEBHOOK_URL:-}" ]] && ENV_VARS="${ENV_VARS}@@ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL}"
 ENV_VARS="${ENV_VARS}@@RUNTIME_SA_EMAIL=${SA}"
+ENV_VARS="${ENV_VARS}@@BUILD_SHA=${BUILD_SHA}@@BUILD_BRANCH=${BUILD_BRANCH}@@BUILD_AT=$(date -u +%Y-%m-%dT%H:%MZ)"
 # Spend sheets: share each with ${SA} as Viewer, then put its id in deploy.env
 for v in SPEND_SHEET_AFFILIATE SPEND_SHEET_CRM_FLOW SPEND_SHEET_CRM_BROADCAST SPEND_SHEET_REDDIT; do
   [[ -n "${!v:-}" ]] && ENV_VARS="${ENV_VARS}@@${v}=${!v}"
