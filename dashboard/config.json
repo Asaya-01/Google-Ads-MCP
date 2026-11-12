@@ -938,6 +938,7 @@
     {"id": "retention", "label": "Retention", "phase": 1, "enabled": true},
     {"id": "region",    "label": "Region",    "phase": 1, "enabled": true},
     {"id": "health",    "label": "Data health", "phase": 1, "enabled": true},
+    {"id": "plus",      "label": "Plus",      "phase": 1, "enabled": true},
     {"id": "d1",        "label": "D-1 Report", "phase": 1, "enabled": true, "report": true},
     {"id": "traffic",   "label": "Traffic",   "phase": 2, "enabled": false},
     {"id": "webapp",    "label": "Web & App", "phase": 2, "enabled": false},

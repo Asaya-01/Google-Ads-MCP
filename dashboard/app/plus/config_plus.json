@@ -1,0 +1,73 @@
+{
+  "_about": "Dashboard Plus (Build Spec v1): settings for the new tabs only. The existing dashboard's config.json is never read for anything new and never changed (except the tab list). Every input the spec asks for that has not been supplied is null here; its card shows 'Input needed: ...', never an estimate.",
+
+  "bq": {
+    "_about": "New tables and views go to this dataset only (created once by the owner, Mumbai region like Maplemonk). Maplemonk is read, never written.",
+    "write_dataset": "dashboard_plus",
+    "read_dataset": "asaya-data-room-487110.Maplemonk"
+  },
+
+  "traffic": {
+    "ga4_property": "412627585",
+    "history_days": 400,
+    "junk": {
+      "_about": "Spec M3: a source with 1,000+ sessions a day and either CVR below 0.05% or engaged-session rate below 20%. Starting points; tune after two weeks of data.",
+      "min_sessions_per_day": 1000,
+      "cvr_below": 0.0005,
+      "engaged_below": 0.20
+    },
+    "click_jump": {"_about": "Highlight a campaign's click-to-session ratio when it moves more than this from its 14-day median.", "move": 0.30, "median_days": 14},
+    "ga4_channels": {
+      "_about": "GA4 session source -> the dashboard's channel names (for the reconciliation table).",
+      "Meta Ads": "^(facebook|fb|ig|instagram|meta|m\\.facebook\\.com|l\\.facebook\\.com|lm\\.facebook\\.com)$",
+      "Google Ads": "^(google|youtube|yt)$",
+      "Reddit Ads": "^reddit$"
+    },
+    "ga4_medium_paid": "^(cpc|ppc|paid|paid_social|paidsocial)$",
+    "inputs_needed": {
+      "event_match_quality": "Meta Event Match Quality: approval to read Meta's dataset quality (a new Meta API read), or an export of it",
+      "reddit_clicks": "Reddit link clicks per campaign (a Reddit Ads export or API access; only Reddit spend is loaded today)"
+    }
+  },
+
+  "data_health": {
+    "_about": "Spec M3 data-health score: share of inputs loaded within their refresh window, weighted by the revenue share they carry. Weights are the channel's share of last-click Total sales over the last 30 days; Shopify orders and sessions carry the whole store (weight 1).",
+    "inputs": [
+      {"name": "Shopify orders", "source": "shopify_orders", "max_age_days": 1, "weight": "store"},
+      {"name": "Shopify sessions", "source": "shopify_sessions", "max_age_days": 1, "weight": "store"},
+      {"name": "GoKwik checkout funnel", "source": "gokwik_funnel", "max_age_days": 1, "weight": "store"},
+      {"name": "Meta ads", "source": "meta", "max_age_days": 1, "weight": "channel:Meta Ads"},
+      {"name": "Google ads", "source": "google_ads", "max_age_days": 1, "weight": "channel:Google Ads"},
+      {"name": "GA4 sessions", "table": "GA4_GA4_asaya_sessions_users_by_date", "max_age_days": 2, "weight": 0.25},
+      {"name": "GA4 purchases", "table": "GA4_GA4_asaya_orders_by_source", "max_age_days": 2, "weight": 0.25},
+      {"name": "Unicommerce stock", "table": "asaya_unicommerce_inventory_get_inventory_snapshot", "max_age_days": 1, "weight": 0.25}
+    ]
+  },
+
+  "profit": {
+    "_about": "Spec M1. Each input is a Google Sheet id in an environment variable (like the existing spend sheets); the sheet is shared with the dashboard's service account as Viewer. Until it is set, the cards that need it show 'Input needed'.",
+    "break_even_reference": {"roas": 1.7, "skus": ["ASS", "ITB", "UAS"], "note": "Spec: 1.7x is the reference line on ROAS charts until per-SKU break-even is calculated."},
+    "gst_inclusive_total_sales": null,
+    "gst_rate": null,
+    "cogs_sheet_env": "PLUS_COGS_SHEET",
+    "cogs_format": "Tab 'COGS', header row 1: sku | landed_cost | effective_from (YYYY-MM-DD). One row per variant SKU; a new row with a later effective_from changes the cost from that date. Bundles list the sum of their components.",
+    "rate_card_sheet_env": "PLUS_RATE_CARD_SHEET",
+    "rate_card_format": "Tab 'Rate card', header row 1: item | value | unit | effective_from. Items: forward_shipping (INR per shipped order), rto_shipping (INR per RTO order), reverse_shipping (INR per return), cod_fee (INR per COD order or % of COD value), gateway_fee (% of prepaid value), packaging (INR per order).",
+    "influencer_sheet_env": "PLUS_INFLUENCER_SHEET",
+    "influencer_format": "Tab 'Spend', header row 1: month (YYYY-MM) | influencer | awareness_other. INR per month; spread evenly over the month's days for daily views.",
+    "finance_pl_note": "Phase 1 gate: CM2 within 5% of the finance P&L for one month. Needs one month of the finance P&L."
+  },
+
+  "site": {
+    "changes_sheet_env": "PLUS_CHANGES_SHEET",
+    "changes_format": "Tab 'Changes', header row 1: date (YYYY-MM-DD) | change | area | owner. One row per Shopify change (theme, price, offer, app, checkout).",
+    "cooee_note": "Cooee test start / stop markers: waiting on Cooee's export or API (asked separately)."
+  },
+
+  "stock": {
+    "_about": "Spec M7: a daily snapshot starts now because stock history cannot be backfilled. Two snapshots a day at most one per date: Shopify available units per variant (the spec's source) and the Unicommerce warehouse snapshot already in BigQuery (overwritten upstream every day).",
+    "shopify_table": "inventory_snapshots_shopify",
+    "unicommerce_table": "inventory_snapshots_unicommerce",
+    "unicommerce_source": "asaya_unicommerce_inventory_get_inventory_snapshot"
+  }
+}
