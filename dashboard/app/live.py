@@ -1317,6 +1317,90 @@ def baseline(
     return keep
 
 
+def history(
+    cfg: dict, store, shop, now: dt.datetime, base: dict, phases: dict,
+    perf_snaps: dict, notes: dict,
+) -> int:
+    """Hourly Orders, Total sales (Shopify's Sales report, as on D-1),
+    sessions and add-to-carts for every past day in the last `days` days, so
+    Today can be compared with any earlier day (a previous offer). Past days
+    do not change: each is read once, `chunk_days` at a time, newest first;
+    the baseline's days (yesterday re-read each morning) override. Publishes
+    pages/live_history.json. Returns the number of days still to fill."""
+    hc = cfg["live"]["history"]
+    today = now.date()
+    yesterday = today - dt.timedelta(days=1)
+    first = today - dt.timedelta(days=hc["days"])
+    cache = store.get_json("cache/live/history.json") or {}
+    if cache.get("logic") != SALES_LOGIC:
+        cache = {"logic": SALES_LOGIC, "days": {}, "empty": []}
+    days: dict = cache.get("days") or {}
+    empty = set(cache.get("empty") or [])
+    changed = False
+    for d, v in base.items():  # the baseline's days are the freshest copy
+        if d < today.isoformat() and all(k in v for k in ("orders", "gmv", "sessions", "atc")):
+            new = {k: v[k] for k in ("orders", "gmv", "sessions", "atc")}
+            if days.get(d) != new:
+                days[d], changed = new, True
+    wanted = [
+        (first + dt.timedelta(days=i)).isoformat()
+        for i in range((yesterday - first).days + 1)
+    ]
+    missing = sorted((d for d in wanted if d not in days and d not in empty), reverse=True)
+    names = [n for n in cfg["orders"]["exclude_name_regex"].split("|") if n]
+    for _ in range(hc["chunks_per_run"]):
+        if not missing:
+            break
+        end = dt.date.fromisoformat(missing[0])
+        start = max(first, end - dt.timedelta(days=hc["chunk_days"] - 1))
+        a, b = start.isoformat(), end.isoformat()
+        try:
+            sales = shop.sales_hourly(a, b, names)
+            sess = shop.sessions_hourly_range(a, b)
+        except Exception as exc:
+            notes["history"] = f"Past days for comparison could not all be read yet ({a} to {b}): {exc}"
+            break
+        for d in [x for x in missing if a <= x <= b]:
+            sd, ss = sales.get(d), sess.get(d)
+            if sd is None and ss is None:
+                empty.add(d)
+            else:
+                days[d] = {
+                    "orders": (sd or {}).get("orders") or [0] * 24,
+                    "gmv": [round(x, 2) for x in (sd or {}).get("gmv") or [0.0] * 24],
+                    "sessions": (ss or {}).get("sessions") or [0] * 24,
+                    "atc": (ss or {}).get("atc") or [0] * 24,
+                }
+        missing = [x for x in missing if not a <= x <= b]
+        changed = True
+    days = {d: v for d, v in days.items() if d >= first.isoformat()}
+    if changed or cache.get("built") != today.isoformat():
+        store.put_json(
+            "cache/live/history.json",
+            {"logic": SALES_LOGIC, "built": today.isoformat(), "days": days,
+             "empty": sorted(e for e in empty if e >= first.isoformat())},
+        )
+        store.put_json(
+            "pages/live_history.json",
+            {
+                "title": "Today: past days",
+                "generated_at": now.isoformat(),
+                "as_of": yesterday.isoformat(),
+                "fields": ["orders", "gmv", "sessions", "atc"],
+                "days": {d: [v["orders"], v["gmv"], v["sessions"], v["atc"]] for d, v in sorted(days.items())},
+                "phases": {d: phases[d] for d in days if d in phases},
+                "perf": {d: v for d, v in perf_snaps.items() if d in days},
+                "pending_days": len(missing),
+                "notes": [
+                    "Orders and Total sales: Shopify's Sales report by hour, as on D-1 (influencer and sample orders left out).",
+                    "Sessions and add-to-carts: Shopify sessions by hour.",
+                    "Perf sessions so far exist only for days the live tab ran on (kept from now on); spend so far is not kept for past days.",
+                ],
+            },
+        )
+    return len(missing)
+
+
 def collect(cfg: dict, store, now: dt.datetime) -> dict:
     today = now.date()
     day = today.isoformat()
@@ -1418,13 +1502,17 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
             perf = report_perf_sessions(sd["rows"], day, aware_ids, known_ids, cfg)
             t_now = round(now.hour + now.minute / 60, 3)
             snaps[day] = [x for x in snaps.get(day, []) if x[0] < t_now] + [[t_now, perf]]
-            keep = sorted(snaps)[-45:]
+            keep = sorted(snaps)[-cfg["live"]["history"]["days"]:]
             snaps = {d: snaps[d] for d in keep}
             store.put_json("cache/live/perf_sessions.json", snaps)
             inp["perf_sessions"] = {"value": perf, "truncated": sd.get("truncated")}
         except Exception as exc:
             unavailable["perf_sessions"] = f"Shopify sessions by UTM: {exc}"
         inp["perf_snapshots"] = snaps
+        try:  # past days for "compare with a past day"; never stops the live page
+            history(cfg, store, shop, now, inp["base"], inp["phases"], snaps, notes)
+        except Exception as exc:
+            notes["history"] = f"Past days for comparison not updated: {exc}"
     except Exception as exc:
         unavailable["shopify_orders"] = f"Shopify API: {exc}"
 

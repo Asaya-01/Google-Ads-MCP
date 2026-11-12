@@ -450,6 +450,7 @@ async def google_reach(request: Request, user: str = Depends(current_user)):
 @app.get("/api/page/{tab}")
 def page(tab: str, user: str = Depends(current_user)):
     if tab not in {t["id"] for t in settings.enabled_tabs()} | {
+        "live_history",
         "days",
         "campaign_days",
         "product_days",

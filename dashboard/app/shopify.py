@@ -335,6 +335,27 @@ class Shopify:
             out[2][at.hour] = _int(r.get("sessions_that_reached_checkout"))
         return out
 
+    def sessions_hourly_range(self, since: str, until: str) -> dict[str, dict]:
+        """Sessions and sessions with add-to-cart for each IST hour of the
+        days since..until, in one query (a month is about 750 rows):
+        {date: {"sessions": [24], "atc": [24]}}."""
+        rows = self.shopifyql(
+            "FROM sessions SHOW sessions, sessions_with_cart_additions "
+            f"TIMESERIES hour SINCE {since} UNTIL {until}"
+        )
+        out: dict[str, dict] = {}
+        for r in rows:
+            at = dt.datetime.fromisoformat(
+                str(r["hour"]).replace("Z", "+00:00")
+            ).astimezone(IST)
+            d = at.date().isoformat()
+            if not since <= d <= until:
+                continue
+            day = out.setdefault(d, {"sessions": [0] * 24, "atc": [0] * 24})
+            day["sessions"][at.hour] = _int(r.get("sessions"))
+            day["atc"][at.hour] = _int(r.get("sessions_with_cart_additions"))
+        return out
+
     def catalog(self) -> dict:
         """MRP per variant (MRP = compareAtPrice, today's value) and the
         catalog's product types, for the freebie-type review."""
