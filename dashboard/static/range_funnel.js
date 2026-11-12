@@ -5,7 +5,7 @@
    picker and the header's BAU / Sale switch. Inlined after range_ui.js. */
 
 const FN = { drill: "source" };
-const FN_KPIS = ["sessions", "perf_sessions", "atc_rate", "atc_to_ic", "ic_to_order", "cvr"];
+const FN_KPIS = ["sessions", "perf_sessions", "atc_rate", "atc_to_ic", "ic_to_order", "cvr", "perf_cvr"];
 
 /* Funnel bars: each step as a share of sessions, the comparison as a marker. */
 function fnBars(g) {
@@ -78,19 +78,25 @@ function fnRates(g, dim, label) {
     const c = C.get(i) || {}, p = P.get(i) || {};
     return {
       name: dd[dim].names[i].key || "(unknown)", sessions: c.sessions || 0,
-      atc: rate(c.atc, c.sessions), ic: rate(c.ic, c.atc), cvr: rate(c.orders, c.sessions),
-      patc: rate(p.atc, p.sessions), pic: rate(p.ic, p.atc), pcvr: rate(p.orders, p.sessions),
+      atc: rate(c.atc, c.sessions), ic: rate(c.ic, c.atc), cvr: rate(c.orders, c.sessions), pfcvr: rate(c.orders, c.perf_sessions),
+      patc: rate(p.atc, p.sessions), pic: rate(p.ic, p.atc), pcvr: rate(p.orders, p.sessions), ppfcvr: rate(p.orders, p.perf_sessions),
     };
   }).filter((r) => r.sessions > 0).sort((x, y) => y.sessions - x.sessions).slice(0, 40);
   const has = g.prev && g.prev.length;
-  const rc = (k, pk, id) => ({ label: METRICS[id].label, html: true, render: (r) => (r[k] == null ? '<span class="na" title="No rate: the two steps are tagged differently for this row">–</span>' : `${esc(mFormat("percent", r[k]))}${has && r[pk] != null ? ` <span class="sub">${mPpHtml(r[k] - r[pk], "higher")}</span>` : ""}`) });
+  const rc = (k, pk, id, why = "No rate: the two steps are tagged differently for this row") => ({ label: METRICS[id].label, html: true, render: (r) => (r[k] == null ? `<span class="na" title="${esc(why)}">–</span>` : `${esc(mFormat("percent", r[k]))}${has && r[pk] != null ? ` <span class="sub">${mPpHtml(r[k] - r[pk], "higher")}</span>` : ""}`) });
   const cols = [{ label, text: true, render: (r) => `<span class="trunc" title="${esc(r.name)}">${esc(r.name)}</span>` }, { label: "Sessions", render: (r) => esc(mFormat("count", r.sessions)) },
-    rc("atc", "patc", "atc_rate"), rc("ic", "pic", "atc_to_ic"), rc("cvr", "pcvr", "cvr")];
+    rc("atc", "patc", "atc_rate"), rc("ic", "pic", "atc_to_ic"), rc("cvr", "pcvr", "cvr"), rc("pfcvr", "ppfcvr", "perf_cvr", "No Perf sessions on this row (not a paid, affiliate or CRM source with a UTM campaign), or more orders than Perf sessions")];
   return table(cols, rows, { full: true, maxHeight: "60vh" });
 }
 
 /* The daily table, funnel columns only; the CSV carries every column. */
-const FN_COLS = ["date", "phase", "sessions", "perf_sessions", "atc", "ic", "orders", "atc_rate", "atc_to_ic", "cvr"];
+const FN_COLS = ["date", "phase", "sessions", "perf_sessions", "atc", "ic", "orders", "atc_rate", "atc_to_ic", "cvr", "perf_cvr"];
+/* The daily page's columns plus Perf CVR (worked out here from the same days) after CVR. */
+function fnColumns(p) {
+  const c = p.columns.slice();
+  if (!c.some((x) => x.key === "perf_cvr")) { const i = c.findIndex((x) => x.key === "cvr"); c.splice(i < 0 ? c.length : i + 1, 0, { key: "perf_cvr", label: "Perf CVR", unit: "pct" }); }
+  return c;
+}
 function fnDays() {
   const e = RG.eng, days = e.rangeOf(RG.from, RG.to).filter((d) => e.phaseOf(d)).reverse();
   return days.map((d) => {
@@ -100,7 +106,7 @@ function fnDays() {
   });
 }
 function fnCsv(p, rows) {
-  const cols = p.columns;
+  const cols = fnColumns(p);
   const q = (v) => (v == null ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
   const lines = [cols.map((c) => q(c.label)).join(",")].concat(rows.map((r) => cols.map((c) => q(c.key === "date" ? r.date : c.key === "phase" ? r.phase : r[c.key] == null ? "" : Math.round(r[c.key] * 1e4) / 1e4)).join(",")));
   const blob = new Blob([lines.join("\n")], { type: "text/csv" });
@@ -121,13 +127,13 @@ R.funnel = (p) => {
     const host = document.getElementById("rg-body");
     if (!g) { host.innerHTML = rgNone(); return; }
     const rows = fnDays();
-    const cols = p.columns.filter((x) => FN_COLS.includes(x.key)).map((x) => (x.key === "date" ? { label: "Date", text: true, render: (r) => esc(dayLabel(r.date)) }
+    const cols = fnColumns(p).filter((x) => FN_COLS.includes(x.key)).map((x) => (x.key === "date" ? { label: "Date", text: true, render: (r) => esc(dayLabel(r.date)) }
       : x.key === "phase" ? { label: "Phase", text: true, render: (r) => phaseChip(r.phase, r.note) }
       : { key: x.key, label: (METRICS[x.key === "perf_sessions" ? "perf_sessions" : x.key] || {}).label || x.label, unit: x.unit }));
     const drills = [["source", "Source"], ["campaign", "Campaign"], ["landing_page", "Landing page"]];
     const dseg = `<div class="seg" id="fn-drill" role="group" aria-label="Funnel by">${drills.map(([k, l]) => `<button type="button" data-d="${k}" aria-pressed="${FN.drill === k}">${l}</button>`).join("")}</div>`;
     host.innerHTML = `
-      <section class="card" data-component="funnel-kpis"><div class="kpis six">${FN_KPIS.map((id) => rgKpi(id, g)).join("")}</div></section>
+      <section class="card" data-component="funnel-kpis"><div class="kpis seven">${FN_KPIS.map((id) => rgKpi(id, g)).join("")}</div></section>
       <div class="cols-2">
         ${rgSec("The funnel", "how many sessions reach each step", fnBars(g), { comp: "funnel-bars" })}
         ${rgSec("Checkout steps", "GoKwik's checkout, step by step, against the comparison", fnCheckout(g), { comp: "checkout-steps" })}
