@@ -467,68 +467,101 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
   /*__RETENTION_UI__*/
 
   // ------------------------------------------------------------ live (Today)
-  const LIVE = { base: "typical", metric: "gmv", past: (() => { try { const v = JSON.parse(localStorage.getItem("asaya-live-past") || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; } })() };
-  const liveSavePast = () => { try { localStorage.setItem("asaya-live-past", JSON.stringify(LIVE.past)); } catch (e) { /* storage blocked */ } };
-  /* "A past day": today against any earlier day (a previous offer, a matching
-     BAU day) at the same clock time, from pages/live_history.json. The same
-     maths as the server's typical day: each day read at the time of this
-     view, then the median across the chosen days. */
+  const LIVE = { base: "typical", metric: "gmv", view: "run", pop: false,
+    date: (() => { try { return localStorage.getItem("asaya-live-date") || null; } catch (e) { return null; } })() };
+  if (LIVE.date) LIVE.base = "past"; // a picked date stays picked on this device until cleared
+  const liveSaveDate = () => { try { if (LIVE.date) localStorage.setItem("asaya-live-date", LIVE.date); else localStorage.removeItem("asaya-live-date"); } catch (e) { /* storage blocked */ } };
+  /* "Compare with a date": today against any earlier day (the last run of an
+     offer, a matching BAU day), from pages/live_history.json: the cards at
+     the same clock time, the chart and the hour-by-hour table across that
+     whole day. The same maths as the server's typical day. */
   const liveT = (p) => { const [h, m] = new Date(p.generated_at).toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" }).split(":").map(Number); return (h % 24) + m / 60; };
   const liveCum = (a, t) => { if (t >= 24) return a.reduce((x, y) => x + y, 0); const h = Math.floor(t); let r = 0; for (let i = 0; i < h; i++) r += a[i]; return r + (t - h) * a[h]; };
-  const liveMed = (xs) => { const a = xs.filter((v) => v != null && Number.isFinite(v)).sort((x, y) => x - y); if (!a.length) return null; const h = a.length >> 1; return a.length % 2 ? a[h] : (a[h - 1] + a[h]) / 2; };
   const liveSnapAt = (snaps, t) => { let best = null; for (const [h, v] of snaps || []) if (h <= t + 0.02 && t - h <= 0.6 && (!best || h > best[0])) best = [h, v]; return best ? best[1] : null; };
-  function livePast(H, dates, t) {
-    const ds = dates.filter((d) => H.days[d]);
-    const per = ds.map((d) => {
-      const [o, g, se, a] = H.days[d], m = { orders: liveCum(o, t), gmv: liveCum(g, t), sessions: liveCum(se, t), atc: liveCum(a, t) };
-      const perf = liveSnapAt((H.perf || {})[d], t);
-      return { ...m, aov: m.orders ? m.gmv / m.orders : null, cvr: m.sessions ? m.orders / m.sessions : null, cvr_perf: perf ? m.orders / perf : null };
-    });
-    const out = { n: ds.length, curves: {} };
-    for (const k of ["orders", "gmv", "sessions", "atc", "aov", "cvr", "cvr_perf"]) out[k] = liveMed(per.map((m) => m[k]));
-    for (const [k, i] of [["orders", 0], ["gmv", 1], ["sessions", 2]]) {
-      const cs = ds.map((d) => { let r = 0; return H.days[d][i].map((v) => (r += v)); });
-      out.curves[k] = cs.length ? Array.from({ length: 24 }, (_, h) => liveMed(cs.map((c) => c[h]))) : null;
+  const LIVE_IX = { orders: 0, gmv: 1, sessions: 2, atc: 3 };
+  function liveDayAt(H, d, t) { // one past day read at time t (t >= 24: the whole day)
+    const a = H && H.days[d];
+    if (!a) return null;
+    const m = { orders: liveCum(a[0], t), gmv: liveCum(a[1], t), sessions: liveCum(a[2], t), atc: liveCum(a[3], t) };
+    const perf = t < 24 ? liveSnapAt((H.perf || {})[d], t) : null;
+    return { ...m, aov: m.orders ? m.gmv / m.orders : null, cvr: m.sessions ? m.orders / m.sessions : null, cvr_perf: perf ? m.orders / perf : null };
+  }
+  const liveDay = (d, y) => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", ...(y ? { year: "numeric" } : {}), timeZone: "UTC" });
+  /* the date button's calendar: one month, sale days shaded as on the other tabs */
+  function livePop(H) {
+    if (!H) return `<div class="rg-pop live-pop"><p class="rg-hint pad">${esc(LIVE.hErr ? "Past days could not be loaded: " + LIVE.hErr : "Loading past days…")}</p></div>`;
+    const all = Object.keys(H.days).sort(), first = all[0], last = H.as_of;
+    if (!LIVE.view2) { const v = LIVE.date || last; LIVE.view2 = [+v.slice(0, 4), +v.slice(5, 7) - 1]; }
+    const [y, m] = LIVE.view2, pad = new Date(Date.UTC(y, m, 1)).getUTCDay(), n = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    let cells = "";
+    for (let i = 0; i < pad; i++) cells += "<span></span>";
+    for (let day = 1; day <= n; day++) {
+      const d = `${y}-${String(m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`, ok = !!H.days[d], sale = (H.phases || {})[d] === "sale";
+      cells += `<button type="button" class="rg-day${d === LIVE.date ? " edge" : ""}${!ok ? " off" : ""}${sale ? " sale" : ""}" data-ld="${d}" ${ok ? "" : "disabled"} aria-label="${esc(liveDay(d, true))}${sale ? ", sale day" : ""}">${day}</button>`;
     }
-    return out;
+    const canPrev = first && `${y}-${String(m + 1).padStart(2, "0")}` > first.slice(0, 7), canNext = `${y}-${String(m + 1).padStart(2, "0")}` < last.slice(0, 7);
+    return `<div class="rg-pop live-pop" role="dialog" aria-label="Compare today with a date">
+      <div class="rg-right">
+        <div class="rg-inputs"><input type="date" id="lp-in" value="${LIVE.date || ""}" min="${first || ""}" max="${last}" aria-label="Date"></div>
+        <div class="rg-nav" style="align-items:center"><button type="button" id="lp-prev" aria-label="Earlier month" ${canPrev ? "" : "disabled"}>‹</button><span class="rg-mname" style="margin:0">${rgMonthName(y, m)}</span><button type="button" id="lp-next" aria-label="Later month" ${canNext ? "" : "disabled"}>›</button></div>
+        <div><div class="rg-month"><div class="rg-dow">${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((x) => `<span>${x}</span>`).join("")}</div><div class="rg-grid">${cells}</div></div></div>
+        <p class="rg-hint rg-legend"><span><i class="rg-sw sale"></i>sale day</span>${H.pending_days ? `<span>${H.pending_days} older days still loading</span>` : ""}</p>
+      </div>
+      ${LIVE.date ? '<div class="rg-foot"><button type="button" class="rg-btn" id="lp-clear">Clear date</button></div>' : ""}
+    </div>`;
   }
-  const liveDay = (d, wd) => new Date(d + "T00:00:00Z").toLocaleDateString("en-IN", { ...(wd ? { weekday: "short" } : {}), day: "numeric", month: "short", timeZone: "UTC" });
-  const livePastLabel = (ds) => (!ds.length ? "A past day…" : ds.length === 1 ? liveDay(ds[0], true) : `Median of ${ds.length} days (${liveDay([...ds].sort()[0])} – ${liveDay([...ds].sort().pop())})`);
-  /* sale runs (consecutive sale days) in the history, newest first */
-  function liveSaleRuns(H) {
-    const runs = []; let cur = null;
-    for (const d of Object.keys(H.phases || {}).sort()) {
-      if (H.phases[d] !== "sale") { cur = null; continue; }
-      const prev = cur && cur[cur.length - 1], next = prev && new Date(Date.parse(prev + "T00:00:00Z") + 864e5).toISOString().slice(0, 10);
-      if (cur && next === d) cur.push(d); else runs.push((cur = [d]));
-    }
-    return runs.reverse();
+  function liveLoadHistory(p) {
+    if (state.pages.live_history || LIVE.hLoading) return;
+    LIVE.hLoading = true;
+    loadPage("live_history").then(() => { LIVE.hErr = null; }).catch((e) => { LIVE.hErr = e.message || String(e); })
+      .finally(() => { LIVE.hLoading = false; if (state.tab === "live") { destroyCharts(); R.live(p); } });
   }
-  function livePicker(H, p) {
-    if (!H) return `<section class="card" data-component="live-past"><p class="empty">${esc(LIVE.hErr ? "Past days could not be loaded: " + LIVE.hErr : "Loading past days…")}</p></section>`;
-    const sel = new Set(LIVE.past), all = Object.keys(H.days).sort();
-    const chip = (d) => `<button type="button" class="chip${sel.has(d) ? " on" : ""}" data-lp="${d}" ${H.days[d] ? "" : 'disabled title="Not loaded yet"'}>${esc(liveDay(d, true))}</button>`;
-    const runs = liveSaleRuns(H).slice(0, 8);
-    const open = LIVE.pickOpen ?? !LIVE.past.length;
-    return `<section class="card" data-component="live-past"><details id="lp-box"${open ? " open" : ""}><summary class="sub" style="cursor:pointer">${LIVE.past.length ? `Comparing with <b>${esc(livePastLabel(LIVE.past))}</b> at the same time · change` : "Pick the past day(s) to compare with"}</summary>
-      <div class="filter-row" style="margin-top:10px"><span class="lbl">Compare today with</span>${LIVE.past.length ? [...LIVE.past].sort().map((d) => `<button type="button" class="chip on" data-lp="${d}" title="Remove">${esc(liveDay(d, true))} ×</button>`).join("") : '<span class="sub">no day picked yet: pick a day of a past offer below, or any date</span>'}
-        <input type="date" id="lp-date" min="${all[0] || ""}" max="${H.as_of}" aria-label="Add a past date"><button type="button" class="rg-btn" id="lp-add">Add date</button>${LIVE.past.length ? '<button type="button" class="rg-btn" id="lp-clear">Clear</button>' : ""}</div>
-      ${runs.length ? `<h3 class="sub" style="margin:12px 0 6px">Past sales (each day of each sale; pick the matching day)</h3>${runs.map((r) => `<div class="filter-row" style="margin-bottom:6px"><span class="lbl" style="min-width:120px">${esc(liveDay(r[0]))} – ${esc(liveDay(r[r.length - 1]))}</span>${r.map(chip).join("")}</div>`).join("")}` : ""}
-      <p class="legend-note">Each day is read at the same clock time as this view (${esc(liveWhen(p.generated_at))}); with several days the comparison is their median, as for the typical day. Orders and Total sales are Shopify's Sales report, as on D-1. Perf CVR compares only where that day's Perf sessions were saved by the live tab (kept from now on). Spend and ROAS keep their own comparison.${H.pending_days ? ` ${H.pending_days} older day${H.pending_days === 1 ? " is" : "s are"} still being loaded (a month every live run).` : ""}</p>
-    </details></section>`;
+  /* hour by hour, as Shopify shows a day: today and the comparison in each hour, with the so-far and full-day totals */
+  function liveHours(today, cmp, t, cmpLabel) {
+    const per = (c) => (c ? c.map((v, h) => (v == null ? null : h ? v - (c[h - 1] ?? 0) : v)) : null);
+    const T = { gmv: per(today.gmv), orders: per(today.orders), sessions: per(today.sessions) }, C = { gmv: per(cmp.gmv), orders: per(cmp.orders), sessions: per(cmp.sessions) };
+    const hNow = Math.min(23, Math.floor(t)), frac = Math.min(1, t - hNow), mins = Math.round(frac * 60);
+    const lbl = (h) => `${h % 12 || 12} ${h < 12 ? "am" : "pm"}`;
+    // the hour under way is set against the same minutes of the comparison's hour, as the cards are
+    const cAt = (k, h) => (C[k] && C[k][h] != null ? C[k][h] * (h === hNow ? frac : 1) : null);
+    const pick = (f) => ({ gmv: f("gmv"), orders: f("orders"), sessions: f("sessions") });
+    const rows = Array.from({ length: 24 }, (_, h) => ({ h, label: lbl(h) + (h === hNow ? ` (first ${mins} min)` : ""),
+      t: h <= hNow ? pick((k) => T[k] && T[k][h]) : null, c: pick((k) => cAt(k, h)) }));
+    const sumC = (k, upto) => (C[k] ? Array.from({ length: upto + 1 }, (_, h) => cAt(k, h) || 0).reduce((a, v) => a + v, 0) : null);
+    const sumT = (k, upto) => (T[k] ? T[k].slice(0, upto + 1).reduce((a, v) => a + (v || 0), 0) : null);
+    const full = (k) => (C[k] ? C[k].reduce((a, v) => a + (v || 0), 0) : null);
+    rows.push({ label: `So far (to ${new Date(Date.UTC(2000, 0, 1, hNow, mins)).toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "UTC" })})`, t: pick((k) => sumT(k, hNow)), c: pick((k) => sumC(k, hNow)), _class: "total" });
+    rows.push({ label: "Full day", t: null, c: pick(full), _class: "total" });
+    const pair = (k, unit, l) => [
+      { label: `${l} today`, render: (r) => (r.t && r.t[k] != null ? esc(fmt(r.t[k], unit)) : '<span class="na">–</span>') },
+      { label: `${l} ${cmpLabel}`, render: (r) => (r.c[k] != null ? esc(fmt(r.c[k], unit)) : '<span class="na">–</span>') + (r.t && r.t[k] != null && r.c[k] ? ` <span class="sub">${deltaHtml(r.t[k] / r.c[k] - 1, "count")}</span>` : "") },
+    ];
+    return table([{ label: "Hour", text: true, render: (r) => esc(r.label) }, ...pair("gmv", "inr", "Sales"), ...pair("orders", "int", "Orders"), ...pair("sessions", "int", "Sessions")], rows, { full: true, maxHeight: "60vh" });
   }
-  function livePickerBind(p) {
-    const host = document.querySelector('[data-component="live-past"]');
-    if (!host) return;
-    const redraw = () => { LIVE.pickOpen = true; liveSavePast(); destroyCharts(); R.live(p); };
-    document.getElementById("lp-box")?.addEventListener("toggle", (ev) => { LIVE.pickOpen = ev.target.open; });
-    host.addEventListener("click", (ev) => {
-      const b = ev.target.closest("button[data-lp]");
-      if (b) { const d = b.dataset.lp; LIVE.past = LIVE.past.includes(d) ? LIVE.past.filter((x) => x !== d) : [...LIVE.past, d].sort(); redraw(); return; }
-      if (ev.target.id === "lp-clear") { LIVE.past = []; redraw(); return; }
-      if (ev.target.id === "lp-add") { const v = document.getElementById("lp-date").value; if (v && !LIVE.past.includes(v)) { LIVE.past = [...LIVE.past, v].sort(); redraw(); } }
+  function liveBindDate(p) {
+    const box = document.querySelector(".live-date");
+    if (!box) return;
+    const redraw = () => { destroyCharts(); R.live(p); };
+    // open toward the side with room (the button sits left or right depending on the width)
+    const pop = box.querySelector(".live-pop");
+    if (pop && innerWidth > 720 && box.getBoundingClientRect().left + pop.offsetWidth > innerWidth - 8) { pop.style.left = "auto"; pop.style.right = "0"; }
+    box.addEventListener("click", (ev) => {
+      const t = ev.target;
+      if (t.closest("#lp-open")) { LIVE.pop = !LIVE.pop; if (LIVE.pop) LIVE.view2 = null; return redraw(); }
+      const day = t.closest("[data-ld]");
+      if (day) { LIVE.date = day.dataset.ld; LIVE.base = "past"; LIVE.pop = false; liveSaveDate(); return redraw(); }
+      if (t.closest("#lp-prev")) { const [y, m] = LIVE.view2; LIVE.view2 = m === 0 ? [y - 1, 11] : [y, m - 1]; return redraw(); }
+      if (t.closest("#lp-next")) { const [y, m] = LIVE.view2; LIVE.view2 = m === 11 ? [y + 1, 0] : [y, m + 1]; return redraw(); }
+      if (t.closest("#lp-clear")) { LIVE.date = null; LIVE.base = "typical"; LIVE.pop = false; liveSaveDate(); return redraw(); }
+    });
+    box.querySelector("#lp-in")?.addEventListener("change", (ev) => {
+      const v = ev.target.value, H = state.pages.live_history;
+      if (v && H && H.days[v]) { LIVE.date = v; LIVE.base = "past"; LIVE.pop = false; liveSaveDate(); redraw(); }
+      else if (v) { ev.target.setCustomValidity("That day is not loaded"); ev.target.reportValidity(); }
     });
   }
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && LIVE.pop && state.tab === "live") { LIVE.pop = false; destroyCharts(); R.live(state.pages.live); } });
+  document.addEventListener("click", (ev) => { if (LIVE.pop && state.tab === "live" && !ev.target.closest(".live-date")) { LIVE.pop = false; destroyCharts(); R.live(state.pages.live); } });
   const liveAge = (p) => Math.max(0, Math.round((Date.now() - new Date(p.generated_at).getTime()) / 60000));
   const liveWhen = (iso) => new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true });
   function liveTick() {
@@ -557,19 +590,18 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     clearInterval(state.liveTimer); clearInterval(state.liveTick);
     state.liveTimer = setInterval(liveRefresh, (p.refresh_seconds || 180) * 1000);
     state.liveTick = setInterval(liveTick, 20000);
-    const sh = p.shopify, sc = p.scorecard, typ = LIVE.base === "typical", past = LIVE.base === "past";
+    const sh = p.shopify, sc = p.scorecard;
     const items = new Map(); for (const gr of (sc ? sc.groups : [])) for (const it of gr.items) items.set(it.key, it);
     const H = state.pages.live_history;
-    if (past && !H && !LIVE.hLoading) {
-      LIVE.hLoading = true;
-      loadPage("live_history").then(() => { LIVE.hErr = null; }).catch((e) => { LIVE.hErr = e.message || String(e); })
-        .finally(() => { LIVE.hLoading = false; if (state.tab === "live" && LIVE.base === "past") { destroyCharts(); R.live(p); } });
-    }
-    const P = past && H && LIVE.past.length ? livePast(H, LIVE.past, liveT(p)) : null;
-    const baseLabel = sh ? (past ? livePastLabel(LIVE.past) : typ ? sh.typical_label : sh.yesterday_label) : "";
+    if ((LIVE.base === "past" || LIVE.pop) && !H) liveLoadHistory(p);
+    const past = LIVE.base === "past" && !!LIVE.date, typ = LIVE.base === "typical" || (LIVE.base === "past" && !LIVE.date);
+    const t = liveT(p), P = past ? liveDayAt(H, LIVE.date, t) : null, PF = past ? liveDayAt(H, LIVE.date, 24) : null;
+    const dLabel = LIVE.date ? liveDay(LIVE.date) : "";
+    const baseLabel = sh ? (past ? dLabel : typ ? sh.typical_label : sh.yesterday_label) : "";
     // the second header row: live, how fresh, what today is compared with
     setSub(`<div class="sub-line"><span class="live-dot" aria-hidden="true"></span><b>Live · ${esc(p.weekday)} ${esc(dayLabel(p.today))}</b><span class="rg-dim">updated <span id="live-age"></span> · refreshes every ${Math.round((p.refresh_seconds || 180) / 60)} min</span>
-      ${sh ? `<span class="rg-dim">compared with</span><div class="seg" id="live-base" role="group" aria-label="Compare today with"><button type="button" data-b="typical" aria-pressed="${typ}">${esc(sh.typical_label)}</button><button type="button" data-b="yesterday" aria-pressed="${LIVE.base === "yesterday"}">Yesterday, same time</button><button type="button" data-b="past" aria-pressed="${past}">${esc(past || LIVE.past.length ? livePastLabel(LIVE.past) : "A past day…")}</button></div>` : ""}</div>`);
+      ${sh ? `<span class="rg-dim">compared with</span><div class="seg" id="live-base" role="group" aria-label="Compare today with"><button type="button" data-b="typical" aria-pressed="${typ}">${esc(sh.typical_label)}</button><button type="button" data-b="yesterday" aria-pressed="${LIVE.base === "yesterday"}">Yesterday, same time</button></div>
+      <span class="live-date" style="position:relative"><button type="button" class="rg-chip${past ? "" : " alt"}" id="lp-open" aria-haspopup="dialog" aria-expanded="${LIVE.pop}" aria-pressed="${past}"><span aria-hidden="true">▦</span> ${esc(LIVE.date ? liveDay(LIVE.date, true) : "Compare with a date")} <span aria-hidden="true" class="rg-caret">▾</span></button>${LIVE.pop ? livePop(H) : ""}</span>` : ""}</div>`);
     const kpi = ([key, id]) => {
       const it = items.get(key);
       if (!it) return kpiCard(id, { value: null, na: (p.unavailable && p.unavailable.shopify_orders) || "not available yet" });
@@ -577,16 +609,23 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       if (key === "total_spend") return kpiCard(id, { value: it.value, est: it.estimate ? "Includes estimated Reddit, CRM and affiliate spend: the sheets are filled the next day" : "", sub: it.ref && it.ref.share != null ? `${Math.round(it.ref.share * 100)}% ${it.ref.label} (${mVal(id, it.ref.value, true)})` : "" });
       if (key === "roas") return kpiCard(id, { value: it.value, prev: it.ref ? it.ref.value ?? null : null, change: it.ref && it.ref.value ? it.value / it.ref.value - 1 : null, tipExtra: it.ref ? `Compared with ${it.ref.label}.` : "", est: "Built on estimated Reddit, CRM and affiliate spend" });
       if (past) {
-        const v = P ? P[key] : null;
-        return kpiCard(id, { value: it.value, prev: v ?? null, change: v ? it.value / v - 1 : null, tipExtra: P ? `Compared with ${livePastLabel(LIVE.past)} at the same time.` : "",
+        const v = P ? P[key] : null, full = PF ? PF[key] : null;
+        return kpiCard(id, { value: it.value, prev: v ?? null, change: v ? it.value / v - 1 : null,
+          tipExtra: P ? `Compared with ${liveDay(LIVE.date, true)} up to the same time of day.` : `${liveDay(LIVE.date, true)} is not loaded yet.`,
+          sub: full != null ? `${dLabel} full day: ${mVal(id, full, true)}` : "",
           small: id !== "cvr" && id !== "perf_cvr" && v != null && (P.orders || 0) < METRIC_RULES.min_orders });
       }
       const v = typ ? it.typical : it.yesterday, d = typ ? it.vs_typical : it.vs_yesterday;
       return kpiCard(id, { value: it.value, prev: v ?? null, change: d, small: id !== "cvr" && id !== "perf_cvr" && v != null && (items.get("orders")[typ ? "typical" : "yesterday"] || 0) < METRIC_RULES.min_orders });
     };
     const strip = `<section class="card"><div class="kpis seven">${LIVE_KPI.map(kpi).join("")}</div><div class="banner" id="live-stale" hidden>This view is more than 30 minutes old, so the live refresh may be failing. The numbers are the last good ones.</div></section>`;
-    const chart = sh ? rgSec("Through the day", "running total, today against the comparison", `${legend([["--accent", "Today"], ["--muted", baseLabel + " (dashed)"]])}<div class="chart-box"><canvas id="c-live" aria-label="Running total through the day"></canvas></div>`,
-      { ctl: `<div class="seg" id="live-metric">${[["gmv", "Total sales"], ["orders", "Orders"], ["sessions", "Sessions"]].map(([k, l]) => `<button type="button" data-m="${k}" aria-pressed="${LIVE.metric === k}">${l}</button>`).join("")}</div>` }) : "";
+    // the comparison's running totals: a picked date from the history, else the server's typical day or yesterday
+    const cmpCurves = !sh ? null : past ? (H && H.days[LIVE.date] ? Object.fromEntries(["gmv", "orders", "sessions"].map((k) => { let r = 0; return [k, H.days[LIVE.date][LIVE_IX[k]].map((v) => (r += v))]; })) : null)
+      : Object.fromEntries(["gmv", "orders", "sessions"].map((k) => [k, sh.curves.series[k][typ ? "typical" : "yesterday"]]));
+    const todayCurves = sh ? Object.fromEntries(["gmv", "orders", "sessions"].map((k) => [k, sh.curves.series[k].today])) : null;
+    const chart = sh ? rgSec("Through the day", LIVE.view === "hour" ? "each hour, today against the comparison" : "running total, today against the comparison", `${legend([["--accent", "Today"], ["--muted", baseLabel + " (dashed)"]])}<div class="chart-box"><canvas id="c-live" aria-label="Today through the day"></canvas></div>`,
+      { ctl: `<div class="seg" id="live-view">${[["run", "Running total"], ["hour", "By hour"]].map(([k, l]) => `<button type="button" data-v="${k}" aria-pressed="${LIVE.view === k}">${l}</button>`).join("")}</div><div class="seg" id="live-metric">${[["gmv", "Total sales"], ["orders", "Orders"], ["sessions", "Sessions"]].map(([k, l]) => `<button type="button" data-m="${k}" aria-pressed="${LIVE.metric === k}">${l}</button>`).join("")}</div>` }) : "";
+    const hours = sh && cmpCurves ? rgFold("Hour by hour", `today against ${esc(baseLabel)}, as Shopify shows a day`, liveHours(todayCurves, cmpCurves, t, past ? dLabel : typ ? "typical" : "yesterday"), { open: past, comp: "live-hours" }) : "";
     // spend pacing: sales campaigns against yesterday's full day; the campaign view acts here
     const pace = ["meta_spend", "google_spend", "reddit_spend", "crm_aff_spend"].map((k) => items.get(k)).filter(Boolean).map((it) => kpiCard("channel_spend", {
       label: it.label === "Meta spends" ? "Meta" : it.label, value: it.value, na: it.na, est: it.estimate ? it.note || "estimated" : "",
@@ -624,19 +663,22 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
           { label: "Typical", render: (r) => (r.typical === null ? '<span class="na">–</span>' : esc(mFormat("percent", r.typical))) },
           { label: "vs typical", render: (r) => (r.delta === null ? '<span class="flat">–</span>' : deltaHtml(r.delta, "rate")) },
         ], gk.steps)}`);
-    $main.innerHTML = (past ? livePicker(H, p) : "") + strip + chart + spend + `<div class="cols-2">${adTable("Meta campaigns today", p.meta)}${adTable("Google Ads campaigns today", p.google)}</div>` + checkout;
+    $main.innerHTML = strip + chart + hours + spend + `<div class="cols-2">${adTable("Meta campaigns today", p.meta)}${adTable("Google Ads campaigns today", p.google)}</div>` + checkout;
     liveTick();
-    livePickerBind(p);
+    liveBindDate(p);
     rgScopeBind("live-scope");
-    document.getElementById("live-base")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-b]"); if (b) { LIVE.base = b.dataset.b; LIVE.pickOpen = undefined; destroyCharts(); R.live(p); } });
+    document.getElementById("live-base")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-b]"); if (b) { LIVE.base = b.dataset.b; LIVE.pop = false; destroyCharts(); R.live(p); } });
+    document.getElementById("live-view")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-v]"); if (b) { LIVE.view = b.dataset.v; destroyCharts(); R.live(p); } });
     document.getElementById("live-metric")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-m]"); if (b) { LIVE.metric = b.dataset.m; destroyCharts(); R.live(p); } });
     const canvas = document.getElementById("c-live");
     if (canvas && sh) {
-      const ser = sh.curves.series[LIVE.metric], unit = LIVE.metric === "gmv" ? "inr" : "int";
+      const unit = LIVE.metric === "gmv" ? "inr" : "int", hourly = LIVE.view === "hour";
+      const per = (c) => (c ? c.map((v, h) => (v == null ? null : h ? v - (c[h - 1] ?? 0) : v)) : []);
+      const tod = todayCurves[LIVE.metric], cmp = cmpCurves ? cmpCurves[LIVE.metric] : null;
       const labels = sh.curves.hours.map((h) => (h % 12 || 12) + (h < 12 ? "a" : "p"));
       baseChart(canvas, { type: "line", data: { labels, datasets: [
-        { label: baseLabel, data: (past ? P && P.curves[LIVE.metric] : ser[typ ? "typical" : "yesterday"]) || [], borderColor: css("--muted"), borderDash: [5, 4], borderWidth: 2, pointRadius: 0, tension: 0.25 },
-        { label: "Today", data: ser.today, borderColor: css("--accent"), backgroundColor: css("--accent"), borderWidth: 2.5, pointRadius: 0, tension: 0.25, spanGaps: false },
+        { label: baseLabel, data: (hourly ? per(cmp) : cmp) || [], borderColor: css("--muted"), borderDash: [5, 4], borderWidth: 2, pointRadius: 0, tension: 0.25 },
+        { label: "Today", data: hourly ? per(tod) : tod, borderColor: css("--accent"), backgroundColor: css("--accent"), borderWidth: 2.5, pointRadius: hourly ? 2 : 0, tension: 0.25, spanGaps: false },
       ] } }, unit);
     }
   };

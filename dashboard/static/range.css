@@ -349,3 +349,6 @@ tr.live-subrow td { font-size: 13px; }
   .rgn-metric { width: 100%; max-width: 100%; display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .rgn-metric button { flex: none; }
 }
+/* Today's "Compare with a date": one month, opening under its button */
+.rg-pop.live-pop { grid-template-columns: 1fr; grid-template-rows: auto auto; width: min(330px, calc(100vw - 32px)); left: 0; right: auto; }
+@media (max-width: 720px) { .rg-pop.live-pop { left: 8px; right: 8px; width: auto; } }
