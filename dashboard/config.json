@@ -967,10 +967,10 @@
   "live": {
     "flag_spend_without_return": {"_about": "Today's campaign tables flag a campaign with at least min_spend rupees spent and no platform value yet, once it is after_hour (IST). Platforms attribute late: a watch flag, not a verdict.", "min_spend": 3000, "after_hour": 14},
     "history": {
-      "_about": "Today can be compared with any past day (a previous offer, a matching BAU day): hourly Orders, Total sales, sessions and add-to-carts for the last `days` days are kept in cache/live/history.json and published as pages/live_history.json. Missing days are filled `chunk_days` at a time, at most `chunks_per_run` chunks per live run, newest first. Perf sessions so far are kept for the same number of days.",
+      "_about": "Today can be compared with any past day (a previous offer, a matching BAU day): hourly Orders, Total sales, sessions and add-to-carts for the last `days` days are kept in cache/live/history.json and published as pages/live_history.json. Missing days are filled `chunk_days` at a time (one Shopify query each for sales and sessions), at most `chunks_per_run` chunks per live run, newest first: 14 x 31 days covers the whole year in the first run. Perf sessions so far are kept for the same number of days.",
       "days": 400,
       "chunk_days": 31,
-      "chunks_per_run": 3
+      "chunks_per_run": 14
     },
     "typical_weeks": 8,
     "typical_days": 4,
