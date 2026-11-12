@@ -502,3 +502,75 @@ def test_sales_by_hour_is_shopifys_report_in_ist_hours():
     assert out["2026-11-04"]["orders"][0] == 10 and out["2026-11-04"]["orders"][23] == 12
     assert out["2026-11-04"]["gmv"][23] == pytest.approx(9600.50)
     assert "FROM sales" in seen["q"] and "NOT CONTAINS 'ASAYAINF'" in seen["q"]
+
+
+class _HistShop:
+    """Shopify's hourly reports for any range: one order of ₹500 and 20
+    sessions every hour, except days in `blank`."""
+
+    def __init__(self, blank=()):
+        self.calls, self.blank = [], set(blank)
+
+    def _days(self, a, b):
+        d, out = dt.date.fromisoformat(a), []
+        while d <= dt.date.fromisoformat(b):
+            if d.isoformat() not in self.blank:
+                out.append(d.isoformat())
+            d += dt.timedelta(days=1)
+        return out
+
+    def sales_hourly(self, a, b, names):
+        self.calls.append(("sales", a, b))
+        assert names == ["ASAYASS", "ASAYAINF"]
+        return {d: {"orders": [1] * 24, "gmv": [500.0] * 24} for d in self._days(a, b)}
+
+    def sessions_hourly_range(self, a, b):
+        self.calls.append(("sessions", a, b))
+        return {d: {"sessions": [20] * 24, "atc": [2] * 24} for d in self._days(a, b)}
+
+
+def test_past_days_are_filled_a_month_at_a_time_newest_first_and_published():
+    cfg = {**CFG, "live": {**CFG["live"], "history": {"days": 70, "chunk_days": 31, "chunks_per_run": 2}}}
+    store, shop = _Store(), _HistShop(blank={"2026-08-25"})
+    y = "2026-10-30"
+    base = {y: {**day_arrays(orders=3), "orders": [3] * 24}}  # the baseline's copy wins
+    left = live.history(cfg, store, shop, NOW, base, {"2026-10-01": "sale"}, {"2026-10-01": [[14.0, 900]]}, {})
+    # yesterday is the baseline's; then a month at a time, newest first
+    assert shop.calls[0] == ("sales", "2026-09-29", "2026-10-29") and shop.calls[2] == ("sales", "2026-08-29", "2026-09-28")
+    assert left == 7  # 22-28 Aug: 70 days back, 1 from the baseline, 62 read this run
+    page = store.saved["pages/live_history.json"]
+    assert page["days"][y][0] == [3] * 24 and page["days"]["2026-09-15"][1] == [500.0] * 24
+    assert page["phases"] == {"2026-10-01": "sale"} and page["perf"] == {"2026-10-01": [[14.0, 900]]}
+    assert NOW.date().isoformat() not in page["days"]
+    # the next run reads only what is left; a day with no data is not asked for again
+    shop.calls.clear()
+    assert live.history(cfg, store, shop, NOW, base, {}, {}, {}) == 0
+    assert shop.calls == [("sales", "2026-08-22", "2026-08-28"), ("sessions", "2026-08-22", "2026-08-28")]
+    assert "2026-08-25" in store.saved["cache/live/history.json"]["empty"]
+    shop.calls.clear()
+    live.history(cfg, store, shop, NOW, base, {}, {}, {})
+    assert shop.calls == []
+
+
+def test_a_failed_history_read_is_a_note_not_a_broken_live_page():
+    class Down(_HistShop):
+        def sales_hourly(self, a, b, names):
+            raise RuntimeError("throttled")
+    cfg = {**CFG, "live": {**CFG["live"], "history": {"days": 10, "chunk_days": 31, "chunks_per_run": 2}}}
+    notes = {}
+    assert live.history(cfg, _Store(), Down(), NOW, {}, {}, {}, notes) == 10
+    assert "throttled" in notes["history"]
+
+
+def test_sessions_by_hour_for_a_range_is_in_ist_hours():
+    from app.shopify import Shopify
+
+    shop = Shopify.__new__(Shopify)
+    shop.shopifyql = lambda q: [
+        {"hour": "2026-06-30T18:30:00Z", "sessions": "3410", "sessions_with_cart_additions": "234"},  # 00:00 IST 1 Jul
+        {"hour": "2026-07-09T14:30:00Z", "sessions": "4797", "sessions_with_cart_additions": "1229"},  # 20:00 IST 9 Jul
+        {"hour": "2026-07-09T18:30:00Z", "sessions": "1", "sessions_with_cart_additions": "1"},  # 10 Jul: outside
+    ]
+    out = shop.sessions_hourly_range("2026-07-01", "2026-07-09")
+    assert sorted(out) == ["2026-07-01", "2026-07-09"]
+    assert out["2026-07-01"]["sessions"][0] == 3410 and out["2026-07-09"]["atc"][20] == 1229
