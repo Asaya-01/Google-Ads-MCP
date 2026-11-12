@@ -5,7 +5,7 @@
    home tab. Inlined after range_basket.js, inside the dashboard closure. */
 
 const D1 = { view: "day" };
-const D1_KPIS = ["total_sales", "orders", "aov", "blended_roas", "perf_spend", "cvr"];
+const D1_KPIS = ["total_sales", "orders", "aov", "blended_roas", "perf_spend", "cvr", "perf_cvr"];
 const d1Median = (xs) => { const a = xs.filter((v) => v != null && Number.isFinite(v)).sort((x, y) => x - y); if (!a.length) return null; const h = a.length >> 1; return a.length % 2 ? a[h] : (a[h - 1] + a[h]) / 2; };
 
 /* Yesterday, and the same-kind days it is judged against (the D-1 checkout
@@ -26,7 +26,7 @@ function d1Day(d1) {
 function d1Kpi(id, D) {
   const k = METRICS[id].field, v = D.w[k], t = D.ok ? D.typ[k] : null;
   return kpiCard(id, { value: v, prev: D.ok ? t : null, change: v != null && t ? v / t - 1 : null, small: D.ok && (D.typ.orders ?? 0) < METRIC_RULES.min_orders,
-    na: v == null ? rgNa(D.w, k) : null, est: rgEstFor(k, D.w), href: id === "blended_roas" || id === "perf_spend" ? "#marketing" : id === "cvr" ? "#funnel" : null });
+    na: v == null ? rgNa(D.w, k) : null, est: rgEstFor(k, D.w), href: id === "blended_roas" || id === "perf_spend" ? "#marketing" : id === "cvr" || id === "perf_cvr" ? "#funnel" : null });
 }
 const D1_CK = { ok: ["Healthy", "✓"], watch: ["Watch", "!"], problem: ["Problem", "✕"], unknown: ["No data", "–"] };
 function d1Checkout(pl) {
@@ -100,7 +100,7 @@ R.d1 = (p) => {
       if (!g) { host.innerHTML = rgNone(); return; }
       const seg = c.groups.length > 1 ? `<div class="seg" id="d1-phase" role="group" aria-label="Which days">${c.groups.map((x) => `<button type="button" data-ph="${x.phase}" aria-pressed="${x.phase === MK.phase}">${x.phase === "sale" ? "Sale" : "BAU"} days</button>`).join("")}</div>` : `<span class="phase-badge" title="${esc(RG_PHASE_RULE)}">${g.phase === "sale" ? "Sale vs Sale" : "BAU vs BAU"}</span>`;
       sub = `<b>${esc(rgSpan(from, d1))}</b> ${seg} <span class="rg-dim">${rgVsLine(g)}</span>`;
-      kpis = D1_KPIS.map((id) => rgKpi(id, g, { href: id === "blended_roas" || id === "perf_spend" ? "#marketing" : id === "cvr" ? "#funnel" : null })).join("");
+      kpis = D1_KPIS.map((id) => rgKpi(id, g, { href: id === "blended_roas" || id === "perf_spend" ? "#marketing" : id === "cvr" || id === "perf_cvr" ? "#funnel" : null })).join("");
       funnelG = g;
       stages = d1Stages(g, null, 0);
       ck = fnCheckout(g);
@@ -111,7 +111,7 @@ R.d1 = (p) => {
     setSub(`<div class="sub-line">${viewSeg} ${sub} <button type="button" class="rg-btn" id="d1-copy" style="margin-left:auto">Copy summary</button></div>`);
     const chHtml = changed.length ? `<ul class="changed">${changed.map((x) => `<li><span class="ic ${x.dir}">${x.dir === "up" ? "▲" : x.dir === "down" ? "▼" : "!"}</span><span>${x.html}</span><a href="${x.link}">${esc(x.lab)} →</a></li>`).join("")}</ul>` : `<p class="na">${g.pw ? "Nothing moved enough to call out." : "No typical day to compare with."}</p>`;
     host.innerHTML = `
-      <section class="card" data-component="d1-headline"><div class="kpis six">${kpis}</div></section>
+      <section class="card" data-component="d1-headline"><div class="kpis seven">${kpis}</div></section>
       ${rgSec("What changed", D1.view === "day" ? `yesterday against a typical ${kw} day, biggest movers first` : "against the same dates last month", chHtml, { comp: "d1-what-changed" })}
       <div class="cols-2">
         ${rgSec("Checkout", "GoKwik's checkout steps", ck, { comp: "d1-checkout-status" })}

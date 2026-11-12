@@ -490,7 +490,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
      numbers so far today against a typical same-weekday day of the same kind
      at the same time (or yesterday at the same time), the running total
      through the day, spend pacing, the campaigns, and the checkout. */
-  const LIVE_KPI = [["orders", "orders"], ["gmv", "total_sales"], ["aov", "aov"], ["total_spend", "perf_spend"], ["roas", "blended_roas"], ["cvr", "cvr"]];
+  const LIVE_KPI = [["orders", "orders"], ["gmv", "total_sales"], ["aov", "aov"], ["total_spend", "perf_spend"], ["roas", "blended_roas"], ["cvr", "cvr"], ["cvr_perf", "perf_cvr"]];
   R.live = (p) => {
     clearInterval(state.liveTimer); clearInterval(state.liveTick);
     state.liveTimer = setInterval(liveRefresh, (p.refresh_seconds || 180) * 1000);
@@ -508,9 +508,9 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       if (key === "total_spend") return kpiCard(id, { value: it.value, est: it.estimate ? "Includes estimated Reddit, CRM and affiliate spend: the sheets are filled the next day" : "", sub: it.ref && it.ref.share != null ? `${Math.round(it.ref.share * 100)}% ${it.ref.label} (${mVal(id, it.ref.value, true)})` : "" });
       if (key === "roas") return kpiCard(id, { value: it.value, prev: it.ref ? it.ref.value ?? null : null, change: it.ref && it.ref.value ? it.value / it.ref.value - 1 : null, tipExtra: it.ref ? `Compared with ${it.ref.label}.` : "", est: "Built on estimated Reddit, CRM and affiliate spend" });
       const v = typ ? it.typical : it.yesterday, d = typ ? it.vs_typical : it.vs_yesterday;
-      return kpiCard(id, { value: it.value, prev: v ?? null, change: d, small: id !== "cvr" && v != null && (items.get("orders")[typ ? "typical" : "yesterday"] || 0) < METRIC_RULES.min_orders });
+      return kpiCard(id, { value: it.value, prev: v ?? null, change: d, small: id !== "cvr" && id !== "perf_cvr" && v != null && (items.get("orders")[typ ? "typical" : "yesterday"] || 0) < METRIC_RULES.min_orders });
     };
-    const strip = `<section class="card"><div class="kpis six">${LIVE_KPI.map(kpi).join("")}</div><div class="banner" id="live-stale" hidden>This view is more than 30 minutes old, so the live refresh may be failing. The numbers are the last good ones.</div></section>`;
+    const strip = `<section class="card"><div class="kpis seven">${LIVE_KPI.map(kpi).join("")}</div><div class="banner" id="live-stale" hidden>This view is more than 30 minutes old, so the live refresh may be failing. The numbers are the last good ones.</div></section>`;
     const chart = sh ? rgSec("Through the day", "running total, today against the comparison", `${legend([["--accent", "Today"], ["--muted", baseLabel + " (dashed)"]])}<div class="chart-box"><canvas id="c-live" aria-label="Running total through the day"></canvas></div>`,
       { ctl: `<div class="seg" id="live-metric">${[["gmv", "Total sales"], ["orders", "Orders"], ["sessions", "Sessions"]].map(([k, l]) => `<button type="button" data-m="${k}" aria-pressed="${LIVE.metric === k}">${l}</button>`).join("")}</div>` }) : "";
     // spend pacing: sales campaigns against yesterday's full day; the campaign view acts here

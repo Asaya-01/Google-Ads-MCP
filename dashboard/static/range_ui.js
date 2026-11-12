@@ -437,7 +437,7 @@ async function rgShell(render) {
 const OV = { metric: "gmv" };
 const OV_KPIS = [
   ["total_sales", null, { perDay: true }], ["orders", null, {}], ["aov", null, {}],
-  ["blended_roas", "marketing", {}], ["perf_spend", "marketing", { perDay: true }], ["cvr", "funnel", {}],
+  ["blended_roas", "marketing", {}], ["perf_spend", "marketing", { perDay: true }], ["cvr", "funnel", {}], ["perf_cvr", "funnel", {}],
 ];
 /* What changed: deterministic, ranked by how much each moved Total sales. */
 function rgWhatChanged(g) {
@@ -498,7 +498,7 @@ R.overview = (p) => {
       : '<p class="na">Nothing moved enough to call out.</p>';
     const mseg = `<div class="seg" id="ov-metric" role="group" aria-label="Chart metric">${[["gmv", "Total sales"], ["orders", "Orders"]].map(([k, l]) => `<button type="button" data-m="${k}" aria-pressed="${OV.metric === k}">${l}</button>`).join("")}</div>`;
     host.innerHTML = `
-      <section class="card" data-component="overview-kpis"><div class="kpis six">${kpis}</div>${g.note ? `<p class="legend-note">${esc(g.note)}</p>` : ""}</section>
+      <section class="card" data-component="overview-kpis"><div class="kpis seven">${kpis}</div>${g.note ? `<p class="legend-note">${esc(g.note)}</p>` : ""}</section>
       ${rgSec("What changed", "the biggest movers behind the change, each linked to its detail", changed, { comp: "what-changed" })}
       ${rgSec(OV.metric === "gmv" ? "Total sales per day" : "Orders per day", "each day of the picked dates", `${rgDayLegend()}<div class="chart-box"><canvas id="c-ov" aria-label="${OV.metric === "gmv" ? "Total sales" : "Orders"} per day"></canvas></div>`, { ctl: mseg, comp: "sales-per-day-chart" })}
       ${rgSec("Target vs achieved", `the media plan for ${esc(rgSpan(RG.from, RG.to))}, every day picked`, rgTargets(RG.from, RG.to), { comp: "targets" })}`;

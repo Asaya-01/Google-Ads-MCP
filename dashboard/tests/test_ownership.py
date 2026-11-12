@@ -132,9 +132,9 @@ def test_no_breakdown_is_rendered_on_two_tabs(rendered):
             seen[c] = t
 
 
-def test_overview_is_six_headline_numbers_and_no_table(rendered):
+def test_overview_is_seven_headline_numbers_and_no_table(rendered):
     ov = rendered["overview"]
-    assert ov["kpis"] == 6
+    assert ov["kpis"] == 7  # six headline numbers + Perf CVR next to CVR
     assert ov["tables"] == 0
 
 
