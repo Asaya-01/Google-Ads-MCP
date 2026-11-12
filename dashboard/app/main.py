@@ -54,6 +54,15 @@ def serializer() -> URLSafeTimedSerializer:
     return _serializer
 
 
+def oauth_serializer() -> URLSafeTimedSerializer:
+    """Signs the one-time sign-in state; a different salt from the session,
+    so one can never stand in for the other."""
+    key = secrets.get_secret("dashboard-session-key")
+    if not key:
+        raise RuntimeError("Secret dashboard-session-key is missing")
+    return URLSafeTimedSerializer(key, salt="asaya-dashboard-oauth-state")
+
+
 def dev_user() -> str | None:
     """Local development only: skips sign-in when serving from a local store."""
     if settings.env("STORE_DIR") and settings.env("DEV_USER_EMAIL"):
@@ -159,8 +168,9 @@ def public_config():
     }
 
 
-def _verified_email(credential: str) -> str:
-    """The allowlisted, verified email in a Google ID token, else an error."""
+def _verified_email(credential: str, nonce: str | None = None) -> str:
+    """The allowlisted, verified email in a Google ID token, else an error.
+    With `nonce`, the token must carry it (the direct sign-in below)."""
     from google.auth.transport import requests as google_requests
     from google.oauth2 import id_token
 
@@ -169,6 +179,8 @@ def _verified_email(credential: str) -> str:
         claims = id_token.verify_oauth2_token(credential or "", google_requests.Request(), client_id)
     except ValueError:
         raise HTTPException(401, "Google sign-in could not be verified")
+    if nonce is not None and claims.get("nonce") != nonce:
+        raise HTTPException(401, "Google sign-in could not be verified (expired or reused); please try again")
     email = (claims.get("email") or "").lower()
     if not email or not claims.get("email_verified"):
         raise HTTPException(401, "Google account email is not verified")
@@ -197,16 +209,76 @@ async def sign_in(request: Request):
     return _with_session(JSONResponse({"email": email}), email)
 
 
+OAUTH_COOKIE = "asaya_oauth"
+OAUTH_SECONDS = 600
+
+
+def _origin(request: Request) -> str:
+    """This site's address as the browser sees it (Cloud Run is https)."""
+    host = request.headers.get("host") or request.url.netloc
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    return f"{proto.split(',')[0].strip()}://{host}"
+
+
+@app.get("/auth/google/start")
+def sign_in_start(request: Request):
+    """Phones: a plain link to Google's own sign-in page (no Google script in
+    the page, which iPhone browsers and in-app browsers break). Google posts
+    the ID token back to /auth/google/redirect, the address already
+    authorised on the OAuth client. A one-time state and nonce, signed in a
+    short-lived cookie, tie the answer to this browser."""
+    import secrets as pysecrets
+    from urllib.parse import urlencode
+
+    from fastapi.responses import RedirectResponse
+
+    state_, nonce = pysecrets.token_urlsafe(24), pysecrets.token_urlsafe(24)
+    url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode({
+        "client_id": settings.env("GOOGLE_OAUTH_CLIENT_ID"),
+        "redirect_uri": _origin(request) + "/auth/google/redirect",
+        "response_type": "id_token",
+        "response_mode": "form_post",
+        "scope": "openid email",
+        "state": state_,
+        "nonce": nonce,
+        "prompt": "select_account",
+    })
+    response = RedirectResponse(url, status_code=302)
+    # SameSite=None: Google's answer is a cross-site POST, which drops Lax cookies
+    response.set_cookie(OAUTH_COOKIE, oauth_serializer().dumps({"s": state_, "n": nonce}), max_age=OAUTH_SECONDS,
+                        httponly=True, secure=True, samesite="none", path="/auth/google")
+    return response
+
+
 @app.post("/auth/google/redirect")
 async def sign_in_redirect(request: Request):
-    """Sign-in by redirect (phones and in-app browsers, where Google's pop-up
-    fails): Google posts the ID token here as a form. The g_csrf_token in
-    the form must match Google's cookie of the same name."""
+    """Sign-in by redirect. Two senders: the direct sign-in above (an
+    `id_token` with our state and nonce) and Google's redirect-mode button
+    (a `credential` whose g_csrf_token must match Google's cookie)."""
     from urllib.parse import parse_qs, quote
 
     from fastapi.responses import RedirectResponse
 
     form = {k: v[0] for k, v in parse_qs((await request.body()).decode("utf-8", "replace")).items()}
+    back = lambda why: RedirectResponse("/?signin_error=" + quote(why), status_code=303)  # noqa: E731
+    if "id_token" in form or "error" in form:
+        try:
+            saved = oauth_serializer().loads(request.cookies.get(OAUTH_COOKIE, ""), max_age=OAUTH_SECONDS)
+        except (BadSignature, SignatureExpired):
+            saved = None
+        if form.get("error"):
+            response = back("Google sign-in was cancelled or refused; please try again")
+        elif not saved or not form.get("state") or form.get("state") != saved.get("s"):
+            response = back("Sign-in took too long or was opened in another browser; please try again")
+        else:
+            try:
+                email = _verified_email(form.get("id_token", ""), nonce=saved.get("n"))
+            except HTTPException as exc:
+                response = back(str(exc.detail))
+            else:
+                response = _with_session(RedirectResponse("/", status_code=303), email)
+        response.delete_cookie(OAUTH_COOKIE, path="/auth/google")
+        return response
     token = form.get("g_csrf_token")
     if not token or token != request.cookies.get("g_csrf_token"):
         return RedirectResponse("/?signin_error=" + quote("Sign-in could not be checked; please try again"), status_code=303)

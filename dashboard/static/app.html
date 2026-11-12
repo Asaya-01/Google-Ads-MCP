@@ -674,15 +674,20 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     $main.innerHTML = `<div class="signin"><h2>Sign in to the Asaya dashboard</h2>
       <p class="sub">${esc(message && message !== "Sign in required" ? message : "Use your Google account. Access is limited to the people on the dashboard allowlist.")}</p>
       <div id="gsi"></div><p class="sub" style="margin-top:12px">On a phone, if sign-in will not open, open this page in Safari or Chrome.</p></div>`;
+    // Phones and in-app browsers (opened from WhatsApp, Slack, the Claude app...)
+    // break Google's pop-up and its redirect mode, so there sign-in is a plain
+    // link to Google's own sign-in page, which posts back to this site.
+    const phone = /Android|iPhone|iPad|iPod|Mobile|FBAN|FBAV|Instagram|Line\/|; wv\)|WhatsApp|Slack|CriOS|FxiOS/i.test(navigator.userAgent)
+      || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); // iPad asking for the desktop site
+    if (phone) {
+      document.getElementById("gsi").innerHTML = `<a class="gsi-link" href="/auth/google/start" style="display:inline-flex;align-items:center;gap:10px;padding:10px 20px;border:1px solid #dadce0;border-radius:999px;background:#fff;color:#3c4043;font:500 15px/1.2 system-ui,sans-serif;text-decoration:none"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.6 5.4 2.6 13.3l7.8 6C12.2 13.6 17.6 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17.1z"/><path fill="#FBBC05" d="M10.4 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.8-6C.9 16.6 0 20.2 0 24s.9 7.4 2.6 10.7l7.8-6z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.8-5.8l-7.4-5.7c-2.1 1.4-4.8 2.2-8.4 2.2-6.4 0-11.8-4.1-13.7-9.8l-7.8 6C6.6 42.6 14.6 48 24 48z"/></svg>Sign in with Google</a>`;
+      return;
+    }
     const s = document.createElement("script");
     s.src = "https://accounts.google.com/gsi/client";
-    // Phones and in-app browsers (opened from WhatsApp, Slack, the Claude app...)
-    // break Google's pop-up, so there the button redirects to Google and back.
-    const redirect = /Android|iPhone|iPad|iPod|Mobile|FBAN|FBAV|Instagram|Line\/|; wv\)|WhatsApp|Slack/i.test(navigator.userAgent);
     s.onload = () => {
       google.accounts.id.initialize({
         client_id: state.config.google_client_id,
-        ...(redirect ? { ux_mode: "redirect", login_uri: location.origin + "/auth/google/redirect" } : {}),
         callback: async (resp) => {
           const r = await fetch("/auth/google", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ credential: resp.credential }) });
           if (r.ok) { state.pages = {}; boot(); } else { signIn((await r.json().catch(() => ({}))).detail || "Sign-in failed"); }
