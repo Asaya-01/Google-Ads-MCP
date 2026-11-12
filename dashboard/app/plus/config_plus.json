@@ -47,20 +47,24 @@
   "profit": {
     "_about": "Spec M1. Each input is a Google Sheet id in an environment variable (like the existing spend sheets); the sheet is shared with the dashboard's service account as Viewer. Until it is set, the cards that need it show 'Input needed'.",
     "break_even_reference": {"roas": 1.7, "skus": ["ASS", "ITB", "UAS"], "note": "Spec: 1.7x is the reference line on ROAS charts until per-SKU break-even is calculated."},
-    "gst_inclusive_total_sales": null,
-    "gst_rate": null,
+    "gst_inclusive_total_sales": true,
+    "gst_source": "Owner (Nov 2026): Total sales includes GST. The GST is not one rate (products, shipping and freebies are taxed differently), so it is taken from the tax Shopify charged on the same valid orders each day: GST on Total sales = Total sales x (order tax / order total) for the days in view.",
     "cogs_sheet_env": "PLUS_COGS_SHEET",
     "cogs_format": "Tab 'COGS', header row 1: sku | landed_cost | effective_from (YYYY-MM-DD). One row per variant SKU; a new row with a later effective_from changes the cost from that date. Bundles list the sum of their components.",
     "rate_card_sheet_env": "PLUS_RATE_CARD_SHEET",
     "rate_card_format": "Tab 'Rate card', header row 1: item | value | unit | effective_from. Items: forward_shipping (INR per shipped order), rto_shipping (INR per RTO order), reverse_shipping (INR per return), cod_fee (INR per COD order or % of COD value), gateway_fee (% of prepaid value), packaging (INR per order).",
     "influencer_sheet_env": "PLUS_INFLUENCER_SHEET",
-    "influencer_format": "Tab 'Spend', header row 1: month (YYYY-MM) | influencer | awareness_other. INR per month; spread evenly over the month's days for daily views.",
+    "influencer_tab": "Actual Budget Spends",
+    "influencer_row": "Actual Spend",
+    "influencer_fy_start": "2026-04",
+    "influencer_format": "Tab 'Actual Budget Spends': a row of month names (April ... March, the financial year starting influencer_fy_start) and a row labelled 'Actual Spend' with INR per month. Only months that have ended count (later columns may hold the plan); each month is spread evenly over its days. Awareness ad spend is already in the dashboard (Meta / Google awareness).",
     "finance_pl_note": "Phase 1 gate: CM2 within 5% of the finance P&L for one month. Needs one month of the finance P&L."
   },
 
   "site": {
     "changes_sheet_env": "PLUS_CHANGES_SHEET",
-    "changes_format": "Tab 'Changes', header row 1: date (YYYY-MM-DD) | change | area | owner. One row per Shopify change (theme, price, offer, app, checkout).",
+    "changes_tab": "Changes",
+    "changes_format": "Tab 'Changes', header row 1: Date | Task | Assigned By | Details | ... | Status | Went Live on. A change is marked on the day it went live (Status 'Done' with a 'Went Live on' date, DD/MM/YYYY); rows still in progress are counted, not marked.",
     "cooee_note": "Cooee test start / stop markers: waiting on Cooee's export or API (asked separately)."
   },
 

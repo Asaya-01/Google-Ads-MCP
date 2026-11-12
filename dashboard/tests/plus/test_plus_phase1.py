@@ -77,25 +77,44 @@ def test_ga4_failure_is_shown_not_zero():
 def test_profit_inputs_are_input_needed_until_supplied(monkeypatch):
     for env in ("PLUS_COGS_SHEET", "PLUS_RATE_CARD_SHEET", "PLUS_INFLUENCER_SHEET"):
         monkeypatch.delenv(env, raising=False)
-    p = build.build_profit(FakeStore(), D1)
-    for k in ("cogs", "rate_card", "influencer", "gst"):
+    p = build.build_profit(FakeStore(), D1, gst_run)
+    for k in ("cogs", "rate_card", "influencer"):
         assert p[k]["na"].startswith("Input needed:"), k
     assert p["reference"]["roas"] == 1.7
+
+
+def gst_run(name, params=None, **subs):
+    assert name == "gst_daily" and params["exclude_name_regex"] == "ASAYASS|ASAYAINF"
+    return [{"date": "2026-11-02", "total_price": 1180.0, "total_tax": 180.0}, {"date": "2026-11-01", "total_price": 1050.0, "total_tax": 50.0}]
+
+
+def test_gst_is_taken_from_shopify_order_tax_not_a_flat_rate():
+    p = build.build_profit(FakeStore(), D1, gst_run)
+    assert p["gst"]["inclusive"] is True
+    assert p["gst"]["days"] == [["2026-11-01", 1050.0, 50.0], ["2026-11-02", 1180.0, 180.0]]
+
+    def broken(name, params=None, **subs):
+        raise RuntimeError("no access")
+    assert "no access" in build.build_profit(FakeStore(), D1, broken)["gst"]["na"]
 
 
 def test_profit_sheets_are_read_when_set(monkeypatch):
     tabs = {
         "COGS": [["SKU", "Landed cost", "Effective from"], ["UAS-1", "120", "2026-10-01"], ["ITB-1", "₹150.5", "2026-11-01"]],
         "Rate card": [["Item", "Value", "Unit", "Effective from"], ["forward_shipping", "55", "INR/order", "2026-10-01"]],
-        "Spend": [["Month", "Influencer", "Awareness other"], ["2026-11", "500000", "100000"]],
+        "Actual Budget Spends": [["OVERALL"], ["", "April", "May ", "June", "July", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"], [],
+                                 ["Product A", "", "1,000"],
+                                 ["Actual Spend", "1,000", "2,000", "", "", "", "", "3,000", "4,000", "5,000", "6,000", "", "", "21,000"]],
     }
     monkeypatch.setattr(build.sheets, "fetch_rows", lambda sid, tab, first: tabs[tab])
     for env in ("PLUS_COGS_SHEET", "PLUS_RATE_CARD_SHEET", "PLUS_INFLUENCER_SHEET"):
         monkeypatch.setenv(env, "x")
-    p = build.build_profit(FakeStore(), D1)
+    p = build.build_profit(FakeStore(), D1, gst_run)
     assert p["cogs"]["rows"] == [["ITB-1", 150.5, "2026-11-01"], ["UAS-1", 120.0, "2026-10-01"]]
     assert p["rate_card"]["rows"][0][:2] == ["forward_shipping", 55.0]
-    assert p["influencer"]["months"]["2026-11"] == [500000.0, 100000.0]
+    # April 2026 - March 2027; only months over by D1 count, the rest (plan) are pending
+    assert p["influencer"]["months"] == {"2026-04": 1000.0, "2026-05": 2000.0, "2026-10": 3000.0}
+    assert p["influencer"]["pending"] == {"2026-11": 4000.0, "2026-12": 5000.0, "2027-01": 6000.0}
 
 
 def test_change_markers_from_the_tracker_sheet(monkeypatch):
@@ -105,6 +124,19 @@ def test_change_markers_from_the_tracker_sheet(monkeypatch):
     monkeypatch.setattr(build.sheets, "fetch_rows", lambda sid, tab, first: [["Date", "Change", "Area", "Owner"], ["2026-11-03", "New PDP layout", "theme", "web"], ["bad", "x", "", ""]])
     rows = build.build_site(FakeStore(), D1)["changes"]["rows"]
     assert rows == [["2026-11-03", "New PDP layout", "theme", "web"]]
+
+
+def test_change_markers_from_the_teams_tracker_layout(monkeypatch):
+    monkeypatch.setenv("PLUS_CHANGES_SHEET", "x")
+    head = ["Date", "Task", "Assigned By", "Details", "Outcome", "Comments", "Dead Line", "Status", "Went Live on"]
+    monkeypatch.setattr(build.sheets, "fetch_rows", lambda sid, tab, first: [head,
+        ["02/09/2025", "Whole-number prices", "Owner A", "New Offer", "-", "", "", "Done", "19/09/2025"],
+        ["02/09/2025", "Product first in side cart", "Owner A", "New Offer", "-", "", "", "Done", "02/09/25"],
+        ["14/09/2026", "Store setup", "Owner B", "", "", "", "", "WIP"],
+        ["27/10/2026", "Progress bar with images"]])
+    c = build.build_site(FakeStore(), D1)["changes"]
+    assert c["rows"] == [["2025-09-02", "Product first in side cart", "New Offer", "Owner A"], ["2025-09-19", "Whole-number prices", "New Offer", "Owner A"]]
+    assert c["open"] == 2
 
 
 class FakeBQ:
@@ -168,7 +200,7 @@ def test_job_writes_one_plus_page_and_a_failing_module_says_so(monkeypatch):
     st = MemStore({"pages/days.json": {"as_of": "2026-11-11"}})
     monkeypatch.setattr(job, "default_store", lambda: st)
     monkeypatch.setattr(job.build, "build_traffic", lambda s, d1, run: {"title": "Traffic Quality", "as_of": d1})
-    monkeypatch.setattr(job.build, "build_profit", lambda s, d1: {"title": "Profit"})
+    monkeypatch.setattr(job.build, "build_profit", lambda s, d1, run: {"title": "Profit"})
     monkeypatch.setattr(job.build, "build_site", lambda s, d1: (_ for _ in ()).throw(RuntimeError("sheet down")))
     monkeypatch.setattr(job.build, "build_stock", lambda d1, bq, taken: {"title": "Inventory"})
     rc = job.main(["--no-snapshot"])

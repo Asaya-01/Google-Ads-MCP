@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
     print("snapshots:", taken)
     makers = {
         "traffic": lambda: build.build_traffic(store, d1, bqx.run),
-        "profit": lambda: build.build_profit(store, d1),
+        "profit": lambda: build.build_profit(store, d1, bqx.run),
         "site": lambda: build.build_site(store, d1),
         "stock": lambda: build.build_stock(d1, bqx, taken),
     }

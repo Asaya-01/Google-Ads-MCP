@@ -54,25 +54,37 @@ git checkout dashboard-plus && ./dashboard/deploy_plus.sh
 gcloud run jobs execute asaya-d2c-plus --region asia-south1 --wait
 ```
 
-## Inputs still needed
+## Inputs
 
-Until each input arrives, its card says "Input needed". No number is estimated.
+**Received:**
+- **GST:** Total sales includes GST (owner, Nov 2026). GST is not one flat rate, because products, shipping and freebies are taxed differently. So the Plus job reads the tax Shopify charged on the same valid orders each day, with the same rules as Total sales (no tests, no cancelled orders, no ASAYAINF / ASAYASS):
+  - GST on Total sales = Total sales × (order tax ÷ order total) for the days in view.
+  - Query: `sql/plus/gst_daily.sql`.
+- **Influencer spend:**
+  - Source: the influencer team's workbook, tab `Actual Budget Spends`, row `Actual Spend`.
+  - The month columns cover April–March of the financial year in `profit.influencer_fy_start`.
+  - Only months that have ended count, because later columns can still hold the plan.
+  - Each month is spread evenly over its days.
+  - Awareness ad spend is already in the dashboard.
+  - **When the financial year rolls over, update `influencer_fy_start`.**
+- **Changes Tracker:**
+  - Source: tab `Changes`, columns Date | Task | Assigned By | Details | … | Status | Went Live on.
+  - A change is marked on its "Went Live on" date when its Status is "Done". Rows still in progress are only counted.
+
+Set these sheet ids as `PLUS_INFLUENCER_SHEET` and `PLUS_CHANGES_SHEET` in `deploy.env`. Never put them in the repository. Share both sheets with the service account as Viewer.
+
+**Still needed** (the card says "Input needed"; no number is estimated):
 
 | Input | Where it goes | Format |
 |---|---|---|
-| Landed COGS per variant | sheet id in `PLUS_COGS_SHEET` | Tab `COGS`, columns: sku, landed_cost, effective_from |
+| Landed COGS per variant | `PLUS_COGS_SHEET` | Tab `COGS`, columns: sku, landed_cost, effective_from |
 | Shipping / COD / gateway / packaging rate card | `PLUS_RATE_CARD_SHEET` | Tab `Rate card`, columns: item, value, unit, effective_from |
-| Influencer and other awareness spend | `PLUS_INFLUENCER_SHEET` | Tab `Spend`, columns: month (YYYY-MM), influencer, awareness_other |
-| GST treatment of Total sales | `app/plus/config_plus.json` → `profit.gst_inclusive_total_sales`, `gst_rate` | yes/no and rate |
-| Shopify Changes Tracker | `PLUS_CHANGES_SHEET` | Tab `Changes`, columns: date, change, area, owner |
+| One month of finance P&L | for the gate (CM2 within 5% of finance) | — |
 | Meta Event Match Quality | approval for a new Meta API read | — |
 | Reddit link clicks | Reddit export or API | — |
 | Cooee test markers | Cooee export or API | — |
-| One month of finance P&L | for the gate: CM2 must be within 5% of finance | — |
 
-Share each sheet with the service account as Viewer, and put its id in `deploy.env`. Never put a sheet id in the repository.
-
-The Shopify app may also need the `read_inventory` scope for `inventoryQuantity`. If it is missing, the Inventory sub-tab says "not taken: …".
+The Shopify app may also need the `read_inventory` scope for `inventoryQuantity`. If it is missing, the Inventory section says "not taken: …".
 
 ## Regression check
 

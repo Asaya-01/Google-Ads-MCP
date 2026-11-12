@@ -13,7 +13,7 @@ import datetime as dt
 import os
 import re
 
-from .. import sheets
+from .. import settings, sheets
 from . import config
 
 
@@ -104,16 +104,24 @@ def data_health(store, d1: str, run) -> dict:
 
 
 # ---------------------------------------------------------------- sheet inputs
-def _sheet_rows(env: str, tab: str) -> tuple[list[dict] | None, str | None]:
-    """Rows of a sheet tab as dicts keyed by the lower-cased header, or
-    (None, why) when the sheet is not set or cannot be read."""
+def _sheet_raw(env: str, tab: str) -> tuple[list[list] | None, str | None]:
+    """The cells of a sheet tab, or (None, why) when the sheet is not set or
+    cannot be read."""
     sid = (os.environ.get(env) or "").strip()
     if not sid:
         return None, f"the sheet id is not set ({env})"
     try:
-        raw = sheets.fetch_rows(sid, tab, 1)
+        return sheets.fetch_rows(sid, tab, 1) or [], None
     except Exception as exc:
         return None, f"{type(exc).__name__}: {exc}"
+
+
+def _sheet_rows(env: str, tab: str) -> tuple[list[dict] | None, str | None]:
+    """Rows of a sheet tab as dicts keyed by the lower-cased header, or
+    (None, why) when the sheet is not set or cannot be read."""
+    raw, why = _sheet_raw(env, tab)
+    if raw is None:
+        return None, why
     if not raw:
         return [], None
     head = [re.sub(r"[^a-z0-9]+", "_", str(h).strip().lower()).strip("_") for h in raw[0]]
@@ -126,7 +134,7 @@ def _num(v):
 
 def _date(v) -> str | None:
     s = str(v or "").strip()
-    for f in ("%Y-%m-%d", "%d-%b-%Y", "%d/%m/%Y", "%d-%m-%Y"):
+    for f in ("%Y-%m-%d", "%d-%b-%Y", "%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y", "%d-%m-%y"):
         try:
             return dt.datetime.strptime(s, f).date().isoformat()
         except ValueError:
@@ -135,11 +143,52 @@ def _date(v) -> str | None:
 
 
 # ---------------------------------------------------------------- M1 profit
-def build_profit(store, d1: str) -> dict:
+MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+
+
+def influencer_months(raw: list[list], row_label: str, fy_start: str, d1: str) -> dict:
+    """Monthly influencer spend from the budget tab: the row of month names
+    and the row labelled `row_label`. Months of the financial year starting
+    `fy_start` (YYYY-MM). Only months that have ended by d1 count: later
+    columns may hold the plan, which is listed as pending, never used."""
+    head = next((r for r in raw if sum(1 for c in r if str(c).strip().lower()[:3] in MONTHS) >= 6), None)
+    vals = next((r for r in raw if r and str(next((c for c in r if str(c).strip()), "")).strip().lower() == row_label.lower()), None)
+    if head is None or vals is None:
+        raise ValueError(f"no month header row or no '{row_label}' row in the tab")
+    y, m = (int(x) for x in fy_start.split("-"))
+    first = m - 1
+    months, pending = {}, {}
+    for i, c in enumerate(head):
+        k = str(c).strip().lower()[:3]
+        if k not in MONTHS:
+            continue
+        mi = MONTHS.index(k)
+        yy = y + (1 if mi < first else 0)
+        key = f"{yy}-{mi + 1:02d}"
+        v = _num(vals[i]) if i < len(vals) else None
+        if v is None:
+            continue
+        end = (dt.date(yy + (mi == 11), (mi + 1) % 12 + 1, 1) - dt.timedelta(days=1)).isoformat()
+        (months if end <= d1 else pending)[key] = round(float(v), 2)
+    return {"months": months, "pending": pending}
+
+
+def build_profit(store, d1: str, run=None) -> dict:
     pc = config()["profit"]
     out: dict = {"title": "Profit", "as_of": d1, "reference": pc["break_even_reference"], "finance_pl_note": pc["finance_pl_note"]}
-    gst = pc["gst_inclusive_total_sales"]
-    out["gst"] = {"inclusive": gst, "rate": pc["gst_rate"]} if gst is not None else {**_input_needed("GST treatment of Total sales"), "detail": "Is Total sales GST-inclusive, and at what rate? Margin maths is net of GST."}
+    if pc["gst_inclusive_total_sales"] is None:
+        out["gst"] = {**_input_needed("GST treatment of Total sales"), "detail": "Is Total sales GST-inclusive? Margin maths is net of GST."}
+    elif not pc["gst_inclusive_total_sales"]:
+        out["gst"] = {"inclusive": False, "about": pc.get("gst_source", "")}
+    else:
+        try:
+            end = dt.date.fromisoformat(d1)
+            rows = run("gst_daily", {"exclude_name_regex": settings.config()["orders"]["exclude_name_regex"],
+                                     "start_date": end - dt.timedelta(days=config()["traffic"]["history_days"] - 1), "end_date": end})
+            out["gst"] = {"inclusive": True, "about": pc.get("gst_source", ""),
+                          "days": sorted([str(r["date"])[:10], round(float(r["total_price"] or 0), 2), round(float(r["total_tax"] or 0), 2)] for r in rows)}
+        except Exception as exc:
+            out["gst"] = {"na": f"GST could not be read from Shopify orders: {type(exc).__name__}: {exc}"}
     rows, why = _sheet_rows(pc["cogs_sheet_env"], "COGS")
     if rows is None:
         out["cogs"] = {**_input_needed("landed COGS per variant"), "detail": why, "format": pc["cogs_format"]}
@@ -151,11 +200,14 @@ def build_profit(store, d1: str) -> dict:
         out["rate_card"] = {**_input_needed("shipping, COD and gateway fee rate card"), "detail": why, "format": pc["rate_card_format"]}
     else:
         out["rate_card"] = {"rows": [[str(r.get("item", "")).strip().lower(), _num(r.get("value")), str(r.get("unit", "")).strip(), _date(r.get("effective_from")) or "2000-01-01"] for r in rows if r.get("item")]}
-    rows, why = _sheet_rows(pc["influencer_sheet_env"], "Spend")
-    if rows is None:
-        out["influencer"] = {**_input_needed("monthly influencer and awareness spend"), "detail": why, "format": pc["influencer_format"]}
+    raw, why = _sheet_raw(pc["influencer_sheet_env"], pc["influencer_tab"])
+    if raw is None:
+        out["influencer"] = {**_input_needed("monthly influencer spend"), "detail": why, "format": pc["influencer_format"]}
     else:
-        out["influencer"] = {"months": {str(r.get("month", "")).strip()[:7]: [_num(r.get("influencer")) or 0.0, _num(r.get("awareness_other")) or 0.0] for r in rows if r.get("month")}}
+        try:
+            out["influencer"] = {**influencer_months(raw, pc["influencer_row"], pc["influencer_fy_start"], d1), "source": f"tab '{pc['influencer_tab']}', row '{pc['influencer_row']}'"}
+        except ValueError as exc:
+            out["influencer"] = {**_input_needed("monthly influencer spend"), "detail": str(exc), "format": pc["influencer_format"]}
     return out
 
 
@@ -163,13 +215,35 @@ def build_profit(store, d1: str) -> dict:
 def build_site(store, d1: str) -> dict:
     sc = config()["site"]
     out: dict = {"title": "Site", "as_of": d1, "cooee": _input_needed(sc["cooee_note"])}
-    rows, why = _sheet_rows(sc["changes_sheet_env"], "Changes")
+    rows, why = _sheet_rows(sc["changes_sheet_env"], sc["changes_tab"])
     if rows is None:
         out["changes"] = {**_input_needed("the Shopify Changes Tracker sheet"), "detail": why, "format": sc["changes_format"]}
     else:
-        out["changes"] = {"rows": sorted([d, str(r.get("change", "")).strip(), str(r.get("area", "")).strip(), str(r.get("owner", "")).strip()]
-                                         for r in rows if (d := _date(r.get("date"))))}
+        out["changes"] = change_rows(rows)
     return out
+
+
+def change_rows(rows: list[dict]) -> dict:
+    """Changes Tracker rows -> markers. The team's tab: Date | Task | Assigned
+    By | Details | ... | Status | Went Live on. A change is marked on the day
+    it went live; with a Status column only 'Done' rows count, the rest are
+    counted as open. A plain date | change | area | owner tab works too."""
+    def first(r, *keys):
+        return next((str(r[k]).strip() for k in keys if str(r.get(k) or "").strip()), "")
+
+    has_status = any("status" in r for r in rows)
+    out, open_n = [], 0
+    for r in rows:
+        if has_status and first(r, "status").lower() != "done":
+            open_n += bool(first(r, "task", "change"))
+            continue
+        d = _date(first(r, "went_live_on", "live_date", "date"))
+        task = first(r, "task", "change")
+        if not d or not task:
+            continue
+        detail = first(r, "details", "area")
+        out.append([d, task[:200], detail[:200], first(r, "assigned_by", "owner")])
+    return {"rows": sorted(out), "open": open_n}
 
 
 # ---------------------------------------------------------------- M7 stock snapshots

@@ -229,19 +229,20 @@ function pxCogs(p, pr) {
 function pxProfit(p, pr) {
   const w = pr.g.w;
   const sales = w.gmv, perf = w.perf_all_spend, aw = w.aw_spend;
-  const gst = p.gst && p.gst.inclusive != null ? p.gst : null;
-  const net = sales == null ? null : gst ? (gst.inclusive ? sales / (1 + (gst.rate || 0)) : sales) : null;
-  const inf = p.influencer && p.influencer.months ? (() => { let t = 0, ok = true; for (const d of pr.cur) { const m = p.influencer.months[d.slice(0, 7)]; if (!m) { ok = false; continue; } const dim = new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7), 0)).getUTCDate(); t += (m[0] + m[1]) / dim; } return ok ? t : null; })() : null;
+  const gst = pxGst(p, pr);
+  const net = sales == null || gst.share == null ? null : sales * (1 - gst.share);
+  const infR = pxInfluencer(p, pr), inf = infR.value;
   const mkt = perf != null && aw != null && inf != null ? perf + aw + inf : null;
   const cogs = pxCogs(p, pr);
   const cm1 = net != null && cogs.value != null ? net - cogs.value : null;
-  const needGst = gst ? null : pxShort(p.gst), needCogs = cogs.value == null ? String(cogs.na || "").replace(/^Input needed:\s*/, "").replace(/\s*\(.*$/, "") : null;
-  const needInf = inf == null ? (p.influencer && p.influencer.na ? pxShort(p.influencer) : "influencer and awareness spend for every month in these days") : null;
+  const needGst = gst.share != null ? null : gst.need, needCogs = cogs.value == null ? String(cogs.na || "").replace(/^Input needed:\s*/, "").replace(/\s*\(.*$/, "") : null;
+  const needInf = inf == null ? infR.need : null;
+  const needMkt = mkt != null ? null : [perf == null ? "performance spend for these days" : null, aw == null ? "awareness spend for these days" : null, needInf].filter(Boolean).join(" · ");
   const needRate = p.rate_card && p.rate_card.na ? pxShort(p.rate_card) : null;
   const needCm2 = [needRate, "RTO % per channel (Module 4, Phase 2)", "COD / prepaid split (Module 4)"].filter(Boolean).join(" · ");
   const ref = p.reference || {};
   const kp = [
-    pxCard("MER", mkt ? pxRatio(sales / mkt) : null, { id: "px_mer", need: mkt ? null : `Input needed: ${needInf}`, tip: "Total sales ÷ total marketing spend (performance + awareness + affiliate + CRM + influencer)." }),
+    pxCard("MER", mkt ? pxRatio(sales / mkt) : null, { id: "px_mer", sub: mkt ? `<span class="kpi-vs">influencer ${esc(pxInrC(inf))} of ${esc(pxInrC(mkt))}</span>` : "", need: mkt ? null : `Input needed: ${needMkt}`, tip: "Total sales ÷ total marketing spend (performance + awareness + affiliate + CRM + influencer)." }),
     pxCard("CM1 (gross margin)", cm1 != null ? pxInrC(cm1) : null, { id: "px_cm1", sub: cm1 != null && net ? `<span class="kpi-vs">${pxPct(cm1 / net)} of net revenue</span>` : "", need: cm1 != null ? null : `Input needed: ${[needGst, needCogs].filter(Boolean).join(" · ")}`, tip: "Net revenue − Σ(units × landed COGS per variant)." }),
     pxCard("CM2", null, { id: "px_cm2", need: `Input needed: ${needCm2}`, tip: "CM1 − forward shipping − RTO and reverse shipping − payment gateway fees − COD fees − packaging." }),
     pxCard("CM3", null, { id: "px_cm3", need: "Input needed: CM2 (above)", tip: "CM2 − total marketing spend." }),
@@ -252,7 +253,7 @@ function pxProfit(p, pr) {
   const step = (l, v, need, neg) => ({ l, v, need, neg });
   const wf = [
     step("Total sales", sales, sales == null ? "Total sales for these days" : null),
-    step("GST", net != null ? -(sales - net) : null, needGst, true),
+    step(gst.share != null ? `GST (${pxPct(gst.share)} of Total sales, as charged)` : "GST", net != null ? -(sales - net) : null, needGst, true),
     step("Net revenue", net, needGst),
     step("Landed COGS", cogs.value != null ? -cogs.value : null, [needCogs].filter(Boolean).join(""), true),
     step("CM1", cm1, cm1 == null ? "the two rows above" : null),
@@ -260,11 +261,12 @@ function pxProfit(p, pr) {
     step("Payment gateway and COD fees", null, needRate || "COD / prepaid split (Module 4)", true),
     step("Packaging", null, needRate, true),
     step("CM2", null, "the rows above", false),
-    step("Marketing spend (performance + awareness + influencer)", mkt != null ? -mkt : null, mkt != null ? null : needInf, true),
+    step("Marketing spend (performance + awareness + influencer)", mkt != null ? -mkt : null, needMkt, true),
+    step("of which influencer", inf != null ? -inf : null, needInf, true),
     step("CM3", null, "CM2", false),
   ];
   const wfTbl = `<div class="table-wrap"><table class="px-wf"><thead><tr><th class="text">Step</th><th>₹</th><th class="text">State</th></tr></thead><tbody>${wf.map((r) => `<tr class="${/^CM|^Net/.test(r.l) ? "total" : ""}"><td class="text">${esc(r.l)}</td><td class="${r.neg && r.v ? "neg" : ""}">${esc(pxInr(r.v))}</td><td class="text">${r.v != null ? "" : `<span class="na">Input needed: ${esc(String(r.need || "").replace(/^Input needed:\s*/, ""))}</span>`}</td></tr>`).join("")}</tbody></table></div>`;
-  const known = `<ul class="notes"><li>Performance spend in these days: <b>${esc(pxInr(perf))}</b>; awareness spend: <b>${esc(pxInr(aw))}</b> (the dashboard's existing numbers).</li><li>Break-even reference until Module 1 calculates it per SKU: <b>${esc(pxRatio(ref.roas))}</b> for ${esc((ref.skus || []).join(", "))} (spec).</li><li>Phase 1 gate: ${esc(p.finance_pl_note || "")}</li></ul>`;
+  const known = `<ul class="notes"><li>Performance spend in these days: <b>${esc(pxInr(perf))}</b>; awareness spend: <b>${esc(pxInr(aw))}</b> (the dashboard's existing numbers).</li><li>Break-even reference until Module 1 calculates it per SKU: <b>${esc(pxRatio(ref.roas))}</b> for ${esc((ref.skus || []).join(", "))} (spec).</li><li>${esc(p.finance_pl_note || "")}</li></ul>`;
   return `
     <section class="card" data-component="plus-profit-kpis"><div class="kpis six">${kp}</div></section>
     <div class="cols-2">
@@ -281,7 +283,39 @@ function pxProfitInputs(p) {
     const fmt = x && x.format ? `<br><span class="sub">Format: ${esc(x.format)}</span>` : "";
     return `<li>${esc(l)}: <span class="px-warn">needed</span>${detail}${fmt}</li>`;
   };
-  return `<h3>Inputs</h3><ul class="notes">${row("Landed COGS per variant", p.cogs)}${row("Shipping, COD and gateway fee rate card", p.rate_card)}${row("GST treatment of Total sales", p.gst && p.gst.inclusive != null ? {} : p.gst)}${row("Influencer and awareness spend", p.influencer)}</ul>`;
+  const inf = p.influencer && p.influencer.months ? Object.keys(p.influencer.months).sort() : null;
+  const infNote = inf && inf.length ? ` <span class="sub">(${esc(pxMonth(inf[0]))} – ${esc(pxMonth(inf[inf.length - 1]))}${p.influencer.pending && Object.keys(p.influencer.pending).length ? `; ${esc(Object.keys(p.influencer.pending).sort().map(pxMonth).join(", "))} not final yet` : ""})</span>` : "";
+  const gstNote = p.gst && p.gst.days ? ' <span class="sub">(GST-inclusive; GST as Shopify charged it on the same orders)</span>' : "";
+  return `<h3>Inputs</h3><ul class="notes">${row("Landed COGS per variant", p.cogs)}${row("Shipping, COD and gateway fee rate card", p.rate_card)}${row("GST", p.gst && (p.gst.days || p.gst.inclusive === false) ? {} : p.gst).replace("</li>", gstNote + "</li>")}${row("Influencer spend", p.influencer).replace("</li>", infNote + "</li>")}</ul>`;
+}
+const pxMonth = (m) => new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7) - 1, 1)).toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
+/* GST share of Total sales for these days: the tax Shopify charged on the
+   same valid orders over their total. Null (with why) when it is not known. */
+function pxGst(p, pr) {
+  const g = p.gst;
+  if (!g || g.na) return { share: null, need: pxShort(g) || "GST treatment of Total sales" };
+  if (g.inclusive === false) return { share: 0 };
+  const days = g.days || [];
+  if (!days.length || days[0][0] > RG.from || days[days.length - 1][0] < RG.to) return { share: null, need: "GST for these days (the Plus job has not read them yet)" };
+  let t = 0, x = 0;
+  for (const [d, tot, tax] of days) if (pr.cur.has(d)) { t += tot; x += tax; }
+  return t > 0 ? { share: x / t } : { share: null, need: "orders on these days" };
+}
+/* Influencer spend for these days: each ended month's actual spread evenly
+   over its days; months not in the sheet (or not ended) are named. */
+function pxInfluencer(p, pr) {
+  const f = p.influencer;
+  if (!f || !f.months) return { value: null, need: pxShort(f) || "monthly influencer spend" };
+  let t = 0; const miss = new Set();
+  for (const d of pr.cur) {
+    const m = d.slice(0, 7), v = f.months[m];
+    if (v == null) { miss.add(m); continue; }
+    t += v / new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7), 0)).getUTCDate();
+  }
+  if (!miss.size) return { value: t };
+  const list = [...miss].sort().map(pxMonth).join(", ");
+  const pend = [...miss].some((m) => f.pending && f.pending[m] != null);
+  return { value: null, need: `influencer spend for ${list}${pend ? " (month not over: the sheet's figure may still be the plan)" : ""}` };
 }
 
 // ================================================================ M6 Site: changes vs funnel
@@ -290,12 +324,12 @@ function pxSite(p, pr) {
   const chg = pxSiteChanges(p);
   const list = chg == null ? pxNeed(pxNa(p.changes)) : chg.length ? table([
     { label: "#", render: (r) => `<span class="px-chg">${r.n}</span>` }, { label: "Date", text: true, render: (r) => esc(dayLabel(r[0])) },
-    { label: "Change", text: true, render: (r) => esc(r[1]) }, { label: "Area", text: true, render: (r) => esc(r[2]) }, { label: "Owner", text: true, render: (r) => esc(r[3]) },
+    { label: "Change", text: true, render: (r) => esc(r[1]) }, { label: "Details", text: true, render: (r) => esc(r[2]) }, { label: "Owner", text: true, render: (r) => esc(r[3]) },
   ], chg.map((r, i) => Object.assign([...r], { n: i + 1 })), { full: true }) : '<p class="sub">No change logged in these days.</p>';
   return `
     ${rgSec("Changes vs funnel", "sessions, CVR and IC → Order per day, with every logged change and the sale days marked", `${legend([["--series-1", "Sessions"], ["--accent", "CVR"], ["--series-2", "IC → Order"]])}<div class="chart-box"><canvas id="c-px-site" aria-label="Sessions, CVR and IC to order per day"></canvas></div>${chg == null ? `<p class="legend-note">Change markers appear once the Changes Tracker sheet is connected. Shaded: sale days.</p>` : '<p class="legend-note">Numbered lines: logged changes (listed below). Shaded: sale days.</p>'}`, { comp: "plus-site-changes-chart" })}
     <div class="cols-2">
-      ${rgSec("Change log", "Shopify Changes Tracker entries in these days", list + (p.changes && p.changes.format ? `<p class="legend-note">Sheet format: ${esc(p.changes.format)}</p>` : ""), { comp: "plus-site-changes" })}
+      ${rgSec("Change log", "Shopify Changes Tracker: changes that went live in these days", list + (p.changes && p.changes.open ? `<p class="legend-note">${esc(String(p.changes.open))} tracker ${p.changes.open === 1 ? "entry is" : "entries are"} not done yet (not marked).</p>` : "") + (p.changes && p.changes.format ? `<p class="legend-note">Sheet format: ${esc(p.changes.format)}</p>` : ""), { comp: "plus-site-changes" })}
       ${rgSec("A/B tests (Cooee)", "test start / stop markers and the test register", pxNeed(pxNa(p.cooee)), { comp: "plus-site-cooee" })}
     </div>
     <p class="legend-note">Sessions, CVR and IC → Order are the Funnel tab's own numbers for the same days (shown here, not changed there).</p>`;
