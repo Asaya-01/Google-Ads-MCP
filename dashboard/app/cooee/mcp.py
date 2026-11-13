@@ -228,6 +228,12 @@ class Client:
         self.log: list[dict] = []
 
     def _post(self, payload: dict, notify: bool = False):
+        try:
+            return self._post_once(payload, notify)
+        except requests.RequestException as exc:  # network down, proxy, timeout: a Cooee error, never a crash
+            raise CooeeError(f"Cooee's MCP server could not be reached: {type(exc).__name__}") from exc
+
+    def _post_once(self, payload: dict, notify: bool = False):
         headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream",
                    "Authorization": f"Bearer {self.token_fn(False)}", "MCP-Protocol-Version": PROTOCOL}
         if self.session_id:
