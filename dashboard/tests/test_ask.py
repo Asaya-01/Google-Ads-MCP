@@ -361,3 +361,50 @@ def test_gifts_and_merch_never_count_in_product_types(tools):
     )
     excluded = {t.lower() for t in settings.config()["freebies"]["exclude_product_types"]}
     assert out["rows"] and all(r["name"].lower() not in excluded for r in out["rows"])
+
+
+# ---- products by name and by variant (Aqua Rush is a UAS fragrance, not a product)
+@pytest.fixture()
+def variant_tools(tmp_path, monkeypatch):
+    from app import ask_data
+
+    monkeypatch.setattr(ask_data, "_PM_CACHE", {"ix": {"111": ("UAS", "Even Tone Underarm Mist"), "222": ("UAS", "Even Tone Underarm Mist")}})
+    st = LocalStore(str(tmp_path))
+    days = {"title": "Days", "as_of": "2026-11-02", "dates": ["2026-11-01", "2026-11-02"], "phase": ["bau", "bau"],
+            "phase_eff": ["bau", "bau"], "phase_note": ["", ""], "phase_source": [], "events": [], "fields": ["orders"],
+            "values": {"orders": [10, 10]}, "na": {}, "reasons": {}, "estimated": {}}
+    st.put_json("pages/days.json", days)
+    st.put_json("pages/product_days.json", {
+        "names": [{"id": "111", "label": "Even Tone Underarm Mist - Fresh / 50 ml", "type": "spray"},
+                  {"id": "222", "label": "Even Tone Underarm Mist", "type": "spray"}],
+        "rows": [["2026-11-01", 0, 30, 9000.0, 0, 0, 0], ["2026-11-01", 1, 10, 3000.0, 0, 0, 0], ["2026-11-02", 0, 30, 9000.0, 0, 0, 0]],
+        "variants": [
+            {"p": 0, "sku": "8906161981580", "pack": 1, "size": "100ml", "opt": "Aqua Rush", "label": "100ml"},
+            {"p": 0, "sku": "Aqua_Rush_packof2", "pack": 2, "size": "100ml", "opt": "Aqua Rush", "label": "100ml x 2"},
+            {"p": 0, "sku": "8906161981023", "pack": 1, "size": "100ml", "opt": "Fresh", "label": "100ml"},
+            {"p": 1, "sku": "x", "pack": 1, "size": "50ml", "opt": "Fresh", "label": "50ml"},
+        ],
+        "vrows": [["2026-11-01", 0, 12, 4000.0], ["2026-11-01", 1, 3, 2000.0], ["2026-11-01", 2, 15, 3000.0], ["2026-11-01", 3, 10, 3000.0],
+                  ["2026-11-02", 0, 14, 4200.0], ["2026-11-02", 1, 1, 800.0], ["2026-11-02", 2, 15, 4000.0]],
+    })
+    return ask.Tools(Pages(st))
+
+
+def _bd(tools, dim, needle=""):
+    return tools.breakdown(dim, "2026-11-01", "2026-11-02", "any", "all", "", "", "", needle, 60)
+
+
+def test_products_are_named_by_code_with_every_listing_together(variant_tools):
+    out = _bd(variant_tools, "product")
+    assert [r["name"] for r in out["rows"]] == ["UAS · Even Tone Underarm Mist"]
+    assert out["rows"][0]["units"] == 70  # both listings, both days; no variant title as the product name
+
+
+def test_a_fragrance_is_found_as_variant_rows(variant_tools):
+    out = _bd(variant_tools, "product_variant", "aqua")
+    rows = {r["name"]: r for r in out["rows"]}
+    assert set(rows) == {"UAS · Even Tone Underarm Mist · Aqua Rush · 100ml", "UAS · Even Tone Underarm Mist · Aqua Rush · 100ml x 2"}
+    single, pack = rows["UAS · Even Tone Underarm Mist · Aqua Rush · 100ml"], rows["UAS · Even Tone Underarm Mist · Aqua Rush · 100ml x 2"]
+    assert single["units"] == 26 and pack["units"] == 4 and pack["pieces"] == 8
+    assert single["skus"] == "8906161981580" and out["n_days"] == 2
+    assert out["total_all_rows"]["units"] == 30

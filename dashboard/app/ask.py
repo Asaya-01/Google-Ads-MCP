@@ -59,6 +59,8 @@ SYSTEM = """You are "Ask Claude", the analyst built into Asaya's internal D2C da
 - Two exclusions hold everywhere: ASAYASS and ASAYAINF orders are never counted, and free gifts, merch, books and gummies never count as items, units, quantities or products (the tools already leave them out; never add them back).
 - Every tab follows the D-1 tab's logic, and so must you. Views: "perf" (Performance, the default) and "all" are the whole store as the team's D-1 sheet reads it: `orders` and `gmv` ARE Shopify's own Sales report (Orders and Total sales: cancelled orders still count as orders, Total sales nets off returns processed that day), sessions / atc / ic are the whole store's, and `perf_sessions` is the team's Perf. sessions rule. The two views differ only in spend: perf shows sales-campaign spend, all every campaign. "aw" (Awareness) is awareness traffic and the orders and GMV credited to it. Use the view the user is on unless the question names another.
 - Questions about states, cities, or products in a place: use the `region` tool (Shopify's Sales report by shipping address, the same numbers as D-1). Items and basket size there leave out gifts and merch; rank AOV or basket size only among places with 20+ orders.
+- Products: names are "CODE · name" (UAS, ITB, ASS, HOT, EEC...). A question about a shade, fragrance, size or pack (Aqua Rush, Sweet Vanilla, Honeydew, 50 g, pack of 2...) is a variant question: use dimension product_variant with name_contains set to that word (a single distinctive word, e.g. "aqua"), and add up all its rows (single and packs) unless one pack is asked for. A product code or product name: use product with name_contains (e.g. "UAS"). If a search finds nothing, list the product's variants (product_variant, name_contains the code) before saying it does not exist; never answer with a different product or variant instead.
+- DRR (daily run rate) = units (and revenue) over the days asked ÷ the number of days in the tool's n_days; for "this month" use the 1st to the latest day with data, and say which days.
 - Breakdowns (channel, source, campaign, product, basket size, new vs repeat) count orders as placed (cancelled orders left out, returns not subtracted), so they add up to slightly less or more than the headline; the difference is Shopify's cancellations and returns. Say so when a breakdown total is compared with the headline.
 - Sale days are compared only with sale days, BAU with BAU. Transition days (a sale went live or ended that day) sit out of both sides. The sale/BAU label of each day comes from the team's media-plan calendar where it exists, else from hour-by-hour order detection. Never compare a sale period with a BAU period as if like for like; if the user asks to, show it but say plainly it is not like for like.
 - When two periods differ in length, counts are compared on per-day averages; rates are compared directly. Rates are always recomputed from summed counts, never averaged across days.
@@ -99,6 +101,7 @@ BREAKDOWN_DIMS = [
     "utm_campaign",
     "landing_page",
     "product",
+    "product_variant",
     "product_type",
     "basket_size",
     "meta_campaign",
@@ -189,8 +192,11 @@ TOOLS = [
         "breakdown",
         "One of the dashboard's tables for any dates, optionally against a comparison "
         "window: traffic by channel / utm_source / utm_campaign / landing_page (sessions, "
-        "perf sessions, ATC, IC, orders, GMV, GoKwik converted, rates); product and "
-        "product_type (units, item revenue; whole store); basket_size (orders, items, "
+        "perf sessions, ATC, IC, orders, GMV, GoKwik converted, rates); product (one row "
+        "per product as 'CODE · name', e.g. 'UAS · Even Tone Underarm Mist', all its variants "
+        "together), product_variant (one row per shade / fragrance and size / pack, e.g. "
+        "'UAS · Even Tone Underarm Mist · Aqua Rush · 100ml x 2'; units as sold, pieces = "
+        "bottles or tubes, skus) and product_type (units, item revenue; whole store); basket_size (orders, items, "
         "sales by items per order; whole store); Meta by campaign, adset, ad, account, "
         "stage, product or stage_product, and Google by campaign, group, product, "
         "ad_group or ad (spend, platform value, purchases, clicks, impressions, ROAS, "
@@ -507,6 +513,8 @@ class Tools:
                 return self.bd.drill(DRILL_DIMS[dimension], s, view), "sessions"
             if dimension == "product":
                 return self.bd.products(s), "revenue"
+            if dimension == "product_variant":
+                return self.bd.product_variants(s), "revenue"
             if dimension == "product_type":
                 return self.bd.product_types(s), "revenue"
             if dimension == "basket_size":
@@ -564,7 +572,7 @@ class Tools:
             out_rows.append(row)
         result = {
             "dimension": dimension,
-            "view": view if dimension not in ("product", "product_type", "basket_size") else "whole store",
+            "view": view if dimension not in ("product", "product_variant", "product_type", "basket_size") else "whole store",
             "days": span_text(cur),
             "n_days": nc,
             "rows_total": len(names),
