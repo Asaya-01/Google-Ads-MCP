@@ -116,3 +116,14 @@ def test_verdict_rules():
     no = model.verdict(t, "2026-12-20", [{"run_type": "final", "lift_pct": 0.1, "p_value": 0.3, "ci_low": -1000, "ci_high": 9000}], None, False, CFG)
     assert no["main"] == "Final: no detectable lift"
     assert model.verdict({**t, "status": "planned"}, "2026-10-01", [], None, False, CFG)["main"] == "Planned"
+
+
+def test_every_query_has_a_valid_bigquery_label():
+    import re
+
+    from app import bq
+    names = [str(f.relative_to(settings.SQL_DIR).with_suffix("")) for f in settings.SQL_DIR.rglob("*.sql")]
+    assert "awareness/geo_daily" in names
+    for n in names:
+        assert re.fullmatch(r"[a-z0-9_-]{1,63}", bq.label(n)), n
+    assert bq.label("orders_daily") == "orders-daily"  # labels of the existing queries do not change
