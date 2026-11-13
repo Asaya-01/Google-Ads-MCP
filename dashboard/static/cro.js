@@ -91,7 +91,9 @@ R.cro = (page) => {
     $main.innerHTML = `<section class="card"><h2>CRO${croSrc()}</h2>
       ${err ? `<p class="na">Cooee sign-in failed: ${esc(err)}</p>` : ""}
       <div class="cro-empty">${conn.connected
-        ? `<b>Cooee is connected</b>${conn.connected_by ? ` (by ${esc(conn.connected_by)})` : ""}. The first sync has not finished yet: the Cooee job back-fills from ${esc(page.sync?.data_start || "17 Jun 2026")}, a month per run. ${conn.last_error ? `<br><span class="na">Last error: ${esc(conn.last_error)}</span>` : ""}`
+        ? `<b>Cooee is connected</b>${conn.connected_by ? ` (by ${esc(conn.connected_by)})` : ""}. ${(() => { const L = page.sync?.last || {}; return L.status === "error"
+          ? `The last sync failed${L.finished ? " (" + esc(new Date(L.finished).toLocaleString("en-IN")) + ")" : ""}: <span class="na">${esc(L.error || "unknown error")}</span>. The details are on <a href="#health">Data health</a>.`
+          : `The first sync has not finished yet: the Cooee job back-fills from ${esc(page.sync?.data_start || "17 Jun 2026")}, a month per run, five times a day. To start it now: <code>gcloud run jobs execute asaya-d2c-cooee --region asia-south1</code>`; })()} ${conn.last_error ? `<br><span class="na">Last sign-in error: ${esc(conn.last_error)}</span>` : ""}`
         : `This tab reads Cooee's on-site data (intent, landing and exit pages, widgets, experiments) from Cooee's MCP server, read-only. Connect it once with your Cooee login; after that the sync job renews the sign-in by itself.<br><a class="cro-connect" href="/auth/cooee/start">Connect Cooee</a>`}</div></section>`;
     return;
   }
