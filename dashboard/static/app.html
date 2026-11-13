@@ -368,6 +368,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
   /*__RANGE_BASKET__*/
   /*__RANGE_D1__*/
   /*__RANGE_REGION__*/
+  /*__CRO__*/
   /*__PLUS__*/
   /*__ASK__*/
 
@@ -378,7 +379,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     const hhmm = (iso) => iso ? new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" }) : null;
     $main.innerHTML = '<p class="empty">Loading…</p>';
     const pg = {};
-    for (const t of ["overview", "funnel", "marketing", "products", "region", "d1", "days", "product_days", "meta_ads", "google_ads"]) { try { pg[t] = await loadPage(t); } catch (e) { pg[t] = null; } }
+    for (const t of ["overview", "funnel", "marketing", "products", "region", "d1", "days", "product_days", "meta_ads", "google_ads", "cro"]) { try { pg[t] = await loadPage(t); } catch (e) { pg[t] = null; } }
     if (state.tab !== "health") return;
     const st = state.status || {}, labels = p.source_labels || {};
     // 1. sources
@@ -455,6 +456,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       ${rgSec("Data checks", "our copy against each source, and the mappings the tabs rely on", `<h3>Cross-checks</h3>${p.reconcile?.length ? table(recCols, p.reconcile, { full: true }) : '<p class="na">No cross-check has run yet for this day.</p>'}<h3>Google sessions ↔ campaigns</h3>${gcheck}<h3>Product map</h3>${pmap}`)}
       ${rgSec("Meta classification", "tag coverage, names to fix, validation and the tie-out (Marketing › Meta)", mvHealth(pg.meta_ads, D), { comp: "meta-coverage" })}
       ${rgSec("Google classification", "tag coverage, the purchase split, validation and the tie-out (Marketing › Google)", gvHealth(pg.google_ads, D), { comp: "google-coverage" })}
+      ${rgSec("Cooee (CRO tab)", "the sign-in, the last syncs, and Cooee's numbers against Shopify and GoKwik", croHealth(pg.cro, D), { comp: "cooee-health" })}
       <div class="cols-2">
         ${rgSec("Sale calendar", "which days are BAU and which are sale", cal)}
         ${rgSec("Known exceptions", "days whose numbers need a footnote", excHtml)}

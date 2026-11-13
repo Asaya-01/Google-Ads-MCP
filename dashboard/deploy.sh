@@ -123,7 +123,7 @@ ENV_VARS="SNAPSHOT_BUCKET=${BUCKET}@@GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIEN
 ENV_VARS="${ENV_VARS}@@RUNTIME_SA_EMAIL=${SA}"
 ENV_VARS="${ENV_VARS}@@BUILD_SHA=${BUILD_SHA}@@BUILD_BRANCH=${BUILD_BRANCH}@@BUILD_AT=$(date -u +%Y-%m-%dT%H:%MZ)"
 # Spend sheets: share each with ${SA} as Viewer, then put its id in deploy.env
-for v in SPEND_SHEET_AFFILIATE SPEND_SHEET_CRM_FLOW SPEND_SHEET_CRM_BROADCAST SPEND_SHEET_REDDIT; do
+for v in SPEND_SHEET_AFFILIATE SPEND_SHEET_CRM_FLOW SPEND_SHEET_CRM_BROADCAST SPEND_SHEET_REDDIT COOEE_OAUTH_CLIENT_ID; do
   [[ -n "${!v:-}" ]] && ENV_VARS="${ENV_VARS}@@${v}=${!v}"
 done
 
@@ -183,6 +183,25 @@ if gcloud scheduler jobs describe "$LIVE_JOB" --location "$REGION" "${P[@]}" >/d
   gcloud scheduler jobs update http "$LIVE_JOB" "${LIVE_SCHED[@]}" "${P[@]}"
 else
   gcloud scheduler jobs create http "$LIVE_JOB" "${LIVE_SCHED[@]}" "${P[@]}"
+fi
+
+# CRO tab: Cooee's on-site data from its MCP server (read-only), five times a
+# day; each run re-pulls the last 7 days once a day and back-fills a month of
+# history until it reaches 17 Jun 2026. Until someone clicks "Connect Cooee"
+# on the CRO tab it only writes the page that shows the Connect button.
+COOEE_JOB="${COOEE_JOB:-asaya-d2c-cooee}"
+gcloud run jobs deploy "$COOEE_JOB" --image "$IMAGE" --region "$REGION" --service-account "$SA" \
+  --set-env-vars "^@@^$ENV_VARS" --command python --args=-m,app.cooee.sync \
+  --memory 1Gi --task-timeout 3000 --max-retries 0 "${P[@]}"
+gcloud run jobs add-iam-policy-binding "$COOEE_JOB" --region "$REGION" --member "serviceAccount:$SA" \
+  --role roles/run.invoker "${P[@]}" >/dev/null
+COOEE_URI="https://run.googleapis.com/v2/projects/${GOOGLE_PROJECT_ID}/locations/${REGION}/jobs/${COOEE_JOB}:run"
+COOEE_SCHED=(--location "$REGION" --schedule "10 6,10,14,18,22 * * *" --time-zone "Asia/Kolkata" --uri "$COOEE_URI"
+             --http-method POST --oauth-service-account-email "$SA")
+if gcloud scheduler jobs describe "$COOEE_JOB" --location "$REGION" "${P[@]}" >/dev/null 2>&1; then
+  gcloud scheduler jobs update http "$COOEE_JOB" "${COOEE_SCHED[@]}" "${P[@]}"
+else
+  gcloud scheduler jobs create http "$COOEE_JOB" "${COOEE_SCHED[@]}" "${P[@]}"
 fi
 
 echo "==> [9/9] Alerts"
