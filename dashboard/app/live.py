@@ -173,9 +173,12 @@ def estimate_other_spend(
                 the share of the day gone (hours so far / 24).
       per_gmv : affiliate cost follows sales, so its share of GMV on those
                 days x today's GMV so far.
-      target_per_hour: today's planned spend from the media-plan workbook x
-                the share of the day gone (Reddit); without a plan for today,
-                per_hour on the days since `reddit_history_from`.
+      target_per_hour: today's target spend in the media plan's Target vs
+                Achieved sheet x the share of the day gone (CRM = flow +
+                broadcast, affiliates, Reddit); without a target for today,
+                the channel's `<channel>_fallback` method (Reddit: per_hour on
+                the days since `reddit_history_from`).
+    `targets` is {channel: {date: target spend}}.
     Returns {channel: {"value", "basis", "dates"}} and a "total"."""
     mcfg = cfg["manual_spends"]["live_estimate"]
     n = mcfg["basis_days"]
@@ -206,17 +209,18 @@ def estimate_other_spend(
         ("reddit", "reddit_spend", mcfg.get("reddit", "per_hour")),
     ):
         if how == "target_per_hour":
-            plan = (targets or {}).get(today) if today else None
+            plan = ((targets or {}).get(ch) or {}).get(today) if today else None
             if plan is not None:
                 out[ch] = {
                     "value": plan * share_of_day,
-                    "basis": f"today's plan of Rs {plan:,.0f} in the media-plan "
-                    f"sheet x {min(t, 24):.1f}/24 of the day",
+                    "basis": f"today's target of Rs {plan:,.0f} in the Target vs "
+                    f"Achieved sheet x {min(t, 24):.1f}/24 of the day",
                     "dates": [today],
+                    "target": plan,
                 }
                 parts.append(out[ch]["value"])
                 continue
-            how = "per_hour"
+            how = mcfg.get(f"{ch}_fallback", "per_hour")
         if field not in days["values"]:
             continue
         use, kind = pick(
@@ -257,6 +261,24 @@ def estimate_other_spend(
             (out[c] or {}).get("value", 0.0)
             for c in ("affiliate", "crm", "reddit")
         )
+    return out
+
+
+def spend_targets(plan: dict, reddit_fallback: dict | None = None) -> dict:
+    """{channel: {date: target spend}} for the channels with no live source,
+    from the plan page ({date: {block: [target spend, target GMV]}})."""
+    out: dict = {"crm": {}, "affiliate": {}, "reddit": dict(reddit_fallback or {})}
+    for d, blocks in (plan.get("days") or {}).items():
+        def sp(b):
+            v = (blocks or {}).get(b)
+            return v[0] if isinstance(v, list) and v and v[0] is not None else None
+        crm = [x for x in (sp("crm_flow"), sp("crm_broadcast")) if x is not None]
+        if crm:
+            out["crm"][d] = float(sum(crm))
+        if sp("affiliate") is not None:
+            out["affiliate"][d] = float(sp("affiliate"))
+        if sp("reddit") is not None:
+            out["reddit"][d] = float(sp("reddit"))
     return out
 
 
@@ -706,7 +728,7 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
         gmv_now,
         t,
         cfg,
-        targets=inp.get("reddit_targets"),
+        targets=inp.get("spend_targets"),
         today=today,
     )
     dm = inp.get("days_manual") or {}
@@ -1447,9 +1469,12 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
     } | extra_ids
     known_ids = {str(n["id"]) for n in g_names} | extra_ids
     inp["google_aware_ids"] = sorted(aware_ids)
-    # today's Reddit plan from the media-plan workbook (read by the refresh)
+    # today's target spends from the media plan's Target vs Achieved sheet
+    # (read by the refresh into pages/plan_days.json): CRM is flow +
+    # broadcast. Reddit falls back to its block's Target Spend column.
     ms = store.get_json("cache/manual_spends.json") or {}
-    inp["reddit_targets"] = (ms.get("reddit") or {}).get("targets") or {}
+    inp["spend_targets"] = spend_targets(store.get_json("pages/plan_days.json") or {},
+                                         (ms.get("reddit") or {}).get("targets") or {})
     inp["phases_eff"] = {
         d: p
         for d, p in zip(days.get("dates", []), days.get("phase_eff", []))

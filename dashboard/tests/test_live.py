@@ -425,9 +425,9 @@ def test_spend_follows_the_campaign_type_switch():
 
 
 def test_reddit_today_is_the_sheets_plan_for_today_scaled_to_the_hour():
-    est = live.estimate_other_spend(manual_days(), "bau", 1e5, 12.0, CFG, targets={"2026-10-31": 5000}, today="2026-10-31")
+    est = live.estimate_other_spend(manual_days(), "bau", 1e5, 12.0, CFG, targets={"reddit": {"2026-10-31": 5000}}, today="2026-10-31")
     assert est["reddit"]["value"] == pytest.approx(5000 * 12 / 24)
-    assert "plan" in est["reddit"]["basis"]
+    assert "target" in est["reddit"]["basis"]
     # no plan for today: only days since the block became sales-only count
     d = manual_days()
     d["dates"] = [f"2026-10-{i:02d}" for i in range(20, 32)][: len(d["dates"])]
@@ -463,7 +463,7 @@ def test_scorecard_is_the_teams_sheet_with_one_performance_roas():
     d = manual_days()
     n = len(d["dates"])
     d["values"].update(reddit_spend=[7000.0] * n, perf_all_spend=[50000.0] * n, sessions=[40000] * n)
-    inp.update(days_manual=d, reddit_targets={"2026-10-31": 5000}, perf_sessions={"value": 900},
+    inp.update(days_manual=d, spend_targets={"reddit": {"2026-10-31": 5000}}, perf_sessions={"value": 900},
                perf_snapshots={"2026-10-30": [[14.4, 800]]})
     page = live.build(inp, CFG, NOW)
     items = {i["key"]: i for g in page["scorecard"]["groups"] for i in g["items"]}
@@ -574,3 +574,20 @@ def test_sessions_by_hour_for_a_range_is_in_ist_hours():
     out = shop.sessions_hourly_range("2026-07-01", "2026-07-09")
     assert sorted(out) == ["2026-07-01", "2026-07-09"]
     assert out["2026-07-01"]["sessions"][0] == 3410 and out["2026-07-09"]["atc"][20] == 1229
+
+
+
+def test_crm_and_affiliates_today_are_the_sheets_targets_scaled_to_the_hour():
+    plan = {"days": {"2026-10-31": {"crm_flow": [13280, 15645], "crm_broadcast": [22000, 77754], "affiliate": [11500, 31702],
+                                    "reddit": [8800, 2592], "meta": [747274, 1]}}}
+    targets = live.spend_targets(plan)
+    assert targets["crm"]["2026-10-31"] == 35280 and targets["affiliate"]["2026-10-31"] == 11500
+    est = live.estimate_other_spend(manual_days(), "bau", 120000.0, 15.0, CFG, targets=targets, today="2026-10-31")
+    assert est["crm"]["value"] == pytest.approx(35280 * 15 / 24)
+    assert est["affiliate"]["value"] == pytest.approx(11500 * 15 / 24)
+    assert est["reddit"]["value"] == pytest.approx(8800 * 15 / 24)
+    assert "Target vs Achieved" in est["crm"]["basis"]
+    assert est["total"] == pytest.approx((35280 + 11500 + 8800) * 15 / 24)
+    # a day with no target in the sheet falls back to the old estimates
+    est2 = live.estimate_other_spend(manual_days(), "bau", 120000.0, 12.0, CFG, targets=targets, today="2026-11-30")
+    assert est2["affiliate"]["value"] == pytest.approx(0.03 * 120000) and est2["crm"]["value"] == pytest.approx(10000 * 12 / 24)

@@ -1035,12 +1035,15 @@
     "estimate_days": 7,
     "estimate_note": "Days after a sheet's last filled day, up to estimate_days back from D-1, get an estimated spend (labelled est. on every tab) so Spends and ROAS are not blank while the sheets catch up: affiliate from its recent share of Shopify sales, CRM from a typical recent day of the same kind, Reddit from the day's plan in the media-plan workbook.",
     "live_estimate": {
-      "affiliate": "per_gmv",
-      "crm": "per_hour",
+      "affiliate": "target_per_hour",
+      "affiliate_fallback": "per_gmv",
+      "crm": "target_per_hour",
+      "crm_fallback": "per_hour",
       "reddit": "target_per_hour",
+      "reddit_fallback": "per_hour",
       "reddit_history_from": "2026-11-01",
       "basis_days": 7,
-      "note": "reddit: today's planned spend from the media-plan workbook (Target Spend in the Reddit block) x the share of the day gone; without a target, a typical day since reddit_history_from (when the block became sales campaigns only)."
+      "note": "CRM (flow + broadcast), affiliates and Reddit: today's target spend in the media plan's Target vs Achieved sheet (the same sheet the Target vs achieved table reads) x the share of the day gone. On a day the sheet has no target: affiliates follow sales (their share of GMV on recent same-kind days x today's GMV so far), CRM a typical same-kind day x the share of the day gone, Reddit a typical day since reddit_history_from."
     }
   },
 
