@@ -937,6 +937,7 @@
     {"id": "products",  "label": "Products",  "phase": 1, "enabled": true},
     {"id": "retention", "label": "Retention", "phase": 1, "enabled": true},
     {"id": "cro",       "label": "CRO",       "phase": 1, "enabled": true},
+    {"id": "awareness", "label": "Awareness", "phase": 1, "enabled": true},
     {"id": "region",    "label": "Region",    "phase": 1, "enabled": true},
     {"id": "health",    "label": "Data health", "phase": 1, "enabled": true},
     {"id": "plus",      "label": "Plus",      "phase": 1, "enabled": true},
@@ -1504,5 +1505,742 @@
     "min_segment_sessions": 300,
     "recon_warn": 0.10,
     "backlog": []
+  },
+
+  "awareness": {
+    "_about": "The Awareness tab: is awareness spend growing demand in the geos we spend in, and which geos can we test next? Geo-trackable sales are read from Maplemonk's consolidated sales, read only (sql/awareness/geo_daily.sql); nothing is written to BigQuery. The Awareness job (python -m app.awareness.job) builds the tab's pages and the GeoLift panels in the dashboard's bucket; the GeoLift job (awareness_r/) reads those panels and writes its results back there. Test geos, regions, events and dates all come from here, never from code.",
+    "start_date": "2026-01-01",
+    "panel_start": "2026-01-05",
+    "channels": [
+      "WEBSITE",
+      "AMAZON",
+      "FLIPKART",
+      "MYNTRA",
+      "BLINKIT",
+      "ZEPTO",
+      "SWIGGYINSTAMART",
+      "CRED_IMMD"
+    ],
+    "channels_note": "Channels with customer geo. SHOPIFY is never used (an OMS duplicate of WEBSITE). Nykaa, Amazon 1P, B2B and Amazon USA have no customer geo, so every lift is a floor.",
+    "floor_note": "Floor: excludes Nykaa, Amazon 1P and B2B",
+    "state_aliases": {
+      "_about": "Letters-only spelling -> state. The first block is the owner's tested set; the second fixes spellings found on 13 Nov 2026 (TG alone was about Rs 12L of Telangana).",
+      "TAMILNADU": "TAMIL NADU",
+      "TAMILANADU": "TAMIL NADU",
+      "TN": "TAMIL NADU",
+      "ORISSA": "ODISHA",
+      "PONDICHERRY": "PUDUCHERRY",
+      "NEWDELHI": "DELHI",
+      "NCTOFDELHI": "DELHI",
+      "JAMMUKASHMIR": "JAMMU AND KASHMIR",
+      "TG": "TELANGANA",
+      "TELENGANA": "TELANGANA",
+      "KERALAM": "KERALA",
+      "CHATTISGARH": "CHHATTISGARH",
+      "UTTARPRADESH": "UTTAR PRADESH",
+      "ANDHRAPRADESH": "ANDHRA PRADESH",
+      "DADRANAGARHAVELIDAMANDIU": "DADRA AND NAGAR HAVELI AND DAMAN AND DIU",
+      "DADRAANDNAGARHAVELIANDDAMANANDDIU": "DADRA AND NAGAR HAVELI AND DAMAN AND DIU",
+      "DADRAANDNAGARHAVELI": "DADRA AND NAGAR HAVELI AND DAMAN AND DIU",
+      "DAMANANDDIU": "DADRA AND NAGAR HAVELI AND DAMAN AND DIU",
+      "DAMANDIU": "DADRA AND NAGAR HAVELI AND DAMAN AND DIU",
+      "ANDAMANANDNICOBARISLANDS": "ANDAMAN AND NICOBAR ISLANDS",
+      "ANDAMANNICOBAR": "ANDAMAN AND NICOBAR ISLANDS"
+    },
+    "not_india_states": [
+      "NEW JERSEY"
+    ],
+    "city_clusters": {
+      "_about": "Raw city -> city cluster (the owner's tested mapping). A Delhi zone name (WEST, SOUTH...) maps to DELHI only when the state is Delhi.",
+      "CHENNAI METRO": [
+        "CHENNAI",
+        "CHENGALPATTU",
+        "TAMBARAM",
+        "TIRUVALLUR",
+        "THIRUVALLUR",
+        "KANCHIPURAM",
+        "KANCHEEPURAM"
+      ],
+      "TIRUCHIRAPPALLI": [
+        "TRICHY",
+        "TIRUCHIRAPALLI",
+        "TIRUCHIRAPPALLI"
+      ],
+      "BENGALURU": [
+        "BANGALORE",
+        "BENGALURU",
+        "BENGALURU URBAN",
+        "BENGALURU RURAL",
+        "BANGALORE URBAN",
+        "BANGALORE RURAL"
+      ],
+      "HYDERABAD": [
+        "HYDERABAD",
+        "MEDCHAL MALKAJGIRI",
+        "RANGAREDDY",
+        "RANGA REDDY",
+        "SECUNDERABAD",
+        "SANGAREDDY"
+      ],
+      "MUMBAI": [
+        "MUMBAI",
+        "MUMBAI SUBURBAN",
+        "MUMBAI SUBUEBAN"
+      ],
+      "THANE": [
+        "THANE",
+        "NAVI MUMBAI",
+        "GREATER THANE"
+      ],
+      "GURUGRAM": [
+        "GURGAON",
+        "GURUGRAM"
+      ],
+      "NOIDA": [
+        "NOIDA",
+        "NOIDA 1",
+        "GREATER NOIDA",
+        "GAUTAM BUDDHA NAGAR"
+      ],
+      "KOCHI": [
+        "ERNAKULAM",
+        "KOCHI",
+        "COCHIN"
+      ],
+      "MYSURU": [
+        "MYSORE",
+        "MYSURU"
+      ],
+      "GOA": [
+        "NORTH GOA",
+        "SOUTH GOA",
+        "CENTRAL GOA",
+        "GOA"
+      ],
+      "MOHALI": [
+        "SAS NAGAR",
+        "S.A.S NAGAR",
+        "MOHALI"
+      ],
+      "DELHI": [
+        "DELHI",
+        "NEW DELHI",
+        "WEST",
+        "NORTH WEST",
+        "NORTH",
+        "SOUTH",
+        "EAST",
+        "NORTH EAST",
+        "SOUTH WEST",
+        "SOUTH EAST",
+        "CENTRAL",
+        "SHAHDARA",
+        "WEST DELHI",
+        "NORTH DELHI",
+        "SOUTH DELHI",
+        "EAST DELHI",
+        "NORTH WEST DELHI",
+        "NORTH EAST DELHI",
+        "SOUTH WEST DELHI",
+        "SOUTH EAST DELHI",
+        "CENTRAL DELHI"
+      ]
+    },
+    "city_clusters_proposed": {
+      "_about": "Proposed on 13 Nov 2026 from the top unmapped district names; not applied until moved into city_clusters.",
+      "KOLKATA METRO": [
+        "KOLKATA",
+        "24 PARAGANAS NORTH",
+        "NORTH 24 PARGANAS",
+        "24 PARAGANAS SOUTH",
+        "SOUTH 24 PARGANAS",
+        "HOWRAH"
+      ],
+      "KANPUR": [
+        "KANPUR",
+        "KANPUR NAGAR"
+      ],
+      "BHUBANESWAR": [
+        "BHUBANESWAR",
+        "KHORDA",
+        "KHURDA"
+      ],
+      "VIJAYAWADA": [
+        "VIJAYAWADA",
+        "KRISHNA",
+        "NTR"
+      ],
+      "GUWAHATI": [
+        "GUWAHATI",
+        "KAMRUP METRO",
+        "KAMRUP"
+      ],
+      "SHILLONG": [
+        "SHILLONG",
+        "EAST KHASI HILLS"
+      ],
+      "MANGALURU": [
+        "MANGALURU",
+        "MANGALORE",
+        "DAKSHINA KANNADA"
+      ]
+    },
+    "eligibility": {
+      "window_days": 300,
+      "state_min_daily": 2000,
+      "city_min_daily": 4000
+    },
+    "show_city_min_daily": 500,
+    "baseline_weeks": 12,
+    "regions": {
+      "_about": "State -> region. Central India (Madhya Pradesh, Chhattisgarh) is counted in West.",
+      "South": [
+        "TAMIL NADU",
+        "KARNATAKA",
+        "KERALA",
+        "ANDHRA PRADESH",
+        "TELANGANA",
+        "PUDUCHERRY",
+        "LAKSHADWEEP"
+      ],
+      "North": [
+        "DELHI",
+        "HARYANA",
+        "PUNJAB",
+        "HIMACHAL PRADESH",
+        "JAMMU AND KASHMIR",
+        "LADAKH",
+        "CHANDIGARH",
+        "RAJASTHAN",
+        "UTTAR PRADESH",
+        "UTTARAKHAND"
+      ],
+      "West": [
+        "MAHARASHTRA",
+        "GUJARAT",
+        "GOA",
+        "MADHYA PRADESH",
+        "CHHATTISGARH",
+        "DADRA AND NAGAR HAVELI AND DAMAN AND DIU"
+      ],
+      "East": [
+        "WEST BENGAL",
+        "ODISHA",
+        "BIHAR",
+        "JHARKHAND",
+        "ANDAMAN AND NICOBAR ISLANDS"
+      ],
+      "North-East": [
+        "ASSAM",
+        "MEGHALAYA",
+        "NAGALAND",
+        "MANIPUR",
+        "MIZORAM",
+        "TRIPURA",
+        "ARUNACHAL PRADESH",
+        "SIKKIM"
+      ]
+    },
+    "map_state_names": {
+      "ANDAMAN & NICOBAR": "ANDAMAN AND NICOBAR ISLANDS",
+      "JAMMU & KASHMIR": "JAMMU AND KASHMIR"
+    },
+    "city_centroids": {
+      "_about": "City cluster centroids [lat, lng] for the map's bubbles (approximate city centres).",
+      "BENGALURU": [
+        12.97,
+        77.59
+      ],
+      "DELHI": [
+        28.64,
+        77.21
+      ],
+      "MUMBAI": [
+        19.08,
+        72.88
+      ],
+      "HYDERABAD": [
+        17.39,
+        78.49
+      ],
+      "PUNE": [
+        18.52,
+        73.86
+      ],
+      "CHENNAI METRO": [
+        13.08,
+        80.27
+      ],
+      "THANE": [
+        19.22,
+        72.98
+      ],
+      "GURUGRAM": [
+        28.46,
+        77.03
+      ],
+      "NOIDA": [
+        28.54,
+        77.39
+      ],
+      "GHAZIABAD": [
+        28.67,
+        77.45
+      ],
+      "KOLKATA": [
+        22.57,
+        88.36
+      ],
+      "AHMEDABAD": [
+        23.02,
+        72.57
+      ],
+      "JAIPUR": [
+        26.91,
+        75.79
+      ],
+      "LUCKNOW": [
+        26.85,
+        80.95
+      ],
+      "FARIDABAD": [
+        28.41,
+        77.32
+      ],
+      "NAGPUR": [
+        21.15,
+        79.09
+      ],
+      "SURAT": [
+        21.17,
+        72.83
+      ],
+      "INDORE": [
+        22.72,
+        75.86
+      ],
+      "DEHRADUN": [
+        30.32,
+        78.03
+      ],
+      "LUDHIANA": [
+        30.9,
+        75.86
+      ],
+      "VADODARA": [
+        22.31,
+        73.18
+      ],
+      "COIMBATORE": [
+        11.02,
+        76.96
+      ],
+      "KOCHI": [
+        9.93,
+        76.27
+      ],
+      "MYSURU": [
+        12.3,
+        76.64
+      ],
+      "GOA": [
+        15.49,
+        73.83
+      ],
+      "MOHALI": [
+        30.7,
+        76.72
+      ],
+      "CHANDIGARH": [
+        30.73,
+        76.78
+      ],
+      "MADURAI": [
+        9.93,
+        78.12
+      ],
+      "TIRUCHIRAPPALLI": [
+        10.8,
+        78.69
+      ],
+      "VISAKHAPATNAM": [
+        17.69,
+        83.22
+      ],
+      "RAIPUR": [
+        21.25,
+        81.63
+      ],
+      "NASHIK": [
+        20.0,
+        73.79
+      ],
+      "AMRITSAR": [
+        31.63,
+        74.87
+      ],
+      "BHOPAL": [
+        23.26,
+        77.41
+      ],
+      "JALANDHAR": [
+        31.33,
+        75.58
+      ],
+      "PATNA": [
+        25.59,
+        85.14
+      ],
+      "RANCHI": [
+        23.34,
+        85.31
+      ],
+      "MEERUT": [
+        28.98,
+        77.71
+      ],
+      "THIRUVANANTHAPURAM": [
+        8.52,
+        76.94
+      ],
+      "DIMAPUR": [
+        25.91,
+        93.73
+      ],
+      "RAIGAD": [
+        18.52,
+        73.18
+      ],
+      "PALGHAR": [
+        19.7,
+        72.77
+      ],
+      "AGRA": [
+        27.18,
+        78.01
+      ],
+      "GUNTUR": [
+        16.31,
+        80.44
+      ],
+      "VARANASI": [
+        25.32,
+        82.97
+      ],
+      "GORAKHPUR": [
+        26.76,
+        83.37
+      ],
+      "KHORDA": [
+        20.18,
+        85.62
+      ],
+      "BHUBANESWAR": [
+        20.3,
+        85.82
+      ],
+      "THRISSUR": [
+        10.53,
+        76.21
+      ],
+      "KOZHIKODE": [
+        11.26,
+        75.78
+      ],
+      "SALEM": [
+        11.66,
+        78.15
+      ],
+      "TIRUPPUR": [
+        11.11,
+        77.34
+      ],
+      "VELLORE": [
+        12.92,
+        79.13
+      ],
+      "ERODE": [
+        11.34,
+        77.72
+      ],
+      "TIRUNELVELI": [
+        8.71,
+        77.76
+      ],
+      "KRISHNA": [
+        16.51,
+        80.65
+      ],
+      "VIJAYAWADA": [
+        16.51,
+        80.65
+      ],
+      "KAMRUP METRO": [
+        26.14,
+        91.74
+      ],
+      "GUWAHATI": [
+        26.14,
+        91.74
+      ],
+      "EAST KHASI HILLS": [
+        25.58,
+        91.89
+      ],
+      "DAKSHINA KANNADA": [
+        12.91,
+        74.86
+      ],
+      "24 PARAGANAS NORTH": [
+        22.72,
+        88.48
+      ],
+      "HOWRAH": [
+        22.59,
+        88.31
+      ],
+      "KANPUR NAGAR": [
+        26.45,
+        80.33
+      ],
+      "KANPUR": [
+        26.45,
+        80.33
+      ],
+      "SONIPAT": [
+        28.99,
+        77.02
+      ],
+      "PANIPAT": [
+        29.39,
+        76.97
+      ],
+      "JODHPUR": [
+        26.24,
+        73.02
+      ],
+      "UDAIPUR": [
+        24.59,
+        73.71
+      ],
+      "RAJKOT": [
+        22.3,
+        70.8
+      ],
+      "JAMMU": [
+        32.73,
+        74.86
+      ],
+      "JABALPUR": [
+        23.18,
+        79.99
+      ],
+      "DURG": [
+        21.19,
+        81.28
+      ],
+      "KOLHAPUR": [
+        16.7,
+        74.24
+      ],
+      "GANDHINAGAR": [
+        23.22,
+        72.65
+      ],
+      "AURANGABAD": [
+        19.88,
+        75.34
+      ],
+      "CHITTOOR": [
+        13.22,
+        79.1
+      ],
+      "PATIALA": [
+        30.34,
+        76.39
+      ],
+      "EAST GODAVARI": [
+        17.0,
+        81.8
+      ]
+    },
+    "media_events": [
+      {
+        "event_id": "GOOGLE_DG_HYDBLR_2026_10",
+        "start_date": "2026-10-26",
+        "end_date": null,
+        "platform": "Google Ads",
+        "account_or_campaign": "WOA_Awareness_DemandGen_ATC_HydBlr_261026",
+        "campaign_id": "24394676551",
+        "geo_level": "state",
+        "locations": [
+          "telangana",
+          "karnataka"
+        ],
+        "city_locations": [
+          "hyderabad",
+          "bengaluru",
+          "mysuru"
+        ],
+        "event_type": "geo_targeted",
+        "source": "manual",
+        "review_status": "approved",
+        "notes": "Demand Gen, geo = Hyderabad + Bengaluru"
+      },
+      {
+        "event_id": "META_TF_TN_2026_11",
+        "start_date": "2026-11-01",
+        "end_date": null,
+        "platform": "Meta",
+        "account_or_campaign": "Top Funnel (act_1040064540569018): UAS + ITB add-to-cart, TN only",
+        "campaign_id": null,
+        "geo_level": "state",
+        "locations": [
+          "tamil nadu"
+        ],
+        "city_locations": [
+          "chennai metro",
+          "coimbatore",
+          "madurai",
+          "tiruchirappalli"
+        ],
+        "event_type": "heavy_up",
+        "source": "manual",
+        "review_status": "approved",
+        "notes": "One ad set: Chennai, Coimbatore, Chengalpattu, Tambaram, Tiruvallur, Madurai, Tiruchirappalli"
+      },
+      {
+        "event_id": "META_TF_DARK_2026_11",
+        "start_date": "2026-11-01",
+        "end_date": null,
+        "platform": "Meta",
+        "account_or_campaign": "Top Funnel (act_1040064540569018): every other state goes dark",
+        "campaign_id": null,
+        "geo_level": "state",
+        "locations": [
+          "*except:tamil nadu"
+        ],
+        "city_locations": [],
+        "event_type": "go_dark",
+        "source": "manual",
+        "review_status": "approved",
+        "notes": "Donors lost Top Funnel at the same moment TN got the heavy-up: the test reads TN with heavy-up vs TN with no Top Funnel, and early weeks include donor carryover decay."
+      },
+      {
+        "event_id": "META_TF_KERALA_LEAK_2026_11",
+        "start_date": "2026-11-01",
+        "end_date": null,
+        "platform": "Meta",
+        "account_or_campaign": "Top Funnel (act_1040064540569018) leakage",
+        "campaign_id": null,
+        "geo_level": "state",
+        "locations": [
+          "kerala"
+        ],
+        "city_locations": [
+          "kochi"
+        ],
+        "event_type": "leakage",
+        "source": "manual",
+        "review_status": "approved",
+        "notes": "Part of Top Funnel spend lands in Kerala (share in the private settings until geo spend is joined)"
+      }
+    ],
+    "tests": [
+      {
+        "test_id": "TN_TF_STATE_2026_11",
+        "test_name": "Tamil Nadu: Top Funnel heavy-up (state)",
+        "geo_level": "state",
+        "treatment_locations": [
+          "tamil nadu"
+        ],
+        "manual_exclusions": [],
+        "pre_start": "2026-01-05",
+        "pre_end": "2026-10-31",
+        "test_start": "2026-11-01",
+        "test_end": "2026-12-12",
+        "kpi": "Y",
+        "weekly_spend": null,
+        "expected_iroas": 0.5,
+        "linked_event_id": "META_TF_TN_2026_11",
+        "status": "active",
+        "notes": "Donors went dark for Top Funnel on the test's first day."
+      },
+      {
+        "test_id": "TN_TF_CITY_2026_11",
+        "test_name": "Tamil Nadu: Top Funnel heavy-up (Chennai + Coimbatore)",
+        "geo_level": "city",
+        "treatment_locations": [
+          "chennai metro",
+          "coimbatore"
+        ],
+        "manual_exclusions": [],
+        "pre_start": "2026-01-05",
+        "pre_end": "2026-10-31",
+        "test_start": "2026-11-01",
+        "test_end": "2026-12-12",
+        "kpi": "Y",
+        "weekly_spend": null,
+        "expected_iroas": 0.5,
+        "linked_event_id": "META_TF_TN_2026_11",
+        "status": "active",
+        "notes": "Other Tamil Nadu cities are left out of the donors (spillover)."
+      }
+    ],
+    "donor_lookback_days": 28,
+    "geolift": {
+      "effect_sizes": [
+        0.0,
+        0.025,
+        0.05,
+        0.075,
+        0.1,
+        0.125,
+        0.15,
+        0.175,
+        0.2,
+        0.225,
+        0.25,
+        0.275,
+        0.3,
+        0.325,
+        0.35,
+        0.375,
+        0.4,
+        0.425,
+        0.45,
+        0.475,
+        0.5,
+        0.525,
+        0.55,
+        0.575,
+        0.6
+      ],
+      "treatment_periods": [
+        28,
+        42
+      ],
+      "lookback_window": 7,
+      "alpha": 0.1,
+      "pre_days": 300,
+      "power_target": 0.8,
+      "drift_flag": -0.1
+    },
+    "planner": {
+      "good_test_mde": 0.2,
+      "default_iroas": 0.5
+    },
+    "leakage_flag": 0.03,
+    "verdict": {
+      "too_early_days": 14,
+      "interim_flat_band": 0.02
+    },
+    "acceptance": {
+      "_note": "Targets for the acceptance checks live in private/awareness.json in the bucket (the repository is public).",
+      "website_orders": null,
+      "tn_weekly_sales": null,
+      "chennai_daily_sales": null,
+      "coimbatore_daily_sales": null
+    }
   }
 }

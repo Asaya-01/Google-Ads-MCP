@@ -33,6 +33,11 @@ class LocalStore:
             encoding="utf-8",
         )
 
+    def put_text(self, path: str, text: str) -> None:
+        p = self.root / path
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+
     def list(self, prefix: str) -> list[str]:
         base = self.root / prefix
         if not base.exists():
@@ -65,6 +70,11 @@ class GCSStore:
             json.dumps(obj, separators=(",", ":"), default=str),
             content_type="application/json",
         )
+
+    def put_text(self, path: str, text: str, content_type: str = "text/csv") -> None:
+        blob = self.bucket.blob(path)
+        blob.cache_control = "no-store"
+        blob.upload_from_string(text, content_type=content_type)
 
     def list(self, prefix: str) -> list[str]:
         return sorted(b.name for b in self.bucket.list_blobs(prefix=prefix))

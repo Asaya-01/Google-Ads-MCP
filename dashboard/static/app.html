@@ -370,6 +370,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
   /*__RANGE_REGION__*/
   /*__CRO__*/
   /*__PLUS__*/
+  /*__AWARENESS__*/
   /*__ASK__*/
 
   /* Data health: "Can I trust these numbers?" Source status, data checks,
@@ -379,7 +380,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     const hhmm = (iso) => iso ? new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" }) : null;
     $main.innerHTML = '<p class="empty">Loading…</p>';
     const pg = {};
-    for (const t of ["overview", "funnel", "marketing", "products", "region", "d1", "days", "product_days", "meta_ads", "google_ads", "cro"]) { try { pg[t] = await loadPage(t); } catch (e) { pg[t] = null; } }
+    for (const t of ["overview", "funnel", "marketing", "products", "region", "d1", "days", "product_days", "meta_ads", "google_ads", "cro", "awareness"]) { try { pg[t] = await loadPage(t); } catch (e) { pg[t] = null; } }
     if (state.tab !== "health") return;
     const st = state.status || {}, labels = p.source_labels || {};
     // 1. sources
@@ -457,6 +458,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       ${rgSec("Meta classification", "tag coverage, names to fix, validation and the tie-out (Marketing › Meta)", mvHealth(pg.meta_ads, D), { comp: "meta-coverage" })}
       ${rgSec("Google classification", "tag coverage, the purchase split, validation and the tie-out (Marketing › Google)", gvHealth(pg.google_ads, D), { comp: "google-coverage" })}
       ${rgSec("Cooee (CRO tab)", "the sign-in, the last syncs, and Cooee's numbers against Shopify and GoKwik", croHealth(pg.cro, D), { comp: "cooee-health" })}
+      ${pg.awareness ? rgSec("Awareness data", "geo coverage, the acceptance checks, unmapped city names and the job runs (Awareness tab)", awHealth(pg.awareness), { comp: "awareness-health" }) : ""}
       <div class="cols-2">
         ${rgSec("Sale calendar", "which days are BAU and which are sale", cal)}
         ${rgSec("Known exceptions", "days whose numbers need a footnote", excHtml)}
@@ -698,7 +700,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     clearInterval(state.liveTimer); clearInterval(state.liveTick);
     $main.innerHTML = '<p class="empty">Loading…</p>';
     setSub("");
-    document.getElementById("mv-drawer")?.remove(); document.getElementById("gv-drawer")?.remove(); document.body.classList.remove("mv-dr-open");
+    document.getElementById("mv-drawer")?.remove(); document.getElementById("gv-drawer")?.remove(); document.getElementById("aw-drawer")?.remove(); document.body.classList.remove("mv-dr-open");
     try {
       const page = await loadPage(state.tab);
       if (!page) throw new Error("This tab has not been built yet.");

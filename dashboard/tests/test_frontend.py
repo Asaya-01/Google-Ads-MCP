@@ -70,7 +70,7 @@ def test_the_metric_registry_drives_names_formats_and_colours():
     reg = settings.STATIC_DIR / "metrics.js"
     script = f"""
 const M = require({str(reg)!r});
-const homes = new Set(["overview", "funnel", "marketing", "products", "retention", "region", "cro"]);
+const homes = new Set(["overview", "funnel", "marketing", "products", "retention", "region", "cro", "awareness"]);
 const bad = Object.entries(M.METRICS).filter(([k, m]) => !m.label || !m.def || !m.format || !["higher", "lower", "neutral"].includes(m.dir) || !homes.has(m.home)).map(([k]) => k);
 console.log(JSON.stringify({{
   bad,

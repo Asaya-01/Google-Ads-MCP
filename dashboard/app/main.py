@@ -600,6 +600,8 @@ def cro_live(start: str, end: str, user: str = Depends(current_user)):
 def page(tab: str, user: str = Depends(current_user)):
     if tab not in {t["id"] for t in settings.enabled_tabs()} | {
         "live_history",
+        "awareness_daily",
+        "awareness_map",
         "days",
         "campaign_days",
         "product_days",
