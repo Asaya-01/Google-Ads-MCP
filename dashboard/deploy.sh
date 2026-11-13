@@ -204,6 +204,24 @@ else
   gcloud scheduler jobs create http "$COOEE_JOB" "${COOEE_SCHED[@]}" "${P[@]}"
 fi
 
+# Awareness tab: geo-trackable sales read from Maplemonk (read only), the
+# tab's pages and the GeoLift panels in the bucket, every morning at 07:15 IST.
+# The GeoLift (R) job itself is deployed by deploy_geolift.sh.
+AW_JOB="${AW_JOB:-asaya-d2c-awareness}"
+gcloud run jobs deploy "$AW_JOB" --image "$IMAGE" --region "$REGION" --service-account "$SA" \
+  --set-env-vars "^@@^$ENV_VARS" --command python --args=-m,app.awareness.job \
+  --memory 2Gi --task-timeout 1800 --max-retries 0 "${P[@]}"
+gcloud run jobs add-iam-policy-binding "$AW_JOB" --region "$REGION" --member "serviceAccount:$SA" \
+  --role roles/run.invoker "${P[@]}" >/dev/null
+AW_URI="https://run.googleapis.com/v2/projects/${GOOGLE_PROJECT_ID}/locations/${REGION}/jobs/${AW_JOB}:run"
+AW_SCHED=(--location "$REGION" --schedule "15 7 * * *" --time-zone "Asia/Kolkata" --uri "$AW_URI"
+          --http-method POST --oauth-service-account-email "$SA")
+if gcloud scheduler jobs describe "$AW_JOB" --location "$REGION" "${P[@]}" >/dev/null 2>&1; then
+  gcloud scheduler jobs update http "$AW_JOB" "${AW_SCHED[@]}" "${P[@]}"
+else
+  gcloud scheduler jobs create http "$AW_JOB" "${AW_SCHED[@]}" "${P[@]}"
+fi
+
 echo "==> [9/9] Alerts"
 gcloud logging metrics describe asaya_dashboard_alert "${P[@]}" >/dev/null 2>&1 \
   || gcloud logging metrics create asaya_dashboard_alert \

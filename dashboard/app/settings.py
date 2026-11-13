@@ -47,6 +47,7 @@ def app_fragment() -> str:
         ("/*__RANGE_D1__*/", "range_d1.js"),
         ("/*__RANGE_REGION__*/", "range_region.js"),
         ("/*__CRO__*/", "cro.js"),
+        ("/*__AWARENESS__*/", "awareness.js"),
         ("/*__ASK_CSS__*/", "ask.css"),
         ("/*__ASK__*/", "ask.js"),
     ):
