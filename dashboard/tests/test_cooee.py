@@ -162,3 +162,17 @@ def test_routes_serve_the_connect_page_before_any_sync(monkeypatch, tmp_path):
     r = c.get("/api/cro/live?start=2026-11-01&end=2026-11-07")
     assert r.status_code == 409 and "Connect Cooee" in r.json()["detail"]
     assert c.get("/api/cro/live?start=bad&end=2026-11-07").status_code == 400
+
+
+def test_an_unreachable_cooee_is_an_error_not_a_crash(store):
+    import requests
+
+    class Down(FakeCooee):
+        def post(self, url, **kw):
+            if url == FakeCooee.MCP:
+                raise requests.exceptions.ProxyError("tunnel 403")
+            return super().post(url, **kw)
+    fake = Down()
+    connect(store, fake)
+    with pytest.raises(mcp.CooeeError, match="could not be reached"):
+        mcp.Client(FakeCooee.MCP, lambda f: mcp.access_token(store, http=fake, force=f), http=fake, retries=1).open()
