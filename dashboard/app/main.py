@@ -519,6 +519,83 @@ async def google_reach(request: Request, user: str = Depends(current_user)):
     return await _google_on_demand(request, "reach", "Google reach", google_ads.fetch_reach)
 
 
+# ---------------------------------------------------------------- Cooee (CRO tab)
+@app.get("/auth/cooee/start")
+def cooee_start(request: Request, user: str = Depends(current_user)):
+    """"Connect Cooee": send the person to Cooee's consent page (read-only
+    scopes). Cooee sends them back to /auth/cooee/callback."""
+    from urllib.parse import quote
+
+    from fastapi.responses import RedirectResponse
+
+    from .cooee import config as cooee_config
+    from .cooee import mcp as cooee_mcp
+
+    try:
+        url = cooee_mcp.start(store(), cooee_config()["mcp_url"], _origin(request) + "/auth/cooee/callback", user,
+                              client_id=(settings.env("COOEE_OAUTH_CLIENT_ID") or None))
+    except cooee_mcp.CooeeError as exc:
+        return RedirectResponse("/#cro?cooee_error=" + quote(str(exc)), status_code=303)
+    return RedirectResponse(url, status_code=302)
+
+
+@app.get("/auth/cooee/callback")
+def cooee_callback(request: Request, code: str = "", state: str = "", error: str = "", error_description: str = ""):
+    from urllib.parse import quote
+
+    from fastapi.responses import RedirectResponse
+
+    from .cooee import mcp as cooee_mcp
+
+    if error or not code:
+        return RedirectResponse("/#cro?cooee_error=" + quote(error_description or error or "Cooee sent no sign-in code"), status_code=303)
+    try:
+        cooee_mcp.finish(store(), state, code)
+    except cooee_mcp.CooeeError as exc:
+        return RedirectResponse("/#cro?cooee_error=" + quote(str(exc)), status_code=303)
+    return RedirectResponse("/#cro?cooee_connected=1", status_code=303)
+
+
+_CRO_LIVE_TTL = 3600
+
+
+@app.get("/api/cro/live")
+def cro_live(start: str, end: str, user: str = Depends(current_user)):
+    """Distinct visitors, sessions, orders and revenue for exactly start..end,
+    from Cooee (visitors do not add across days, so RPV for a range needs
+    this call). Cached for an hour per range."""
+    import datetime as dt
+    import time as _t
+
+    from .cooee import config as cooee_config
+    from .cooee import mcp as cooee_mcp
+
+    for v in (start, end):
+        try:
+            dt.date.fromisoformat(v)
+        except ValueError:
+            raise HTTPException(400, "dates must be YYYY-MM-DD")
+    key = f"cache/cooee/live/{start}_{end}.json"
+    hit = store().get_json(key)
+    if hit and _t.time() - hit.get("at", 0) < _CRO_LIVE_TTL:
+        return hit
+    cc = cooee_config()
+    try:
+        c = cooee_mcp.Client(cc["mcp_url"], lambda force: cooee_mcp.access_token(store(), force=force), retries=2).open()
+        out = c.call("get_landing_page_report", {"storeSlug": cc["store_slug"], "fromDate": start, "toDate": end,
+                                                 "dimensions": ["ordered"], "limit": 5,
+                                                 "metrics": ["sessionCount", "visitorCount", "sessionsWithOrder", "orderCount", "revenue"]})
+    except cooee_mcp.NotConnected as exc:
+        raise HTTPException(409, str(exc))
+    except cooee_mcp.CooeeError as exc:
+        raise HTTPException(502, f"Cooee: {exc}")
+    s = out.get("summary") or {}
+    res = {"start": start, "end": end, "at": _t.time(), "visitors": s.get("visitorCount"), "sessions": s.get("sessionCount"),
+           "order_sessions": s.get("sessionsWithOrder"), "orders": s.get("orderCount"), "revenue": s.get("revenue")}
+    store().put_json(key, res)
+    return res
+
+
 @app.get("/api/page/{tab}")
 def page(tab: str, user: str = Depends(current_user)):
     if tab not in {t["id"] for t in settings.enabled_tabs()} | {
@@ -541,6 +618,13 @@ def page(tab: str, user: str = Depends(current_user)):
     }:
         raise HTTPException(404, "No such tab")
     payload = store().get_json(f"pages/{tab}.json")
+    if tab == "cro":  # the Connect button must show before the first sync
+        from .cooee import mcp as cooee_mcp
+
+        payload = payload or {"title": "CRO", "days": [], "experiments": [], "backlog": [],
+                              "na": "Cooee is not connected yet: click Connect Cooee."}
+        payload["connection"] = cooee_mcp.status(store())
+        return payload
     if payload is None:
         return Response(
             content='{"error": "This tab has not been built yet. The refresh job runs from 07:00 IST."}',

@@ -936,6 +936,7 @@
     {"id": "marketing", "label": "Marketing", "phase": 1, "enabled": true},
     {"id": "products",  "label": "Products",  "phase": 1, "enabled": true},
     {"id": "retention", "label": "Retention", "phase": 1, "enabled": true},
+    {"id": "cro",       "label": "CRO",       "phase": 1, "enabled": true},
     {"id": "region",    "label": "Region",    "phase": 1, "enabled": true},
     {"id": "health",    "label": "Data health", "phase": 1, "enabled": true},
     {"id": "d1",        "label": "D-1 Report", "phase": 1, "enabled": true, "report": true},
@@ -1483,5 +1484,21 @@
     "google_sku_groups": [
       "Non-brand PMax"
     ]
+  },
+  "cro": {
+    "_about": "The CRO tab (Cooee). Read from Cooee's MCP server by the Cooee sync job (python -m app.cooee.sync) with fixed tool calls; never through a model. Data starts on data_start (Cooee's reports begin there). Each run re-pulls repull_days and back-fills backfill_days_per_run older days. Rows past Cooee's caps are kept as the top `limits` rows per day plus the day totals.",
+    "mcp_url": "https://cdn.mcp.api.letscooee.com/mcp",
+    "store_slug": "world-of-asaya",
+    "data_start": "2026-06-17",
+    "repull_days": 7,
+    "backfill_days_per_run": 30,
+    "limits": {"landing": 300, "exit": 200, "utm": 300, "channel": 100, "products": 100},
+    "verdict": {"_about": "Experiment verdicts, in order: Invalid (split mismatch) when the chi-square test of visitors per arm against the configured split gives p < srm_p; Too early under min_days live or under min_visitors / min_orders in an arm; Winner / Loser when orders per visitor differ with p < alpha; else Inconclusive.",
+                "srm_p": 0.001, "min_days": 7, "min_visitors": 1000, "min_orders": 100, "alpha": 0.05},
+    "flags": {"dismissal_rate": 0.40, "zero_order_days": 7, "min_impressions": 1000, "pdp_min_views": 500,
+              "creative_min_sessions": 300, "creative_bounce_over": 0.95, "draft_age_days": 30, "exposure_below": 0.20},
+    "min_segment_sessions": 300,
+    "recon_warn": 0.10,
+    "backlog": []
   }
 }
