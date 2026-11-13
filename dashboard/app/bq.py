@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import decimal
+import re
 
 from . import settings
 
@@ -40,6 +41,12 @@ def render(sql_name: str) -> str:
     return sql.replace("{{dataset}}", settings.config()["gcp"]["dataset"])
 
 
+def label(sql_name: str) -> str:
+    """A BigQuery label value for the query: only lowercase letters, digits,
+    _ and -, at most 63 characters (a "/" from a sql/ subfolder is refused)."""
+    return re.sub(r"[^a-z0-9_-]+", "-", sql_name.lower().replace("_", "-"))[:63]
+
+
 def _job(sql_name: str, params: dict):
     from google.cloud import bigquery
 
@@ -53,7 +60,7 @@ def _job(sql_name: str, params: dict):
             query_parameters=[_param(k, v) for k, v in params.items()],
             labels={
                 "app": "asaya-d2c-dashboard",
-                "query": sql_name.replace("_", "-"),
+                "query": label(sql_name),
             },
         ),
     )
