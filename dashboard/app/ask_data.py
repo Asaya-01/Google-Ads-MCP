@@ -590,6 +590,34 @@ def _drill_rates(a: dict) -> dict:
     }
 
 
+_PM_CACHE: dict = {}
+
+
+def product_map_index() -> dict[str, tuple[str, str]]:
+    """Shopify product id -> (house code, name) from config.json's product
+    map: the names the Products tab uses."""
+    if "ix" not in _PM_CACHE:
+        from . import settings
+
+        ix = {}
+        for prod in settings.config().get("product_map", {}).get("products", []):
+            for pid in (prod.get("ids") or {}):
+                ix[str(pid)] = (prod["code"], prod["name"])
+        _PM_CACHE["ix"] = ix
+    return _PM_CACHE["ix"]
+
+
+def product_display(n: dict, pm: dict) -> str:
+    """"UAS · Even Tone Underarm Mist" for a mapped product; otherwise its
+    Shopify title (HTML entities decoded)."""
+    import html
+
+    hit = pm.get(str(n.get("id")))
+    if hit:
+        return f"{hit[0]} · {hit[1]}"
+    return html.unescape(str(n.get("label") or n.get("id") or "(unknown product)"))
+
+
 class Breakdowns:
     """Rebuilds the dashboard's tables for any list of days."""
 
@@ -629,15 +657,18 @@ class Breakdowns:
         return out, note
 
     def products(self, days: set[str]):
+        """One row per product as the Products tab shows it: the product map's
+        "CODE · name", every Shopify listing of the product together."""
         p = self.pages.get("product_days")
         if not p:
             return None, "the product data has not been built yet"
         out: dict[str, dict] = {}
+        pm = product_map_index()
         for d, i, units, rev, mrp_val, mrp_units, mrp_rev in p["rows"]:
             if d not in days:
                 continue
             n = p["names"][i]
-            key = n.get("label") or n["id"]
+            key = product_display(n, pm)
             a = out.setdefault(
                 key,
                 {
@@ -659,6 +690,37 @@ class Breakdowns:
                 else None
             )
             del a["_mrp_val"], a["_mrp_rev"]
+        return out, None
+
+    def product_variants(self, days: set[str]):
+        """One row per variant: the product, then its shade or fragrance and
+        its size and pack ("UAS · Even Tone Underarm Mist · Aqua Rush · 100ml
+        x 2"). Units are as sold (a pack of 2 is one unit); `pieces` counts
+        the bottles or tubes in them."""
+        p = self.pages.get("product_days")
+        if not p:
+            return None, "the product data has not been built yet"
+        if not p.get("vrows"):
+            return None, "variant detail is not in the product data yet (it is added by the next refresh)"
+        pm = product_map_index()
+        out: dict[str, dict] = {}
+        for d, vi, units, rev in p["vrows"]:
+            if d not in days:
+                continue
+            v = p["variants"][vi]
+            n = p["names"][v["p"]]
+            opt = (v.get("opt") or "").strip()
+            label = (v.get("label") or "").strip()
+            parts = [product_display(n, pm)] + ([opt] if opt else []) + ([label] if label and label != opt else [])
+            key = " · ".join(parts)
+            a = out.setdefault(key, {"type": n.get("type"), "units": 0, "pieces": 0, "revenue": 0.0, "skus": set()})
+            a["units"] += units
+            a["pieces"] += units * int(v.get("pack") or 1)
+            a["revenue"] += rev
+            if v.get("sku"):
+                a["skus"].add(v["sku"])
+        for a in out.values():
+            a["skus"] = ", ".join(sorted(a["skus"]))
         return out, None
 
     def product_types(self, days: set[str]):
