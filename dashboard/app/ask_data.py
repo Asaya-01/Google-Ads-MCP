@@ -748,12 +748,10 @@ class Breakdowns:
         have = set(p.get("days") or [])
         out: dict[str, dict] = {}
         for d, slab, orders, units, sales, *_ in p["rows"]:
-            if d not in days:
+            if d not in days or slab == 0:  # gift- or merch-only orders are not a basket, as on the tab
                 continue
             label = (
-                "0 products (gifts or merch only)"
-                if slab == 0
-                else f"{top}+ products"
+                f"{top}+ products"
                 if slab >= top
                 else f"{slab} product{'s' if slab > 1 else ''}"
             )
