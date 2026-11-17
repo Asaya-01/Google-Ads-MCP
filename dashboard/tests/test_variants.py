@@ -86,3 +86,44 @@ def test_without_the_catalog_the_packs_list_still_splits_itb():
     got = labels([line("10107079721273", "inner_thigh_bum_roll_on", 90), line("10107079721273", "", 10)],
                  catalog=None, titles={"inner_thigh_bum_roll_on": "70 ml"})
     assert got == {"70ml": 90, "70ml x 2": 10}
+
+
+def test_pack_sizes_for_the_basket_count_only_clear_packs():
+    from app import variants
+    cat = {"variants_by_product": {
+        # a listing sold as 1 and as x 2, the pack of 2 with no SKU
+        "1": [["8906161981030", "50 g"], ["", "50 g X 2"]],
+        # fragrance packs with their own SKUs, and none without a SKU: a SKU-less line is the pack of 2
+        "2": [["8906161981443", "Sweet Vanilla / 100 ml"], ["Sweet_Vanilla_packof2", "Sweet Vanilla / 100 ml x 2"]],
+        # one SKU on a pack of 1 and a pack of 6: unclear, so counted as 1
+        "3": [["Salicylic Acid Serum - 30ml", "30 ml / Pack of 1"], ["Salicylic Acid Serum - 30ml", "30 ml / Pack of 6"]],
+        # a single's barcode reused on an "x 2" listing: only that listing counts 2
+        "4": [["8906161980552", "50 G"]],
+        "5": [["8906161980552", "50g x 2"]],
+        # single-size products count 1
+        "6": [["8906161980750", "50 g"]],
+    }}
+    p = variants.pack_sizes(cat)
+    assert p["1|"] == 2 and "1|8906161981030" not in p
+    assert p["2|Sweet_Vanilla_packof2"] == 2 and p["2|"] == 2 and p["*|Sweet_Vanilla_packof2"] == 2 and "2|8906161981443" not in p
+    assert not any(k.startswith("3|") for k in p) and "*|Salicylic Acid Serum - 30ml" not in p
+    assert p["5|8906161980552"] == 2 and "4|8906161980552" not in p and "*|8906161980552" not in p
+    assert not any(k.startswith("6|") for k in p)
+    assert variants.pack_sizes(None) == {}
+
+
+def test_every_combo_says_how_many_products_it_holds():
+    from app import settings
+    combos = settings.config()["basket"]["combo_products"]
+    ids = [c["id"] for c in combos]
+    assert len(ids) == len(set(ids)) and all(i.isdigit() for i in ids)
+    assert all(isinstance(c["products"], int) and 2 <= c["products"] <= 6 for c in combos)
+    by = {c["title"]: c["products"] for c in combos}
+    assert by["Target & Fade Duo"] == 2 and by["Even-tone Body Trio"] == 3 and by["Advanced Anti-Pigmentation Set"] == 4
+
+
+def test_basket_query_takes_combo_and_pack_parameters():
+    from app import settings
+    sql = (settings.SQL_DIR / "order_slabs.sql").read_text()
+    for p in ("@combo_ids", "@combo_counts", "@pack_keys", "@pack_sizes", "@exclude_product_types"):
+        assert p in sql

@@ -41,6 +41,7 @@ from . import (
     secrets,
     settings,
     sheets,
+    variants,
 )
 from .pages import build_all
 from .shopify import Shopify
@@ -108,11 +109,19 @@ def collect(
         **orders,
         exclude_product_types=fb["exclude_product_types"],
     )
-    # basket size: orders by how many (non-gift) items they held
+    # basket size: orders by how many (non-gift) products they held: a combo
+    # counts the products inside it, a pack of 2 counts 2 (packs read from
+    # the last Shopify catalog pull, the same rules as the Products tab)
+    combos = (cfg.get("basket") or {}).get("combo_products") or []
+    packs = variants.pack_sizes(store.get_json("cache/catalog.json"))
     data["order_slabs"] = bq.run(
         "order_slabs",
         **orders,
         exclude_product_types=fb["exclude_product_types"],
+        combo_ids=[c["id"] for c in combos],
+        combo_counts=[str(int(c["products"])) for c in combos],
+        pack_keys=list(packs),
+        pack_sizes=[str(n) for n in packs.values()],
     )
     data["funnel"] = bq.run("funnel_daily", **window)
     data["google_ads"] = bq.run("google_ads_daily", **window)

@@ -1,12 +1,13 @@
 /* Basket size: how many orders, and how much of the sales, came from baskets of
-   1, 2, 3, 4 and 5+ items. A basket is the order's items with gifts, merch,
-   books and gummies left out, so a free gift never turns a buy-one into a
-   buy-two. 1 item is the single-product price, 2 is the "buy 2" offer, 3 the
+   1, 2, 3, 4 and 5+ products. Products, not order lines: a combo counts the
+   products inside it (a duo 2, a trio 3), a pack of 2 counts 2, a single SKU
+   1. Gifts, merch, books and gummies are left out, so a free gift never
+   turns a buy-one into a buy-two. 1 item is the single-product price, 2 is the "buy 2" offer, 3 the
    "buy 3" and so on, whatever the offer is that day. Sale days are compared
    with sale days and BAU with BAU, like everything else. Inlined after
    range_tree.js, inside the dashboard closure. */
 
-const BK_LABEL = (n, top) => (n === 0 ? "Gifts or merch only" : n >= top ? `${top}+ items` : n === 1 ? "1 item · single" : `${n} items · buy ${n}`);
+const BK_LABEL = (n, top) => (n === 0 ? "Gifts or merch only" : n >= top ? `${top}+ products` : n === 1 ? "1 product · single" : `${n} products · buy ${n}`);
 
 function bkSum(p, days) {
   const set = new Set(days || []), m = new Map();
@@ -46,14 +47,14 @@ function bkHtml(g) {
   });
   const bar = (v) => (v == null ? "" : `<span class="bk-bar" style="width:${Math.max(2, Math.round(v * 100))}%"></span>`);
   const cols = [
-    { label: mHead("items_per_order", "Basket"), text: true, render: (r) => esc(r.label) },
+    { label: mHead("basket_products", "Basket"), text: true, render: (r) => esc(r.label) },
     { label: "Orders", render: (r) => esc(fmt(r.a.orders, "int")) },
     { label: "Δ orders", render: (r) => (prev ? deltaHtml(r.dOrders, "orders") : '<span class="flat">–</span>') },
     { label: "Share of orders", render: (r) => `<span class="bk-cell">${bar(r.so)}${pc(r.so)}</span>${r.sp != null ? `<br><span class="sub">vs ${esc((r.sp * 100).toFixed(1))}% · ${pp(r.so, r.sp)}</span>` : ""}` },
     { label: "Sales", render: (r) => esc(fmt(r.a.sales, "inr")) },
     { label: "Share of sales", render: (r) => `${pc(r.ss)}${r.ssp != null ? `<br><span class="sub">vs ${esc((r.ssp * 100).toFixed(1))}% · ${pp(r.ss, r.ssp)}</span>` : ""}` },
     { label: "AOV", render: (r) => (r.aov == null ? '<span class="na">–</span>' : esc(fmt(r.aov, "inr")) + (r.paov != null ? `<br><span class="sub">vs ${esc(fmt(r.paov, "inr"))}</span>` : "")) },
-    { label: "Items", render: (r) => (r.a.units == null ? '<span class="flat">–</span>' : esc(fmt(r.a.units, "int"))) },
+    { label: "Products", render: (r) => (r.a.units == null ? '<span class="flat">–</span>' : esc(fmt(r.a.units, "int"))) },
   ];
   const total = { label: "All orders placed", _class: "total", a: tc, so: 1, sp: tp ? 1 : null, ss: 1, ssp: tp ? 1 : null, aov: tc.orders ? tc.sales / tc.orders : null, paov: tp && tp.orders ? tp.sales / tp.orders : null,
     b: tp, dOrders: tp && tp.orders ? rgAvgChange(tc.orders, nCur, tp.orders, nPrev) : null };

@@ -280,7 +280,7 @@ R.products = (p) => {
       host.innerHTML = `
         <section class="card" data-component="product-kpis"><div class="kpis">${prKpis(pd, state.pages.slab_days, g)}</div>${p.mrp_check && p.mrp_check.na ? `<p class="legend-note">Landed discount: data unavailable. ${esc(p.mrp_check.na)}.</p>` : ""}</section>
         ${rgSec("Products", "parent products by house code; open one for its variants (shade, scent, size, pack)", prodTbl, { comp: "products-table" })}
-        ${rgSec("Basket size", "orders by number of items bought (freebies, merch, books and gummies are not items)", bkHtml(g), { comp: "basket-size" })}
+        ${rgSec("Basket size", "orders by number of products bought: a combo counts each product inside it, a pack of 2 counts 2 (freebies, merch, books and gummies are not counted)", bkHtml(g), { comp: "basket-size" })}
         ${rgSec("Categories", "Shopify product type", catTbl, { comp: "categories" })}
         ${rgFold("Excluded product types", "freebies, merch, books, gummies and blank types: never counted as items", prExcluded(pd, new Set(c.all)), { comp: "excluded-types" })}
         ${rgFold("Product types and MRP coverage", "the catalog's types, and units sold with a Shopify compare-at price", `<div class="cols-2"><div>${typeTable(days)}<p class="legend-note">${esc(pt.review_note || "")}</p></div><div>${mrpCard(days)}</div></div>`)}`;

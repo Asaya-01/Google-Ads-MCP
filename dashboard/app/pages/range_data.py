@@ -471,8 +471,9 @@ SLAB_TOP = 5  # the last slab is "5 or more"
 
 
 def slabs(ctx: Context) -> dict:
-    """Basket size per day: orders, units and sales by how many items the
-    order held (gifts, merch and the other excluded types do not count).
+    """Basket size per day: orders, products and sales by how many products
+    the order held (a combo counts the products inside it, a pack of 2
+    counts 2; gifts, merch and the other excluded types do not count).
     Rows are [date, slab, orders, units, sales, gmv]. Slab 0 is an order
     with nothing but excluded items; SLAB_TOP is "that many or more"."""
     rows = ctx.data.get("order_slabs")
