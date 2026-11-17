@@ -31,14 +31,15 @@ function bkHtml(g) {
   const cur = bkSum(p, (g.cur || []).filter((d) => have.has(d)));
   const prev = g.prev && g.prev.length && missPrev.length < g.prev.length ? bkSum(p, g.prev.filter((d) => have.has(d))) : null;
   const nCur = (g.cur || []).filter((d) => have.has(d)).length, nPrev = prev ? g.prev.filter((d) => have.has(d)).length : 0;
-  const slabs = [...new Set([...cur.keys(), ...(prev ? prev.keys() : [])])].sort((a, b) => a - b);
-  const tot = (m) => { const t = { orders: 0, units: 0, sales: 0 }; if (m) for (const a of m.values()) { t.orders += a.orders; t.units += a.units; t.sales += a.sales; } return t; };
+  // orders holding only gifts or merch are not a basket: left out of the rows and the totals (the reconcile line carries them)
+  const slabs = [...new Set([...cur.keys(), ...(prev ? prev.keys() : [])])].filter((s) => s !== 0).sort((a, b) => a - b);
+  const tot = (m) => { const t = { orders: 0, units: 0, sales: 0 }; if (m) for (const [s, a] of m) { if (s === 0) continue; t.orders += a.orders; t.units += a.units; t.sales += a.sales; } return t; };
   const tc = tot(cur), tp = prev ? tot(prev) : null;
   const pct = (v, t) => (t ? v / t : null);
   const pc = (v) => (v == null ? '<span class="na">–</span>' : esc((v * 100).toFixed(1) + "%"));
   // a change in mix, in percentage points; not good or bad, so not coloured
   const pp = (a, b) => mPpHtml(a == null || b == null ? null : a - b);
-  const rows = slabs.filter((s) => s !== 0 || (cur.get(0) || {}).orders).map((s) => {
+  const rows = slabs.map((s) => {
     const a = cur.get(s) || { orders: 0, units: 0, sales: 0 }, b = prev ? prev.get(s) || { orders: 0, units: 0, sales: 0 } : null;
     const so = pct(a.orders, tc.orders), sp = b ? pct(b.orders, tp.orders) : null;
     const ss = pct(a.sales, tc.sales), ssp = b ? pct(b.sales, tp.sales) : null;
@@ -65,8 +66,8 @@ function bkHtml(g) {
   if (W && W.orders != null && W.gmv != null) {
     const rid = "bk" + ++trRid;
     const line = (r, cls) => `<tr class="${cls}" data-rid="${rid}" hidden>${cols.map((c) => `<td class="${c.text ? "text" : ""}">${c.render(r)}</td>`).join("")}</tr>`;
-    recon = `<tr class="recon-toggle" data-recon="${rid}" tabindex="0" role="button" aria-expanded="false"><td class="text" colspan="${cols.length}">▸ Reconcile to Shopify: cancellations, returns and edits</td></tr>`
-      + line({ label: "Cancellations, returns and edits", a: { orders: W.orders - tc.orders, units: null, sales: W.gmv - tc.sales }, so: null, ss: null, aov: null, b: null, dOrders: null }, "recon")
+    recon = `<tr class="recon-toggle" data-recon="${rid}" tabindex="0" role="button" aria-expanded="false"><td class="text" colspan="${cols.length}">▸ Reconcile to Shopify: cancellations, returns, edits and gift-only orders</td></tr>`
+      + line({ label: "Cancellations, returns, edits and gift-only orders", a: { orders: W.orders - tc.orders, units: null, sales: W.gmv - tc.sales }, so: null, ss: null, aov: null, b: null, dOrders: null }, "recon")
       + line({ label: "Total · Shopify's report (the headline)", a: { orders: W.orders, units: null, sales: W.gmv }, so: null, ss: null, aov: W.orders ? W.gmv / W.orders : null, b: null, dOrders: null }, "total recon");
   }
   const warn = [missCur.length ? `Basket data is missing for ${rgListDays(missCur)}, which are left out.` : "", g.prev && missPrev.length ? `Comparison days without basket data (${rgListDays(missPrev)}) are left out too.` : ""].filter(Boolean).join(" ");
