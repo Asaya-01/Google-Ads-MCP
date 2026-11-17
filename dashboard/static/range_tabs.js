@@ -1,7 +1,7 @@
 /* Marketing, Products and D-1 driven by the same date range and comparison as
    Overview and Daily. Inlined after range_ui.js, inside the dashboard closure. */
 
-const MK = { phase: null };
+const MK = { phase: "all" }; // "all" (every picked day) unless BAU or Sale is clicked
 
 // A tab with its own picker bar, its body filled once the day-by-day data is in.
 function rgTab(name, pages, head, render) {

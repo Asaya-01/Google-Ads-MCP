@@ -98,7 +98,7 @@ R.d1 = (p) => {
       const from = e.monthStart(d1), c = e.compare(from, d1, { mode: "month" });
       g = rgPick(c);
       if (!g) { host.innerHTML = rgNone(); return; }
-      const seg = c.groups.length > 1 ? `<div class="seg" id="d1-phase" role="group" aria-label="Which days">${c.groups.map((x) => `<button type="button" data-ph="${x.phase}" aria-pressed="${x.phase === MK.phase}">${x.phase === "sale" ? "Sale" : "BAU"} days</button>`).join("")}</div>` : `<span class="phase-badge" title="${esc(RG_PHASE_RULE)}">${g.phase === "sale" ? "Sale vs Sale" : "BAU vs BAU"}</span>`;
+      const seg = rgPhaseSeg(c, "d1-phase");
       sub = `<b>${esc(rgSpan(from, d1))}</b> ${seg} <span class="rg-dim">${rgVsLine(g)}</span>`;
       kpis = D1_KPIS.map((id) => rgKpi(id, g, { href: id === "blended_roas" || id === "perf_spend" ? "#marketing" : id === "cvr" || id === "perf_cvr" ? "#funnel" : null })).join("");
       funnelG = g;

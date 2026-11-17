@@ -187,9 +187,10 @@
     function compareDays(range, cmp, phase) {
       const [a, b] = range, len = diffDays(a, b) + 1;
       if (cmp.mode === "none") return null;
+      const keep = (d) => phase === "all" || phaseOf(d) === phase; // "all": every day, sale or not
       if (cmp.mode === "match") {
-        const mine = rangeOf(a, b).filter((d) => phaseOf(d) === phase).length;
-        const pool = dates.filter((d) => d < a && phaseOf(d) === phase);
+        const mine = rangeOf(a, b).filter(keep).length;
+        const pool = dates.filter((d) => d < a && keep(d));
         const out = [];
         for (let i = pool.length - 1; i >= 0 && out.length < mine; i--) {
           // a sale is one event: stop at a gap, so two sales are never blended
@@ -204,7 +205,7 @@
       else if (cmp.mode === "year") { ca = shiftMonths(a, -12); cb = shiftMonths(b, -12); }
       else { ca = cmp.from; cb = cmp.to; }
       if (!ca || !cb || ca > cb) return null;
-      return rangeOf(ca, cb).filter((d) => phaseOf(d) === phase);
+      return rangeOf(ca, cb).filter(keep);
     }
 
     const EV = (D.events || []).map((e) => ({ ...e, a: e.start.slice(0, 10), b: e.end.slice(0, 10) }));
@@ -247,7 +248,19 @@
       const outside = rangeOf(a, b).length - all.length;
       // days when a sale went live or ended: neither BAU nor sale, so they sit out of both
       const mixed = all.filter((d) => phaseOf(d) === "mixed");
-      return { groups, all, outside, mixed, w: windowOf(all) };
+      /* Every picked day, sale, BAU or transition, against every day of the
+         comparison period: the default view, the one that ties to a Shopify
+         report for the same dates. BAU / Sale are the like-for-like views. */
+      let allGroup = null;
+      if (all.length) {
+        const prev = compareDays([a, b], cmp, "all");
+        const w = windowOf(all), pw = prev && prev.length ? windowOf(prev) : null;
+        let note = null;
+        if (cmp.mode !== "none" && !pw) note = "There are no days with data in the comparison period.";
+        else if (pw && cmp.mode !== "match" && pw.days < Math.max(1, Math.round(w.days / 2))) note = `Only ${pw.days} day${pw.days === 1 ? "" : "s"} in the comparison period against ${w.days}; changes use per-day averages.`;
+        allGroup = { phase: "all", cur: all, prev, w, pw, note, curSpan: span(all), prevSpan: span(prev), curEvents: eventsFor(all), prevEvents: eventsFor(prev), change: (k) => change(w, pw, k) };
+      }
+      return { groups, all, outside, mixed, w: windowOf(all), allGroup };
     }
 
     // ------------------------------------------------------------- presets
