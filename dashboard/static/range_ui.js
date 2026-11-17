@@ -78,8 +78,8 @@ function rgEventLabel(ev) {
 }
 // the days a block is compared with, spelled out: "Sale 13 Oct, 6 pm → 16 Oct, 6 pm (sale days 14–15 Oct)"
 function rgVsText(g, who) {
-  const word = g.phase === "sale" ? "sale" : "BAU";
-  const days = (list) => `${list.length} ${word} day${list.length === 1 ? "" : "s"}: ${rgListDays(list)}`;
+  const word = g.phase === "sale" ? "sale " : g.phase === "bau" ? "BAU " : "";
+  const days = (list) => `${list.length} ${word}day${list.length === 1 ? "" : "s"}: ${rgListDays(list)}`;
   const evs = who === "cur" ? g.curEvents : g.prevEvents;
   const list = who === "cur" ? g.cur : g.prev;
   if (!list || !list.length) return "";
@@ -116,19 +116,14 @@ const rgScopeBind = (id) => document.getElementById(id)?.addEventListener("click
    so the dates and the view stay in sight while you scroll. The view switch,
    the two pickers, then one line of context: what the dates hold and what
    they are compared with (sale with sale, BAU with BAU). */
-const RG_PHASE_RULE = "Sale days are only compared with sale days, and BAU days with BAU days. When the two periods differ in length, changes compare per-day averages. Transition days (a sale went live or ended) sit out of both.";
+const RG_PHASE_RULE = "All days (the default): every day you picked, sale or not, against every day of the comparison period; the totals match a Shopify report for the same dates. BAU days / Sale days: only those days, compared with the same kind of day, for a like-for-like read. Transition days (a sale went live or ended) count only under All days. When the two periods differ in length, changes compare per-day averages.";
 function rgBar() {
   const e = RG.eng, c = e.compare(RG.from, RG.to, RG.cmp);
   const cnt = (n, w) => `${n} ${w} day${n === 1 ? "" : "s"}`;
   const cur = [...c.groups.map((g) => cnt(g.cur.length, g.phase === "sale" ? "sale" : "BAU")), ...(c.mixed.length ? [cnt(c.mixed.length, "transition")] : [])].join(" + ");
-  const have = c.groups.map((g) => g.phase);
-  if (!have.includes(MK.phase)) MK.phase = have[0] || null;
-  const g = c.groups.find((x) => x.phase === MK.phase);
-  const word = (p) => (p === "sale" ? "Sale" : "BAU");
+  const g = rgPick(c);
   const vs = !g ? "" : RG.cmp.mode === "none" ? "no comparison" : g.prev && g.prev.length ? `vs ${rgListDays(g.prev)}` : "nothing to compare";
-  const phase = c.groups.length > 1
-    ? `<div class="seg" id="rg-phase" role="group" aria-label="Which days" title="${esc(RG_PHASE_RULE)}">${c.groups.map((x) => `<button type="button" data-ph="${x.phase}" aria-pressed="${x.phase === MK.phase}">${word(x.phase)} days</button>`).join("")}</div>`
-    : g ? `<span class="phase-badge" tabindex="0" title="${esc(RG_PHASE_RULE)}">${word(g.phase)}${RG.cmp.mode === "none" ? " days" : ` vs ${word(g.phase)}`}</span>` : "";
+  const phase = c.allGroup ? rgPhaseSeg(c, "rg-phase") : "";
   const info = `<span class="rg-info" title="${esc(RG_PHASE_RULE)}"><b>${esc(rgSpan(RG.from, RG.to))}</b> <span class="rg-dim">${esc(cur)}</span>${g && g.cur.length ? ` <span class="rg-dim">· showing ${esc(rgListDays(g.cur))}</span> <b>${esc(vs)}</b>` : ""}</span>`;
   return `<section class="rg-barcard" id="rg-bar"><div class="rg-wrap rg-line">
       <div class="rg-chips">
@@ -191,7 +186,8 @@ function rgPopover() {
       let shown = hint;
       if (k !== "none" && !(k === "custom" && !(d.from && d.to))) {
         const c = e.compare(RG.from, RG.to, k === "custom" ? { mode: k, from: d.from <= d.to ? d.from : d.to, to: d.from <= d.to ? d.to : d.from } : { mode: k });
-        shown = c.groups.map((g) => `${g.phase === "sale" ? "Sale" : "BAU"}: ${g.prev && g.prev.length ? (g.prevEvents && g.prevEvents.length ? g.prevEvents.map(rgEventLabel).join(" and ") : rgListDays(g.prev)) : "none"}`).join(" · ") || hint;
+        const gs = MK.phase === "all" ? [c.allGroup].filter(Boolean) : c.groups;
+        shown = gs.map((g) => `${{ sale: "Sale", bau: "BAU", all: "All days" }[g.phase]}: ${g.prev && g.prev.length ? (g.phase === "sale" && g.prevEvents && g.prevEvents.length ? g.prevEvents.map(rgEventLabel).join(" and ") : rgListDays(g.prev)) : "none"}`).join(" · ") || hint;
       }
       return `<button type="button" class="rg-pre ${d.mode === k ? "on" : ""}" data-cmp="${k}" title="${esc(hint)}">${esc(l)}${shown ? `<small>${esc(shown)}</small>` : ""}</button>`;
     }).join("");
@@ -246,6 +242,7 @@ function rgApply() {
     let a = d.from, b = d.to || d.from;
     if (a > b) [a, b] = [b, a];
     RG.from = a; RG.to = b;
+    MK.phase = "all"; // new dates: every day, until BAU or Sale is clicked
     const p = e.presets().find((x) => x.from === a && x.to === b);
     RG.preset = p ? p.id : "custom";
     if (RG.cmpAuto) RG.cmp = { mode: RG.preset === "mtd" ? "month" : RG.preset.startsWith("sale:") ? "match" : "previous" };
@@ -355,9 +352,18 @@ const rgLink = (tab, label) => `<a class="sec-link" href="#${tab}">${esc(label)}
 const rgNone = () => `<section class="card"><p class="na">Data unavailable: there are no days in the data for ${esc(rgSpan(RG.from, RG.to))}. The history runs ${esc(rgFmtDay(RG.eng.first, true))} to ${esc(rgFmtDay(RG.eng.last, true))}.</p></section>`;
 /* The block the header's BAU / Sale switch picked. */
 function rgPick(c) {
-  const have = c.groups.map((g) => g.phase);
-  if (!have.includes(MK.phase)) MK.phase = have[0] || null;
-  return c.groups.find((x) => x.phase === MK.phase) || null;
+  if (MK.phase !== "all") {
+    const g = c.groups.find((x) => x.phase === MK.phase);
+    if (g) return g;
+    MK.phase = "all"; // the picked kind of day is not in these dates
+  }
+  return c.allGroup || null;
+}
+/* All days / BAU days / Sale days: All is the default; BAU or Sale only
+   when clicked. Only the kinds of day the dates hold are offered. */
+function rgPhaseSeg(c, id) {
+  const opts = [["all", "All days"], ...c.groups.map((x) => [x.phase, x.phase === "sale" ? "Sale days" : "BAU days"])];
+  return `<div class="seg" id="${id}" role="group" aria-label="Which days" title="${esc(RG_PHASE_RULE)}">${opts.map(([k, l]) => `<button type="button" data-ph="${k}" aria-pressed="${k === MK.phase}">${l}</button>`).join("")}</div>`;
 }
 const rgVsLine = (g) => `${esc(rgVsText(g, "cur"))}${g.pw ? ` · vs ${esc(rgVsText(g, "prev"))}` : ""}`;
 

@@ -28,7 +28,10 @@ function askContext() {
       Object.assign(ctx, { from: RG.from, to: RG.to, range_label: rgRangeLabel(), compare: RG.cmp.mode, latest_day: RG.eng.last });
       if (RG.cmp.mode === "custom") Object.assign(ctx, { compare_from: RG.cmp.from, compare_to: RG.cmp.to });
       const c = RG.eng.compare(RG.from, RG.to, RG.cmp);
-      ctx.groups = c.groups.map((g) => ({ phase: g.phase, current_days: rgListDays(g.cur), comparison_days: g.prev && g.prev.length ? rgListDays(g.prev) : null }));
+      // the days the tab is showing: every picked day unless BAU or Sale was clicked
+      const g = rgPick(c);
+      ctx.days_shown = g ? { kind: g.phase === "all" ? "all days (sale and BAU)" : g.phase === "sale" ? "sale days only" : "BAU days only", current_days: rgListDays(g.cur), comparison_days: g.prev && g.prev.length ? rgListDays(g.prev) : null } : null;
+      ctx.groups = c.groups.map((x) => ({ phase: x.phase, current_days: rgListDays(x.cur), comparison_days: x.prev && x.prev.length ? rgListDays(x.prev) : null }));
     }
   } catch (e) { /* the range is not ready on this tab yet */ }
   // on the Region tab: the state and city that are open, and what the map shows
