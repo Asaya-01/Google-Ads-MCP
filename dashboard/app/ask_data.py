@@ -751,15 +751,16 @@ class Breakdowns:
             if d not in days:
                 continue
             label = (
-                "0 items (gifts or merch only)"
+                "0 products (gifts or merch only)"
                 if slab == 0
-                else f"{top}+ items"
+                else f"{top}+ products"
                 if slab >= top
-                else f"{slab} item{'s' if slab > 1 else ''}"
+                else f"{slab} product{'s' if slab > 1 else ''}"
             )
-            a = out.setdefault(label, {"orders": 0, "units": 0, "sales": 0.0})
+            # products, not lines: a combo counts the products inside it, a pack of 2 counts 2
+            a = out.setdefault(label, {"orders": 0, "products": 0, "sales": 0.0})
             a["orders"] += orders
-            a["units"] += units
+            a["products"] += units
             a["sales"] += sales
         tot_o = sum(a["orders"] for a in out.values())
         tot_s = sum(a["sales"] for a in out.values())

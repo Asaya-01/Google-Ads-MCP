@@ -1,5 +1,11 @@
--- Basket size ("slab") per day: how many orders had 1, 2, 3, 4 or 5+ items.
--- Items are the kept order lines only: lines whose product type is in
+-- Basket size ("slab") per day: how many orders had 1, 2, 3, 4 or 5+ products.
+-- Products, not lines: each kept line counts quantity x the products in one
+-- unit of it. A combo counts the products inside it (@combo_ids /
+-- @combo_counts, from config basket.combo_products); a pack of N counts N
+-- (@pack_keys / @pack_sizes, from the Shopify catalog's variant titles, then
+-- an "x2" / "pack of 2" / "packof2" SKU, then "Pack of 2" / "Set of 2" in the
+-- product name); anything else counts 1.
+-- Only kept order lines count: lines whose product type is in
 -- @exclude_product_types (freebie, merch, book, gummies, blank) do not count,
 -- so a free gift never turns a buy-one into a buy-two. Orders that are tests,
 -- cancelled, ASAYASS samples or ASAYAINF influencer orders are left out, as
@@ -25,6 +31,16 @@ valid_orders AS (
     AND NOT REGEXP_CONTAINS(UPPER(name), @exclude_name_regex)
     AND DATE(created_at, 'Asia/Kolkata') BETWEEN @start_date AND @end_date
 ),
+combos AS (
+  SELECT k AS product_id, CAST(v AS INT64) AS n
+  FROM UNNEST(@combo_ids) AS k WITH OFFSET i
+  JOIN UNNEST(@combo_counts) AS v WITH OFFSET j ON i = j
+),
+packs AS (
+  SELECT k AS pack_key, CAST(v AS INT64) AS n
+  FROM UNNEST(@pack_keys) AS k WITH OFFSET i
+  JOIN UNNEST(@pack_sizes) AS v WITH OFFSET j ON i = j
+),
 products AS (
   SELECT CAST(id AS STRING) AS product_id, LOWER(TRIM(IFNULL(product_type, ''))) AS product_type
   FROM `{{dataset}}.Shopify_All_products`
@@ -34,11 +50,21 @@ lines AS (
   SELECT
     i.ORDER_ID AS order_id,
     i.QUANTITY AS quantity,
+    i.QUANTITY * LEAST(COALESCE(
+      c.n,
+      pk.n,
+      ps.n,
+      NULLIF(SAFE_CAST(REGEXP_EXTRACT(REPLACE(TRIM(IFNULL(i.SKU, '')), '-', ' '), r'(?i)(?:x\s*|(?:pack|set)\s*_?(?:of)?\s*_?)(\d+)\s*$') AS INT64), 0),
+      NULLIF(SAFE_CAST(REGEXP_EXTRACT(LOWER(IFNULL(i.PRODUCT_NAME, '')), r'\b(?:pack|set) of (\d+)\b') AS INT64), 0),
+      1), 10) AS products,
     i.TOTAL_SALES AS revenue,
     IF(p.product_id IS NULL, '(no product match)', p.product_type) AS product_type
   FROM `{{dataset}}.Shopify_All_orders_items` i
   JOIN valid_orders v ON v.order_id = i.ORDER_ID
   LEFT JOIN products p ON p.product_id = i.PRODUCT_ID
+  LEFT JOIN combos c ON c.product_id = i.PRODUCT_ID
+  LEFT JOIN packs pk ON pk.pack_key = CONCAT(i.PRODUCT_ID, '|', TRIM(IFNULL(i.SKU, '')))
+  LEFT JOIN packs ps ON ps.pack_key = CONCAT('*|', NULLIF(TRIM(IFNULL(i.SKU, '')), ''))
   QUALIFY ROW_NUMBER() OVER (PARTITION BY i.LINE_ITEM_ID ORDER BY i.ORDER_TIMESTAMP DESC) = 1
 ),
 per_order AS (
@@ -46,7 +72,7 @@ per_order AS (
     v.order_id,
     v.order_date,
     v.total_price,
-    IFNULL(SUM(IF(l.product_type NOT IN UNNEST(@exclude_product_types), l.quantity, 0)), 0) AS kept_qty,
+    IFNULL(SUM(IF(l.product_type NOT IN UNNEST(@exclude_product_types), GREATEST(l.products, 0), 0)), 0) AS kept_qty,
     IFNULL(SUM(IF(l.product_type NOT IN UNNEST(@exclude_product_types), l.revenue, 0)), 0) AS kept_sales
   FROM valid_orders v
   LEFT JOIN lines l ON l.order_id = v.order_id

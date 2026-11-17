@@ -116,3 +116,43 @@ def row_label(v: dict, multi: bool, base_size: str | None) -> str:
     if v.get("how") == "ambiguous":
         return "Variant not on the order line"
     return v.get("option") or v.get("size") or "Single variant"
+
+
+
+def pack_sizes(catalog: dict | None) -> dict[str, int]:
+    """Packs bigger than 1, for the basket-size query, only where the catalog
+    is unambiguous:
+      "<product id>|<sku>"  every variant of that listing with this SKU has
+                            the same pack;
+      "<product id>|"       a SKU-less line on that listing: its SKU-less
+                            variants share one pack, or it has none and is
+                            sold as a pack of 1 and a pack of 2 (the
+                            Products tab's rule: a SKU-less line there is
+                            the pack of 2);
+      "*|<sku>"             every variant with this SKU, on any listing, has
+                            the same pack (the barcode of a single is reused
+                            on some "x 2" listings, so this is checked).
+    Anything else falls back to the SKU / product-name rules in
+    sql/order_slabs.sql, then 1."""
+    pack = lambda sku, title: max(parse(title).get("pack") or 1, _sku_pack(sku) or 1)  # noqa: E731
+    out: dict[str, int] = {}
+    by_sku: dict[str, set] = {}
+    for pid, rows in ((catalog or {}).get("variants_by_product") or {}).items():
+        per: dict[str, set] = {}
+        for sku, title in rows:
+            per.setdefault(sku or "", set()).add(pack(sku, title))
+            if sku:
+                by_sku.setdefault(sku, set()).add(pack(sku, title))
+        for sku, ps in per.items():
+            if sku and len(ps) == 1 and next(iter(ps)) > 1:
+                out[f"{pid}|{sku}"] = next(iter(ps))
+        blank = per.get("")
+        if blank:
+            if len(blank) == 1 and next(iter(blank)) > 1:
+                out[f"{pid}|"] = next(iter(blank))
+        elif {x for ps in per.values() for x in ps} == {1, 2}:
+            out[f"{pid}|"] = 2
+    for sku, ps in by_sku.items():
+        if len(ps) == 1 and next(iter(ps)) > 1:
+            out[f"*|{sku}"] = next(iter(ps))
+    return out

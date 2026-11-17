@@ -14,7 +14,7 @@ const ASK_SUGG = {
   overview: ["How are these dates tracking against the comparison?", "What is driving the change in GMV: traffic, conversion or AOV?", "How much did we spend for every rupee of revenue?"],
   funnel: ["Which day in this range was the best, and why?", "Show orders and CVR day by day for the last 7 days", "Which days had data missing?"],
   marketing: ["Which Meta campaigns had the best ROAS on these dates?", "Split Meta spend by funnel stage and product", "How did Google Non-brand PMax do by product?"],
-  products: ["Which products grew the most against the comparison?", "How did the basket mix (1, 2, 3+ items) change?", "Top 10 products by revenue on these dates"],
+  products: ["Which products grew the most against the comparison?", "How did the basket mix (1, 2, 3+ products) change?", "Top 10 products by revenue on these dates"],
   live: ["How is today tracking against a typical day?", "Is today's spend on pace with yesterday?", "What is today's conversion rate so far?"],
   region: ["Which states grew the most against the comparison?", "What sells best in Bengaluru compared with the rest of India?", "Which cities have the highest AOV with at least 20 orders?"],
   retention: ["Summarise new vs repeat orders for these dates", "How did repeat orders change against the comparison?", "What share of orders came from new customers?"],
