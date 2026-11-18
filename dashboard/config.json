@@ -1609,7 +1609,8 @@
       "ai_source_regex": "chatgpt|openai|perplexity|gemini|copilot|claude|deepseek|grok"
     },
     "keyword_planner": {"geo": "geoTargetConstants/2356", "language": "languageConstants/1000", "network": "GOOGLE_SEARCH", "refresh_days": 7,
-                        "_about": "India, English, Google Search: Keyword Planner's defaults for India. Needs Basic API access on the Cloud project."},
+                        "client_id_secret": "keyword-planner-client-id", "client_secret_secret": "keyword-planner-client-secret", "refresh_token_secret": "keyword-planner-refresh-token",
+                        "_about": "India, English, Google Search: Keyword Planner's defaults for India. Needs Basic API access on the Cloud project that owns the OAuth client. The keyword-planner-* secrets (an OAuth client in a separate project with Basic access) are used when all three are set; otherwise the dashboard's own Google Ads credentials. docs/seo.md has the steps."},
     "shopify": {"history_days": 120},
     "ai_platforms": [
       {"name": "ChatGPT",    "utm_sources": ["chatgpt.com", "chatgpt"],   "referrer_names": ["chatgpt", "openai"], "ga4_source_regex": "chatgpt|openai"},

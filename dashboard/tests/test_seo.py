@@ -224,3 +224,14 @@ def test_without_an_api_key_lab_tests_still_run(tmp_path):
     assert page["sources"]["crux"]["status"] == "error" and "no API key" in page["sources"]["crux"]["error"]
     assert page["sources"]["psi"]["status"] == "ok" and "without an API key" in page["sources"]["psi"]["detail"]
     assert keys and set(keys) == {None}
+
+
+def test_keyword_planner_prefers_its_own_project_credentials(tmp_path, monkeypatch):
+    got = {}
+    fake = Fake()
+    fake.keyword_history = lambda gcfg, creds, *a: got.update(creds) or []
+    job.pull_keywords(config(), src=fake)
+    assert got["client_id"] == "made-up-keyword-planner-client-id"
+    monkeypatch.setattr(secrets, "get_secret", lambda n: None if n.startswith("keyword-planner") else f"made-up-{n}")
+    job.pull_keywords(config(), src=fake)
+    assert got["client_id"] == "made-up-google-ads-client-id"  # falls back to the dashboard's own
