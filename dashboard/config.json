@@ -938,6 +938,7 @@
     {"id": "retention", "label": "Retention", "phase": 1, "enabled": true},
     {"id": "cro",       "label": "CRO",       "phase": 1, "enabled": true},
     {"id": "awareness", "label": "Awareness", "phase": 1, "enabled": true},
+    {"id": "seo",       "label": "SEO / AEO", "phase": 1, "enabled": true},
     {"id": "region",    "label": "Region",    "phase": 1, "enabled": true},
     {"id": "health",    "label": "Data health", "phase": 1, "enabled": true},
     {"id": "d1",        "label": "D-1 Report", "phase": 1, "enabled": true, "report": true},
@@ -1563,6 +1564,82 @@
     "min_segment_sessions": 300,
     "recon_warn": 0.10,
     "backlog": []
+  },
+
+  "seo": {
+    "_about": "SEO / AEO / GEO tab, built by python -m app.seo.job (daily 08:20 IST). Every source is read only and has its own switch in sources (approved to run). Results go to the dashboard bucket only (pages/seo.json, cache/seo/); nothing is written to BigQuery or to any source. docs/seo.md explains each number.",
+    "sources": {"gsc": true, "ga4": true, "crux": true, "psi": true, "keyword_planner": true, "shopify": true},
+    "domain": "worldofasaya.com",
+    "api_key_secret": "google-api-key",
+    "brands": [
+      {"name": "Asaya", "own": true, "domain": "worldofasaya.com", "keywords": ["asaya"], "in_share": true},
+      {"name": "Dot & Key", "domain": "dotandkey.com", "keywords": ["dot and key"], "in_share": true},
+      {"name": "Pilgrim", "domain": "discoverpilgrim.com", "keywords": ["pilgrim"], "in_share": true},
+      {"name": "Minimalist", "domain": "beminimalist.co", "keywords": ["minimalist"], "in_share": true},
+      {"name": "Wishcare", "domain": "wishcare.co", "keywords": ["wishcare"], "in_share": true},
+      {"name": "Dyou", "domain": "dyou.co", "keywords": ["dyou"], "in_share": true},
+      {"name": "The Deconstruct", "domain": "thedeconstruct.in", "keywords": ["deconstruct"], "in_share": true},
+      {"name": "Clayco", "domain": "clayco.in", "keywords": ["clayco"], "in_share": true},
+      {"name": "Hyphen", "domain": "letshyphen.com", "keywords": ["hyphen"], "in_share": true},
+      {"name": "Conscious Chemist", "domain": "consciouschemist.com", "keywords": ["conscious chemist"], "in_share": true},
+      {"name": "Chemist at Play", "domain": "innovist.com", "keywords": ["chemist at play"], "in_share": true},
+      {"name": "Be Bodywise", "domain": "bebodywise.com", "keywords": ["bodywise"], "in_share": true},
+      {"name": "Plum", "domain": "plumgoodness.com", "keywords": ["plum goodness"], "in_share": false},
+      {"name": "The Derma Co", "domain": "thedermaco.com", "keywords": ["the derma co"], "in_share": false},
+      {"name": "Aqualogica", "domain": "aqualogica.in", "keywords": ["aqualogica"], "in_share": false},
+      {"name": "Dr. Sheth's", "domain": "drsheths.com", "keywords": ["dr sheths"], "in_share": false}
+    ],
+    "_brands": "in_share: counted in share of search (the 12 brands of the team's Keyword Planner sheet). Chemist at Play's site is innovist.com, so its speed numbers are Innovist's.",
+    "category_keywords": ["underarm whitening", "dark underarms", "underarm spray", "underarm roll on", "dark inner thighs", "inner thigh darkness",
+                          "pigmentation serum", "hyperpigmentation", "dark spots", "dark spot serum", "dark spot removal cream", "melasma", "melasma cream",
+                          "tinted sunscreen", "sunscreen for pigmentation", "sunscreen spray", "dark knees", "dark neck", "body pigmentation",
+                          "acne marks", "tranexamic acid serum", "alpha arbutin serum"],
+    "gsc": {
+      "property": null,
+      "_property": "null: the domain property for seo.domain if the service account can read it, else the https URL-prefix one.",
+      "brand_regex": "asaya|aasaya|asya|world ?of ?asaya|melame|fade forward|super fade|day maker|rise renewed|glow forward|hint of tint|even evermore|sheerscreen",
+      "lag_days": 3, "history_days": 480, "rows": 5000, "keep_queries": 600, "keep_pages": 400
+    },
+    "ga4": {
+      "property": null,
+      "_property": "null: the only GA4 property the service account can see (or the one whose name contains property_hint).",
+      "property_hint": "asaya",
+      "history_days": 120,
+      "ai_source_regex": "chatgpt|openai|perplexity|gemini|copilot|claude|deepseek|grok"
+    },
+    "keyword_planner": {"geo": "geoTargetConstants/2356", "language": "languageConstants/1000", "network": "GOOGLE_SEARCH", "refresh_days": 7,
+                        "_about": "India, English, Google Search: Keyword Planner's defaults for India. Needs Basic API access on the Cloud project."},
+    "shopify": {"history_days": 120},
+    "ai_platforms": [
+      {"name": "ChatGPT",    "utm_sources": ["chatgpt.com", "chatgpt"],   "referrer_names": ["chatgpt", "openai"], "ga4_source_regex": "chatgpt|openai"},
+      {"name": "Perplexity", "utm_sources": ["perplexity", "perplexity.ai"], "referrer_names": ["perplexity"],     "ga4_source_regex": "perplexity"},
+      {"name": "Gemini",     "utm_sources": ["gemini", "gemini.google.com"], "referrer_names": ["gemini"],         "ga4_source_regex": "gemini"},
+      {"name": "Copilot",    "utm_sources": ["copilot.com", "copilot"],   "referrer_names": ["copilot"],           "ga4_source_regex": "copilot"},
+      {"name": "Claude",     "utm_sources": ["claude.ai", "claude"],      "referrer_names": ["claude"],            "ga4_source_regex": "claude"},
+      {"name": "DeepSeek",   "utm_sources": [],                           "referrer_names": ["deepseek"],          "ga4_source_regex": "deepseek"},
+      {"name": "Grok",       "utm_sources": [],                           "referrer_names": ["grok"],              "ga4_source_regex": "grok"}
+    ],
+    "order_channels": ["AI Assistants", "Organic Search"],
+    "page_types": [["Home", "^/$"], ["Product", "^/products/"], ["Collection", "^/collections/"], ["Blog post", "^/blogs/[^/]+/.+"],
+                   ["Blog", "^/blogs/"], ["Page", "^/pages/"]],
+    "speed": {
+      "pages": [
+        {"name": "Home", "path": "/"},
+        {"name": "Underarm Mist", "path": "/products/underarm-spray"},
+        {"name": "Inner Thigh Roll-On", "path": "/products/fade-forward-inner-thigh-and-bum-roll-on"},
+        {"name": "Tinted Sunscreen", "path": "/products/tinted-sunscreen"},
+        {"name": "Spot Serum", "path": "/products/advanced-spot-targeting-serum-india"},
+        {"name": "Offers", "path": "/collections/offers"},
+        {"name": "Hyperpigmentation collection", "path": "/collections/hyperpigmentation"},
+        {"name": "Blog", "path": "/blogs/hyperpigmentation"}
+      ],
+      "_pages": "The pages most visits land on (Shopify landing pages, last 30 days), one collection and the blog.",
+      "thresholds": {"lcp": [2500, 4000], "inp": [200, 500], "cls": [0.1, 0.25], "fcp": [1800, 3000], "ttfb": [800, 1800]},
+      "_thresholds": "Google's good / poor limits at the 75th percentile (ms; CLS has no unit).",
+      "history_weeks": 40,
+      "psi_history_days": 120
+    },
+    "alerts": {"clicks_drop": 0.20, "speed_worse": 0.15, "share_drop_pp": 0.02}
   },
 
   "awareness": {
