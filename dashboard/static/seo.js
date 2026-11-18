@@ -35,7 +35,7 @@ td .up { color: var(--good); } td .down { color: var(--bad); }
 
 const SEO = { sub: "overview", q: "top", qBrand: "all", pType: "all", ff: "phone", strat: "mobile", dm: "abs" };
 const SEO_SUBS = [["overview", "Overview"], ["demand", "Search demand"], ["organic", "Organic search"], ["ai", "AI assistants"], ["speed", "Website speed"], ["content", "Content"]];
-const SEO_SRC = { gsc: "Search Console", ga4: "GA4", crux: "Chrome UX Report", psi: "PageSpeed Insights", keyword_planner: "Keyword Planner", shopify: "Shopify" };
+const SEO_SRC = { gsc: "Search Console", ga4: "GA4", crux: "Chrome UX Report", psi: "PageSpeed Insights", keyword_planner: "Keyword Planner", dataforseo: "DataForSEO", shopify: "Shopify" };
 const SEO_COLORS = ["--series-1", "--series-2", "#7a5195", "#2a9d8f", "#bc5090", "#8c8c8c", "#c99a2e"];
 const seoCol = (i) => { const c = SEO_COLORS[i % SEO_COLORS.length]; return c.startsWith("--") ? css(c) : c; };
 const seoN = (v) => (v == null || !isFinite(v) ? "—" : inGroup.format(Math.round(v)));
@@ -135,7 +135,7 @@ function seoOverview(P) {
     : '<p class="sub">Nothing flagged. The rules: branded or non-branded clicks down 20% or more (28 days against the 28 before); mobile failing Core Web Vitals; mobile LCP or INP 15% worse than four weeks earlier; share of search down 2 pp month on month.</p>';
   const shareCard = share.length ? seoCard("Share of search", seoPct(share[share.length - 1], 1), `${share.length > 1 ? `<span class="kpi-vs">${((share[share.length - 1] - share[share.length - 2]) * 100).toFixed(1)} pp MoM</span>` : ""}`, "Asaya's Google searches as a share of the 12 brands in the team's Keyword Planner sheet.") : "";
   const tiles = [
-    ["demand", "Search demand", P.demand ? "Monthly Google searches for Asaya and the competitors, share of search, category keywords" : "Keyword Planner needs Basic API access: see the section for the step"],
+    ["demand", "Search demand", P.demand ? "Monthly Google searches for Asaya and the competitors, share of search, category keywords" : "Not connected yet: see the section"],
     ["organic", "Organic search", "Search Console clicks and impressions, branded vs non-branded, queries and pages that moved, and what it brings in"],
     ["ai", "AI assistants", "Visits and orders from ChatGPT, Perplexity, Gemini, Copilot and Claude, and where they land"],
     ["speed", "Website speed", "Real-user LCP, INP, CLS, FCP and TTFB against competitors, lab tests of the key pages, what slows them"],
@@ -158,7 +158,7 @@ function seoDemand(P) {
   })() : null;
   const gscSec = gsc && gsc.length ? rgSec("Branded searches on Google (Search Console)", "impressions of results for searches with Asaya or a product name, by month: our own demand, available while Keyword Planner is not",
     `<div class="chart-box" style="height:260px"><canvas id="c-seo-brandimp" aria-label="Branded impressions per month"></canvas></div>${table([{ label: "Month", text: true, render: (r) => esc(r.month) + (r.days < 28 ? ` <span class="sub">(${r.days} days)</span>` : "") }, { label: "Branded impressions", render: (r) => seoN(r.impr) }, { label: "Branded clicks", render: (r) => seoN(r.clicks) }], gsc.slice().reverse().slice(0, 16), { full: true })}`, { comp: "seo-brandimp" }) : "";
-  if (!D) return seoEmpty(P, "keyword_planner", "Monthly searches for Asaya and the competitors (Keyword Planner)") + gscSec;
+  if (!D) return seoEmpty(P, ((P.sources || {}).dataforseo || {}).status && P.sources.dataforseo.status !== "off" ? "dataforseo" : "keyword_planner", "Monthly searches for Asaya and the competitors (Keyword Planner)") + gscSec;
   const mo = D.months || [];
   const lbl = (k) => new Date(k + "-01T00:00:00").toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
   const brands = D.brands.slice().sort((a, b) => (b.avg || 0) - (a.avg || 0));

@@ -238,6 +238,36 @@ def keyword_history(gcfg: dict, creds: dict, keywords: list[str], geo: str, lang
     return out
 
 
+DATAFORSEO_API = "https://api.dataforseo.com/v3/keywords_data/google_ads/search_volume/live"
+
+
+def dataforseo_volume(login: str, password: str, keywords: list[str], location_code: int, language_code: str | None) -> list[dict]:
+    """Google Ads (Keyword Planner) monthly searches through DataForSEO's
+    Keywords Data API, in Keyword Planner's own response shape so the same
+    page builder reads it. A paid lookup (per task of up to 1,000 keywords);
+    only the keywords are sent."""
+    from .model import MONTHS
+
+    out: list[dict] = []
+    for i in range(0, len(keywords), 1000):
+        task = {"keywords": keywords[i:i + 1000], "location_code": location_code}
+        if language_code:
+            task["language_code"] = language_code
+        resp = requests.post(DATAFORSEO_API, auth=(login, password), json=[task], timeout=180)
+        body = _json(resp, "DataForSEO")
+        if body.get("status_code") not in (None, 20000):
+            raise SourceError(f"DataForSEO: {body.get('status_code')} {body.get('status_message')}")
+        for t in body.get("tasks") or []:
+            if t.get("status_code") != 20000:
+                raise SourceError(f"DataForSEO: {t.get('status_code')} {t.get('status_message')}")
+            for r in t.get("result") or []:
+                out.append({"text": r.get("keyword"), "closeVariants": [],
+                            "keywordMetrics": {"avgMonthlySearches": r.get("search_volume") or 0, "competition": r.get("competition"),
+                                               "monthlySearchVolumes": [{"year": m["year"], "month": MONTHS[int(m["month"]) - 1], "monthlySearches": m.get("search_volume") or 0}
+                                                                        for m in r.get("monthly_searches") or [] if m.get("month")]}})
+    return out
+
+
 # ---------------------------------------------------------------- Shopify
 
 
