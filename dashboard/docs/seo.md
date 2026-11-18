@@ -11,7 +11,6 @@
 | Chrome UX Report (CrUX API, CrUX History API) | Real-user p75 LCP, INP, CLS, FCP, TTFB for worldofasaya.com and every competitor, 40 weeks of history, key pages | API key `google-api-key` in Secret Manager |
 | PageSpeed Insights | Lab tests (Lighthouse) of the key pages, mobile and desktop, once a day: score, lab metrics, fixes, third-party scripts | Same key |
 | Google Ads Keyword Planner (`GenerateKeywordHistoricalMetrics`) | Monthly searches for Asaya, competitors and category keywords; share of search | Basic API access on the Cloud project. A lookup: no keyword plan is created. Refreshed weekly |
-| DataForSEO (Keywords Data API, Google Ads search volume, live) | The same Keyword Planner monthly searches, without Basic Google Ads API access. Only the keyword list is sent. Paid per task of up to 1,000 keywords; one task a week | `dataforseo-login`, `dataforseo-password` in Secret Manager; switch `seo.sources.dataforseo` on (and `keyword_planner` off) |
 | Shopify (ShopifyQL sessions, blog articles) | Search-engine and AI-assistant visits by day; AI landing pages; blog posts per month | The dashboard's existing Shopify app (articles need `read_content`) |
 | The dashboard's own `pages/channel_days.json` | Orders from the Organic Search and AI Assistants channels (GoKwik checkout UTM) | none |
 
@@ -29,9 +28,7 @@ gcloud run jobs execute asaya-d2c-seo --region asia-south1
 
 1. `./dashboard/deploy.sh` (enables the APIs and creates the job).
 2. `./dashboard/tools/make_api_key.sh` (creates the PageSpeed / CrUX key, limited to those two APIs, straight into Secret Manager; the key is never printed).
-3. Monthly searches, either way:
-   - **DataForSEO** (no change to any Google project): create an account at dataforseo.com, add a prepaid balance, and save the API login and password (DataForSEO dashboard › API Access) as the secrets `dataforseo-login` and `dataforseo-password`. Then set `seo.sources.dataforseo` to true and `seo.sources.keyword_planner` to false.
-   - **Keyword Planner direct** needs **Basic** Google Ads API access (Explorer cannot call it). Basic needs brand verification, an External / In production sign-in screen and authorised domains you own, which the dashboard's own project cannot take without touching its sign-in. So Keyword Planner gets **its own Cloud project**:
+3. Keyword Planner needs **Basic** Google Ads API access (Explorer cannot call it). Basic needs brand verification, an External / In production sign-in screen and authorised domains you own, which the dashboard's own project cannot take without touching its sign-in. So Keyword Planner gets **its own Cloud project**:
    1. Create a project (for example `asaya-keyword-planner`) and enable the Google Ads API in it.
    2. Google Auth Platform: user type External, publishing status In production. Branding: app name, support email, home page `https://worldofasaya.com`, the privacy policy page, authorised domain `worldofasaya.com` only, no logo. Submit for brand verification (the person submitting must be an Owner of worldofasaya.com in Search Console).
    3. Once verified, apply for Basic on that project's Google Ads API page.

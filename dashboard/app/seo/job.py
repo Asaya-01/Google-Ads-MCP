@@ -220,17 +220,6 @@ def _keywords(cfg: dict) -> list[str]:
     return uniq
 
 
-def pull_dataforseo(cfg: dict, src=S) -> dict:
-    from .. import secrets
-
-    d = cfg["dataforseo"]
-    login, password = secrets.get_secret(d["login_secret"]), secrets.get_secret(d["password_secret"])
-    if not (login and password):
-        raise S.SourceError(f"DataForSEO API login / password are not in Secret Manager ({d['login_secret']}, {d['password_secret']})")
-    res = src.dataforseo_volume(login, password, _keywords(cfg), d["location_code"], d.get("language_code"))
-    return model.keyword_table(res, cfg["brands"], cfg.get("category_keywords") or [])
-
-
 def pull_shopify(cfg: dict, today: dt.date, src=S) -> dict:
     sh = cfg["shopify"]
     shop = src.shopify_client()
@@ -306,13 +295,8 @@ def run(store, now: dt.datetime, src=S, api_key_fn=None) -> dict:
     psi = _source(store, "psi", cfg, lambda: pull_psi(cfg, key, store, today, src), status, now=now)
     if not key and status.get("psi", {}).get("status") == "ok":
         status["psi"]["detail"] = "run without an API key (shared quota): run tools/make_api_key.sh for a dedicated one"
-    # monthly searches: DataForSEO (Keyword Planner's numbers, no Basic access
-    # needed) when it is on, else Keyword Planner straight from Google Ads
-    dfs = _source(store, "dataforseo", cfg, lambda: pull_dataforseo(cfg, src), status,
-                  max_age_days=cfg["dataforseo"].get("refresh_days", 7), now=now)
-    kp = _source(store, "keyword_planner", cfg, lambda: pull_keywords(cfg, src), status,
-                 max_age_days=cfg["keyword_planner"].get("refresh_days", 7), now=now)
-    demand = dfs or kp
+    demand = _source(store, "keyword_planner", cfg, lambda: pull_keywords(cfg, src), status,
+                     max_age_days=cfg["keyword_planner"].get("refresh_days", 7), now=now)
     shop = _source(store, "shopify", cfg, lambda: pull_shopify(cfg, today, src), status, now=now)
     orders = model.channel_orders(store.get_json("pages/channel_days.json"), cfg.get("order_channels") or [])
 
