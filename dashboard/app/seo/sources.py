@@ -178,7 +178,9 @@ def crux(key: str, body: dict, history: bool = False) -> dict | None:
 
 
 def psi(key: str, url: str, strategy: str) -> dict:
-    params = {"url": url, "strategy": strategy, "category": "performance", "key": key}
+    params = {"url": url, "strategy": strategy, "category": "performance"}
+    if key:
+        params["key"] = key
     last = None
     for attempt in range(3):
         try:

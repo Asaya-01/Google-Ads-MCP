@@ -211,3 +211,16 @@ def test_tab_is_served(tmp_path, monkeypatch):
         assert r.status_code == 200 and r.json()["title"] == "SEO / AEO / GEO"
     finally:
         main.app.dependency_overrides.clear()
+
+
+def test_without_an_api_key_lab_tests_still_run(tmp_path):
+    store = LocalStore(str(tmp_path))
+    fake = Fake()
+    keys = []
+    orig = fake.psi
+    fake.psi = lambda key, url, strategy: keys.append(key) or orig(key, url, strategy)
+    job.run(store, NOW, src=fake, api_key_fn=lambda name: None)
+    page = store.get_json("pages/seo.json")
+    assert page["sources"]["crux"]["status"] == "error" and "no API key" in page["sources"]["crux"]["error"]
+    assert page["sources"]["psi"]["status"] == "ok" and "without an API key" in page["sources"]["psi"]["detail"]
+    assert keys and set(keys) == {None}
