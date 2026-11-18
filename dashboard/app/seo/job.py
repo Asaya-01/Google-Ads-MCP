@@ -186,7 +186,13 @@ def pull_keywords(cfg: dict, src=S) -> dict:
 
     k = cfg["keyword_planner"]
     gcfg = settings.config()["google_ads"]
-    creds = {n: secrets.get_secret(gcfg[f"{n}_secret"]) for n in ("client_id", "client_secret", "refresh_token")}
+    names = ("client_id", "client_secret", "refresh_token")
+    # Keyword Planner can use its own OAuth client from a separate Cloud
+    # project that holds Basic access, so the dashboard's own project (its
+    # sign-in screen and the daily Google Ads pull) never has to change.
+    creds = {n: secrets.get_secret(k[f"{n}_secret"]) for n in names} if k.get("client_id_secret") else {}
+    if not all(creds.values()):
+        creds = {n: secrets.get_secret(gcfg[f"{n}_secret"]) for n in names}
     if not all(creds.values()):
         raise S.SourceError("Google Ads API credentials are not in Secret Manager")
     words = []

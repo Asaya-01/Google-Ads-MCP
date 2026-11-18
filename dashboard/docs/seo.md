@@ -28,7 +28,14 @@ gcloud run jobs execute asaya-d2c-seo --region asia-south1
 
 1. `./dashboard/deploy.sh` (enables the APIs and creates the job).
 2. `./dashboard/tools/make_api_key.sh` (creates the PageSpeed / CrUX key, limited to those two APIs, straight into Secret Manager; the key is never printed).
-3. Keyword Planner: the Cloud project needs **Basic** Google Ads API access (Explorer access cannot call Keyword Planner). Apply on the Google Ads API page in Cloud Console. Until then the Search demand section explains this and shows branded impressions from Search Console instead.
+3. Keyword Planner needs **Basic** Google Ads API access (Explorer cannot call it). Basic needs brand verification, an External / In production sign-in screen and authorised domains you own, which the dashboard's own project cannot take without touching its sign-in. So Keyword Planner gets **its own Cloud project**:
+   1. Create a project (for example `asaya-keyword-planner`) and enable the Google Ads API in it.
+   2. Google Auth Platform: user type External, publishing status In production. Branding: app name, support email, home page `https://worldofasaya.com`, the privacy policy page, authorised domain `worldofasaya.com` only, no logo. Submit for brand verification (the person submitting must be an Owner of worldofasaya.com in Search Console).
+   3. Once verified, apply for Basic on that project's Google Ads API page.
+   4. Create an OAuth client (Web application, redirect URI `https://developers.google.com/oauthplayground`) and mint a refresh token in the OAuth Playground (own credentials, scope `https://www.googleapis.com/auth/adwords`), signed in as someone with read access to the Asaya Google Ads account.
+   5. Save the three values as secrets in the **dashboard's** project: `keyword-planner-client-id`, `keyword-planner-client-secret`, `keyword-planner-refresh-token`.
+
+   The job uses those three when they are all set, otherwise the dashboard's own Google Ads credentials. Until then the Search demand section explains this and shows branded impressions from Search Console instead.
 
 ## Settings (`config.json` → `seo`)
 
