@@ -46,6 +46,10 @@ gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregi
   secretmanager.googleapis.com firestore.googleapis.com cloudscheduler.googleapis.com \
   bigquery.googleapis.com storage.googleapis.com monitoring.googleapis.com logging.googleapis.com \
   sheets.googleapis.com iamcredentials.googleapis.com speech.googleapis.com "${P[@]}"
+# SEO tab (read only): Search Console, GA4 (reports and the property list),
+# PageSpeed Insights and the Chrome UX Report
+gcloud services enable searchconsole.googleapis.com analyticsdata.googleapis.com analyticsadmin.googleapis.com \
+  pagespeedonline.googleapis.com chromeuxreport.googleapis.com apikeys.googleapis.com "${P[@]}"
 
 echo "==> [2/9] Service account and roles"
 gcloud iam service-accounts describe "$SA" "${P[@]}" >/dev/null 2>&1 \
@@ -85,6 +89,9 @@ ensure_secret() {
 for s in shopify-client-id shopify-client-secret meta-system-user-token anthropic-api-key google-ads-client-id google-ads-client-secret google-ads-refresh-token; do
   ensure_secret "$s"
 done
+# PageSpeed Insights / Chrome UX Report key for the SEO tab (filled by the
+# command in docs/seo.md, which never prints the key)
+ensure_secret google-api-key
 ensure_secret dashboard-session-key
 if ! gcloud secrets versions describe latest --secret dashboard-session-key "${P[@]}" >/dev/null 2>&1; then
   python3 -c 'import secrets; print(secrets.token_hex(32), end="")' \
@@ -222,6 +229,24 @@ else
   gcloud scheduler jobs create http "$AW_JOB" "${AW_SCHED[@]}" "${P[@]}"
 fi
 
+# SEO / AEO / GEO tab: Search Console, GA4, Chrome UX Report, PageSpeed
+# Insights, Keyword Planner and Shopify sessions, all read only, every
+# morning at 08:20 IST. Writes only pages/seo.json and cache/seo/ in the bucket.
+SEO_JOB="${SEO_JOB:-asaya-d2c-seo}"
+gcloud run jobs deploy "$SEO_JOB" --image "$IMAGE" --region "$REGION" --service-account "$SA" \
+  --set-env-vars "^@@^$ENV_VARS" --command python --args=-m,app.seo.job \
+  --memory 1Gi --task-timeout 2400 --max-retries 0 "${P[@]}"
+gcloud run jobs add-iam-policy-binding "$SEO_JOB" --region "$REGION" --member "serviceAccount:$SA" \
+  --role roles/run.invoker "${P[@]}" >/dev/null
+SEO_URI="https://run.googleapis.com/v2/projects/${GOOGLE_PROJECT_ID}/locations/${REGION}/jobs/${SEO_JOB}:run"
+SEO_SCHED=(--location "$REGION" --schedule "20 8 * * *" --time-zone "Asia/Kolkata" --uri "$SEO_URI"
+           --http-method POST --oauth-service-account-email "$SA")
+if gcloud scheduler jobs describe "$SEO_JOB" --location "$REGION" "${P[@]}" >/dev/null 2>&1; then
+  gcloud scheduler jobs update http "$SEO_JOB" "${SEO_SCHED[@]}" "${P[@]}"
+else
+  gcloud scheduler jobs create http "$SEO_JOB" "${SEO_SCHED[@]}" "${P[@]}"
+fi
+
 echo "==> [9/9] Alerts"
 gcloud logging metrics describe asaya_dashboard_alert "${P[@]}" >/dev/null 2>&1 \
   || gcloud logging metrics create asaya_dashboard_alert \
@@ -301,6 +326,9 @@ Next:
   2. Run the first refresh now instead of waiting for 07:00 IST:
        gcloud run jobs execute ${JOB} --region ${REGION} --project ${GOOGLE_PROJECT_ID}
 EOM
+if ! gcloud secrets versions describe latest --secret google-api-key "${P[@]}" >/dev/null 2>&1; then
+  echo "  *  The SEO tab's speed sections need the PageSpeed / Chrome UX key: run dashboard/tools/make_api_key.sh once."
+fi
 if (( ${#MISSING[@]} )); then
   echo "  3. These secrets are still empty (the dashboard shows those sources as unavailable until they are set):"
   for s in "${MISSING[@]}"; do

@@ -49,6 +49,7 @@ def app_fragment() -> str:
         ("/*__CRO__*/", "cro.js"),
         ("/*__PLUS__*/", "plus/plus.js"),
         ("/*__AWARENESS__*/", "awareness.js"),
+        ("/*__SEO__*/", "seo.js"),
         ("/*__ASK_CSS__*/", "ask.css"),
         ("/*__ASK__*/", "ask.js"),
     ):
