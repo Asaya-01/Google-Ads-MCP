@@ -32,7 +32,8 @@ def build(tmp_path, fake=None, store=None):
 
 def test_config_is_complete_and_switched_on():
     cfg = config()
-    assert set(cfg["sources"]) == {"gsc", "ga4", "crux", "psi", "keyword_planner", "shopify"}
+    assert set(cfg["sources"]) == {"gsc", "ga4", "crux", "psi", "keyword_planner", "dataforseo", "shopify"}
+    assert cfg["sources"]["dataforseo"] is False  # paid: off until approved
     assert sum(1 for b in cfg["brands"] if b.get("own")) == 1
     assert len([b for b in cfg["brands"] if b.get("in_share")]) == 12
     assert {t["id"] for t in settings.enabled_tabs()} >= {"seo"}
@@ -45,7 +46,7 @@ def test_full_build(tmp_path):
     page, log, store, fake = build(tmp_path)
     assert log["status"] == "ok", log
     assert page["title"] == "SEO / AEO / GEO" and page["as_of"] == "2026-11-17"
-    assert {k: v["status"] for k, v in page["sources"].items()} == {k: "ok" for k in config()["sources"]}
+    assert {k: v["status"] for k, v in page["sources"].items()} == {k: "ok" if on else "off" for k, on in config()["sources"].items()}
 
     g = page["gsc"]
     assert g["site"] == "sc-domain:worldofasaya.com" and g["end"] == "2026-11-15"
@@ -191,7 +192,7 @@ def test_read_only():
     assert "mutation" not in code
     assert re.findall(r"auth/[a-z.]+", code) == ["auth/webmasters.readonly", "auth/analytics.readonly"]
     posts = re.findall(r"(?:requests|sess)\.post\(([^,]+)", code)
-    assert all(re.search(r"url|f\"\{GA4_DATA\}", p) for p in posts), posts
+    assert all(re.search(r"url|f\"\{GA4_DATA\}|DATAFORSEO_API", p) for p in posts), posts
     for verb in (".delete(", ".put(", ".patch("):
         assert verb not in code
     assert "searchAnalytics/query" in code and ":runReport" in code and "generateKeywordHistoricalMetrics" in code
@@ -235,3 +236,39 @@ def test_keyword_planner_prefers_its_own_project_credentials(tmp_path, monkeypat
     monkeypatch.setattr(secrets, "get_secret", lambda n: None if n.startswith("keyword-planner") else f"made-up-{n}")
     job.pull_keywords(config(), src=fake)
     assert got["client_id"] == "made-up-google-ads-client-id"  # falls back to the dashboard's own
+
+
+def test_dataforseo_fills_search_demand_when_on(tmp_path, monkeypatch):
+    cfg = config()
+    cfg["sources"].update(dataforseo=True, keyword_planner=False)
+    monkeypatch.setattr(job, "config", lambda: cfg)
+    fake = Fake()
+    sent = {}
+
+    def volume(login, password, keywords, location, language):
+        sent.update(login=login, n=len(keywords), location=location, language=language)
+        return [{"text": k, "closeVariants": [], "keywordMetrics": {"avgMonthlySearches": 500, "competition": "LOW",
+                 "monthlySearchVolumes": [{"year": 2026, "month": "OCTOBER", "monthlySearches": 500}]}} for k in keywords]
+    fake.dataforseo_volume = volume
+    page, _, _, _ = build(tmp_path, fake=fake)
+    assert page["sources"]["dataforseo"]["status"] == "ok" and page["sources"]["keyword_planner"]["status"] == "off"
+    assert sent == {"login": "made-up-dataforseo-login", "n": len(job._keywords(cfg)), "location": 2356, "language": "en"}
+    asaya = next(b for b in page["demand"]["brands"] if b["own"])
+    assert page["demand"]["months"] == ["2026-10"] and asaya["monthly"] == [500]
+
+
+def test_dataforseo_response_is_read_into_keyword_planner_shape(monkeypatch):
+    class Resp:
+        status_code = 200
+        def json(self):
+            return {"status_code": 20000, "tasks": [{"status_code": 20000, "result": [
+                {"keyword": "asaya", "search_volume": 33100, "competition": "LOW",
+                 "monthly_searches": [{"year": 2026, "month": 9, "search_volume": 49500}, {"year": 2026, "month": 8, "search_volume": 40500}]}]}]}
+    calls = []
+    monkeypatch.setattr(S.requests, "post", lambda url, **kw: calls.append((url, kw)) or Resp())
+    out = S.dataforseo_volume("u", "p", ["asaya"], 2356, "en")
+    assert calls[0][0].endswith("/keywords_data/google_ads/search_volume/live") and calls[0][1]["json"] == [{"keywords": ["asaya"], "location_code": 2356, "language_code": "en"}]
+    m = out[0]["keywordMetrics"]
+    assert m["avgMonthlySearches"] == 33100 and {"year": 2026, "month": "SEPTEMBER", "monthlySearches": 49500} in m["monthlySearchVolumes"]
+    t = model.keyword_table(out, config()["brands"], [])
+    assert t["months"] == ["2026-08", "2026-09"]
