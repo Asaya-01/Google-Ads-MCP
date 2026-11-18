@@ -279,7 +279,11 @@ def run(store, now: dt.datetime, src=S, api_key_fn=None) -> dict:
     gsc = _source(store, "gsc", cfg, lambda: pull_gsc(cfg, today, src), status, now=now)
     ga4 = _source(store, "ga4", cfg, lambda: pull_ga4(cfg, today, src), status, now=now)
     crux = _source(store, "crux", cfg, need_key(lambda: pull_crux(cfg, key, src)), status, now=now)
-    psi = _source(store, "psi", cfg, need_key(lambda: pull_psi(cfg, key, store, today, src)), status, now=now)
+    # PageSpeed Insights also answers without a key (on a small shared quota),
+    # so the lab tests run while the key is not set up yet
+    psi = _source(store, "psi", cfg, lambda: pull_psi(cfg, key, store, today, src), status, now=now)
+    if not key and status.get("psi", {}).get("status") == "ok":
+        status["psi"]["detail"] = "run without an API key (shared quota): run tools/make_api_key.sh for a dedicated one"
     demand = _source(store, "keyword_planner", cfg, lambda: pull_keywords(cfg, src), status,
                      max_age_days=cfg["keyword_planner"].get("refresh_days", 7), now=now)
     shop = _source(store, "shopify", cfg, lambda: pull_shopify(cfg, today, src), status, now=now)
