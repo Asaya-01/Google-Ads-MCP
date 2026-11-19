@@ -3,7 +3,8 @@
   "exclude_always": [
     {
       "reason": "free gift or test line",
-      "pattern": "\\bfree\\b|^_|^test|pay remaining amount"
+      "pattern": "(?:^|[^a-z-])free\\b|^_|^test|pay remaining amount",
+      "_note": "free as its own word, not inside oil-free"
     }
   ],
   "exclude_unless_product": [
@@ -21,7 +22,8 @@
     {
       "code": "FFD",
       "name": "Fade & Fresh Duo",
-      "pattern": "fade & fresh duo"
+      "pattern": "fade & fresh duo|advanced spot targeting serum & even tone underarm mist",
+      "_note": "Shopify renamed the Spot Targeting Serum + Underarm Mist duo to Fade & Fresh duo (same listing)"
     },
     {
       "code": "GED",
@@ -59,6 +61,16 @@
       "pattern": "3-step spot diminishing"
     },
     {
+      "code": "A4S",
+      "name": "4-Step Advanced Anti-Pigmentation Set",
+      "pattern": "4-step advanced anti[- ]pigmentation"
+    },
+    {
+      "code": "AAP",
+      "name": "Advanced Anti-Pigmentation Set",
+      "pattern": "advanced anti[- ]pigmentation (set|kit)"
+    },
+    {
       "code": "APS",
       "name": "Anti Pigmentation Set",
       "pattern": "anti[- ]pigmentation (set|kit)"
@@ -72,11 +84,6 @@
       "code": "ESD",
       "name": "Even Skin Duo",
       "pattern": "even skin duo"
-    },
-    {
-      "code": "SUD",
-      "name": "Spot Targeting Serum + Underarm Mist Duo",
-      "pattern": "advanced spot targeting serum & even tone underarm mist"
     },
     {
       "code": "RDS",
@@ -96,11 +103,12 @@
     {
       "code": "UAS",
       "name": "Even Tone Underarm Mist",
-      "pattern": "underarm mist",
+      "pattern": "underarm mist|undermist",
       "subs": [
         "Fresh",
         "Sweet Vanilla",
         "Berry Crush",
+        "Aqua Rush",
         "Mixed"
       ],
       "default_sub": "Fresh"
@@ -159,6 +167,11 @@
       "code": "PEEL",
       "name": "Super Fade Regenerative Peel",
       "pattern": "regenerative peel"
+    },
+    {
+      "code": "GFR",
+      "name": "Glow Forward Radiance Serum",
+      "pattern": "glow forward"
     },
     {
       "code": "ETC",
@@ -313,7 +326,17 @@
     {
       "code": "LHC",
       "name": "Lush Hand Cream",
-      "pattern": "hand cream"
+      "pattern": "hand cream",
+      "subs": [
+        "Magnolia Bloom",
+        "Bed of Roses",
+        "Mandarin Tree",
+        "Peony Blush",
+        "Patchouli Vanilla",
+        "Orange Spice",
+        "Mixed"
+      ],
+      "default_sub": "Unspecified"
     },
     {
       "code": "SHM",
@@ -335,7 +358,7 @@
     "code": "OTH",
     "name": "Other products & seasonal sets"
   },
-  "pack_pattern": "pack ?of ?2|packof2|set of 2|\\bx ?2\\b|2 pack|bundle of 2",
+  "pack_pattern": "pack ?(?:of ?)?([2-9]|1[0-2])\\b|set of ([2-9]|1[0-2])\\b|(?:\\b|ml|g)x ?([2-9]|1[0-2])\\b|\\b([2-9]|1[0-2]) pack\\b|bundle of ([2-9]|1[0-2])\\b",
   "exclude_if_type_unknown": [
     {
       "reason": "mini or trial size",
@@ -357,5 +380,23 @@
       "name": "Other sets & bundles (not on the website now)",
       "pattern": "\\bset\\b|\\bduo\\b|\\bkit\\b|bundle|trio|routine|combo|\\bpack\\b"
     }
-  ]
+  ],
+  "_pack": "How many units a line holds, when the Shopify catalog cannot say (the catalog's variant titles decide first, the Basket size tab's rule): the first number this pattern captures in the title, variant title and SKU; else 1.",
+  "combo_hint": {
+    "_about": "Products inside a set whose listing is not in config basket.combo_products (old sets with no product id): read from its name. First match wins; anything else counts 1.",
+    "rules": [
+      [
+        "\\b([2-9])[- ]step\\b",
+        null
+      ],
+      [
+        "\\btrio\\b",
+        3
+      ],
+      [
+        "\\bduo\\b|\\btwin\\b|\\bpair\\b",
+        2
+      ]
+    ]
+  }
 }

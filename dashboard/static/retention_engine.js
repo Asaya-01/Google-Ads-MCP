@@ -51,6 +51,10 @@
     const SINGLES = {};
     for (const k in P.singles_s) SINGLES[+k] = P.singles_s[k];
     const SB = P.sbrand;
+    // products in each repeat customer's first order (a combo counts what is inside,
+    // a pack of N counts N); older censuses fall back to distinct products
+    const FBS = Array.isArray(P.fbs) && P.fbs.length === P.multi.length ? P.fbs : null;
+    const basketOf = (m, tl) => Math.min(Math.max(FBS ? FBS[m] : tl[0][1].length, 1), 3);
 
     const dayToDate = (d) => new Date(EPOCH.getTime() + d * 86400000);
     const iso = (dt) => dt.toISOString().slice(0, 10);
@@ -290,7 +294,7 @@
             }
           }
         }
-        const z = Math.min(tl[0][1].length, 3);
+        const z = basketOf(m, tl);
         if (f0 <= Math.min(b, NDAYS - 90)) {
           bs[z][0]++;
           for (let j = 1; j < tl.length; j++) {
@@ -397,7 +401,7 @@
         if ((!scoped && PREFLAG[m]) || f0 < a || f0 > b) continue;
         if (scoped && tl[0][1].indexOf(sku) < 0) continue; // acquired on this product
         t.cust++; t.first += tl[0][2];
-        const z = Math.min(tl[0][1].length, 3);
+        const z = basketOf(m, tl);
         size[z].n++; size[z].first += tl[0][2];
         if (f0 <= bE) {
           t.hzN++; t.hzFirst += tl[0][2];

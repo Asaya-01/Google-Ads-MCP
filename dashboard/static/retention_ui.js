@@ -327,7 +327,7 @@ function retBrand() {
     ${rBars(curve, (r) => r[1].toFixed(2) + "%")}
     ${rTable([{ t: "By day" }, { t: "Repeat rate", n: 1 }, { t: "Customers repeated", n: 1 }, { t: "Cohort size", n: 1 }], x.H.map((h) => `<tr><td>${h} days</td><td class="n">${x.cb[h] ? ((100 * x.ch[h]) / x.cb[h]).toFixed(2) + "%" : "—"}</td><td class="n">${rN(x.ch[h])}</td><td class="n">${rN(x.cb[h])}</td></tr>`), { csv: "brand-curve" })}
     <h4>First-order basket size against 90-day repeat</h4>
-    <p class="rsub">How many different products were in the very first order.</p>
+    <p class="rsub">How many products were in the very first order, counted like the Basket size tab: a combo counts each product inside it, a pack of 2 counts 2, two of the same item count 2; free gifts and merch do not count.</p>
     ${rTable([{ t: "First order contained" }, { t: "Customers", n: 1 }, { t: "Repeat in 90 days", n: 1 }], [1, 2, 3].map((z) => `<tr><td>${bl[z]}</td><td class="n">${rN(x.bs[z][0])}</td><td class="n">${x.bs[z][0] ? ((100 * x.bs[z][1]) / x.bs[z][0]).toFixed(2) + "%" : "—"}</td></tr>`), { csv: "brand-basket" })}
     ${rBox(sum + "<br><br>" + act)}`;
 }

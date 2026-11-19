@@ -25,7 +25,7 @@ class Line:
 
     code: str
     sub: str  # fragrance or shade; "—" when the product has none
-    pack: int  # 1 or 2
+    pack: int  # units in one line of it: 1, or the pack size (2, 6...)
 
 
 class Catalog:
@@ -46,6 +46,9 @@ class Catalog:
         ]
         self.other = spec["other"]
         self.pack_re = re.compile(spec["pack_pattern"])
+        self.combo_hints = [
+            (re.compile(rx), n) for rx, n in (spec.get("combo_hint") or {}).get("rules", [])
+        ]
         self.names = {p["code"]: p["name"] for p in self.products}
         self.names.update({g["code"]: g["name"] for g in self.groups})
         self.names[self.other["code"]] = self.other["name"]
@@ -63,6 +66,7 @@ class Catalog:
         product_type: str,
         exclude_types: list[str],
         variant_title: str = "",
+        pack: int | None = None,
     ) -> tuple[Line | None, str | None]:
         """(Line, None) for a counted line, (None, reason) for an excluded one.
 
@@ -87,7 +91,7 @@ class Catalog:
                     return None, reason
         for p in self.products:
             if p["_re"].search(nt):
-                return self._line(p, nt, sku, variant_title), None
+                return self._line(p, nt, sku, variant_title, pack), None
         for reason, rx in self.unless:
             if rx.search(nt):
                 return None, reason
@@ -95,13 +99,28 @@ class Catalog:
             return None, "product type: blank, not a named product"
         for g in self.groups:
             if g["_re"].search(nt):
-                return self._line(g, nt, sku, variant_title), None
+                return self._line(g, nt, sku, variant_title, pack), None
         return (
-            self._line({"code": self.other["code"]}, nt, sku, variant_title),
+            self._line({"code": self.other["code"]}, nt, sku, variant_title, pack),
             None,
         )
 
-    def _line(self, p: dict, nt: str, sku: str, variant_title: str) -> Line:
+    def combo_of(self, title: str) -> int | None:
+        """Products inside a set, read from its name ("duo" 2, "trio" 3,
+        "3-step" 3), for old sets the combo list does not have."""
+        nt = normalise(title)
+        for rx, n in self.combo_hints:
+            m = rx.search(nt)
+            if m:
+                return n or int(m.group(1))
+        return None
+
+    def pack_of(self, text: str) -> int:
+        """Units in one line, read from its title, variant title and SKU."""
+        m = self.pack_re.search(text)
+        return int(next(g for g in m.groups() if g)) if m else 1
+
+    def _line(self, p: dict, nt: str, sku: str, variant_title: str, pack: int | None = None) -> Line:
         text = " ".join(
             [
                 nt,
@@ -109,7 +128,9 @@ class Catalog:
                 (sku or "").lower().replace("_", " "),
             ]
         )
-        pack = 2 if self.pack_re.search(text) else 1
+        # the Shopify catalog's pack for this listing and SKU decides when it
+        # knows; otherwise the title, variant title and SKU
+        pack = pack if pack and pack > 1 else self.pack_of(text)
         subs = p.get("subs")
         if not subs:
             return Line(p["code"], "—", pack)
@@ -132,5 +153,5 @@ def label(sub: str, pack: int) -> str:
     return (
         base
         if pack == 1
-        else ("Pack of 2" if sub == "—" else f"{sub} · Pack of 2")
+        else (f"Pack of {pack}" if sub == "—" else f"{sub} · Pack of {pack}")
     )
