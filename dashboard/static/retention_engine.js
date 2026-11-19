@@ -56,6 +56,11 @@
     const FBS = Array.isArray(P.fbs) && P.fbs.length === P.multi.length ? P.fbs : null;
     const basketOf = (m, tl) => Math.min(Math.max(FBS ? FBS[m] : tl[0][1].length, 1), 3);
 
+    // the first day each variant was ever bought, to say why a variant has no
+    // buyers in a window (a new launch, after the cohort's last day)
+    const FIRST_V = new Array(NV).fill(Infinity);
+    for (const tl of MULTI_V) for (const [d, vv] of tl) for (const v of vv) if (d < FIRST_V[v]) FIRST_V[v] = d;
+    for (const k in SINGLES_V) for (const row of SINGLES_V[k]) if (row[0] < FIRST_V[+k]) FIRST_V[+k] = row[0];
     const dayToDate = (d) => new Date(EPOCH.getTime() + d * 86400000);
     const iso = (dt) => dt.toISOString().slice(0, 10);
     const dateToDay = (s) => Math.round((new Date(s + "T00:00:00Z") - EPOCH) / 86400000);
@@ -523,7 +528,7 @@
     }
 
     return {
-      P, EPOCH, NDAYS, SKUS, VARS, NS, NV, MILES,
+      P, EPOCH, NDAYS, SKUS, VARS, NS, NV, MILES, FIRST_V,
       compute, computeBrand, computeVariants, computeValue, computeMonthly, computeProductValue, LTV_H, acqEnd, median,
       dayToDate, iso, dateToDay,
     };

@@ -444,3 +444,24 @@ def test_basket_size_counts_products_like_the_basket_tab():
     old = census([line("9", "E", "2025-01-10", "Sun-Ready Twin Set", ptype="(no product match)") + ("", 1),
                   line("9b", "E", "2025-03-10", ASS) + ("p", 1)])
     assert old["fbs"] == [2]
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node is not installed")
+def test_a_new_variant_is_known_even_when_a_window_has_no_buyers_of_it(tmp_path):
+    """Aqua Rush launched late: a 90-day window cut before its launch has no
+    buyers of it, and the tab must still list it and say when it first sold."""
+    titles = {"8906161981580": "Aqua Rush / 100 ml", "8906161981023": "Fresh / 100 ml"}
+    rows = [line("1", "A", "2025-01-10", UAS, sku="8906161981023"),
+            line("2", "B", "2026-03-20", UAS, sku="8906161981580"),
+            line("3", "B", "2026-03-25", ASS)]
+    c = census(rows, variant_titles=titles)
+    f = tmp_path / "census.json"
+    f.write_text(json.dumps(c))
+    script = (
+        "const P=JSON.parse(require('fs').readFileSync(process.argv[1]));"
+        f"const E=require('{ENGINE}')(P);"
+        "console.log(JSON.stringify(E.VARS.map((v,i)=>[v.label,E.FIRST_V[i]])));"
+    )
+    out = dict(json.loads(subprocess.run(["node", "-e", script, str(f)], capture_output=True, text=True, check=True).stdout))
+    epoch = dt.date.fromisoformat(c["epoch"])
+    assert out["Aqua Rush"] == (dt.date(2026, 3, 20) - epoch).days and out["Fresh"] == 0
