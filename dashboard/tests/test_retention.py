@@ -382,3 +382,65 @@ def test_the_90_day_figure_is_90_days_whatever_horizon_is_picked(tmp_path):
     assert out["a"] == want and out["b"] == want
     # with a 90-day horizon the two figures are the same thing
     assert out["c"][0] == out["c"][2] and out["c"][1] == pytest.approx(out["c"][3])
+
+
+# ------------------------------------------------ catalog and basket fixes
+
+def test_aqua_rush_and_every_underarm_mist_fragrance_is_its_own_variant():
+    titles = {"8906161981580": "Aqua Rush / 100 ml", "Aqua_Rush_packof2": "Aqua Rush / 100 ml x 2",
+              "8906161981023": "Fresh / 100 ml", "UAS_Mixed": "Mixed / 100 ml x 2"}
+    c = census([line("1", "A", "2025-01-10", UAS, sku="8906161981580"),
+                line("2", "A", "2025-02-10", UAS, sku="Aqua_Rush_packof2"),
+                line("3", "B", "2025-01-10", UAS, sku="8906161981023"),
+                line("4", "B", "2025-02-10", UAS, sku="UAS_Mixed")], variant_titles=titles)
+    labels = {v["label"] for v in c["vars"]}
+    assert {"Aqua Rush", "Aqua Rush · Pack of 2", "Fresh", "Mixed · Pack of 2"} <= labels
+
+
+def test_named_products_that_were_missed_or_merged():
+    def code(title, ptype="serum"):
+        ln, why = CAT.classify(title, "", 500.0, ptype, TYPES)
+        return ln.code if ln else why
+    assert code("Oil-Free Barrier+ Crème - Barrier Repair & Hydrating Moisturizer", "moisturiser") == "OFB"  # "free" inside oil-free
+    assert code("Moisture Cocoon Crème - Free", "moisturiser") == "free gift or test line"
+    assert code("Glow Forward Radiance Serum") == "GFR"
+    assert code("Radiance Serum - Korean Brightening Serum for Face") == "RAD"
+    assert code("Advanced Anti-Pigmentation Set", "combo") == "AAP"
+    assert code("4-Step Advanced Anti-Pigmentation Set", "combo") == "A4S"
+    assert code("Anti Pigmentation Set", "combo") == "APS"
+    assert code("Fresh Start Smoothening Scrub", "scrub") == "FSS"
+    assert code("Even tone undermist - Sweet vanilla", "(no product match)") == "UAS"
+
+
+def test_packs_come_from_the_catalog_even_without_a_sku():
+    catalog = {"variants_by_product": {"10107079721273": [["inner_thigh_bum_roll_on", "70 ml"], ["", "70 ml x 2"]]}}
+    rows = [line("1", "A", "2025-01-10", ITB, sku="") + ("10107079721273", 1),
+            line("2", "A", "2025-02-10", ITB, sku="inner_thigh_bum_roll_on") + ("10107079721273", 1)]
+    c = census(rows, catalog=catalog)
+    assert {v["label"] for v in c["vars"]} == {"Standard", "Pack of 2"}
+    hc = CAT.classify("Set of 6 Hand Creams", "", 900.0, "(no product match)", TYPES)[0]
+    assert hc.code == "LHC" and hc.pack == 6
+
+
+def test_basket_size_counts_products_like_the_basket_tab():
+    """A combo counts the products inside, a pack of 2 counts 2, quantity
+    counts, gifts do not: the same rule as the Basket size tab."""
+    TFD = "Target & Fade Duo"
+    rows = [
+        line("1", "A", "2025-01-10", TFD, ptype="combo") + ("10163957203257", 1),       # combo of 2 -> 2
+        line("1b", "A", "2025-03-10", ASS) + ("p", 1),
+        line("2", "B", "2025-01-10", UAS, sku="Sweet_Vanilla_packof2") + ("p2", 1),  # pack of 2 -> 2
+        line("2", "B", "2025-01-10", "Sunshine Charm", ptype="freebie") + ("g", 1),   # gift: not counted
+        line("3", "C", "2025-01-10", ASS) + ("p", 3),                                 # quantity 3 -> 3+
+        line("4", "D", "2025-01-10", ASS) + ("p", 1),                                 # single -> 1
+    ]
+    c = census(rows, combos={"10163957203257": 2})
+    assert c["fbs"] == [2]  # A is the only repeat customer: first order = the duo
+    z = {(d, size): n for d, size, n, _x, _r in c["sbrand"]}
+    day = (dt.date(2025, 1, 10) - dt.date.fromisoformat(c["epoch"])).days
+    assert z[(day, 2)] == 1 and z[(day, 3)] == 1 and z[(day, 1)] == 1
+    assert c["stats"]["first_order_products"] == {"1": 1, "2": 2, "3": 1}
+    # an old set with no product id: its name says how many products
+    old = census([line("9", "E", "2025-01-10", "Sun-Ready Twin Set", ptype="(no product match)") + ("", 1),
+                  line("9b", "E", "2025-03-10", ASS) + ("p", 1)])
+    assert old["fbs"] == [2]

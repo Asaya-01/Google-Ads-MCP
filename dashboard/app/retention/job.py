@@ -46,6 +46,8 @@ def _rows(stream):
             r["sku"],
             r["product_type"],
             r["revenue"] or 0.0,
+            r.get("product_id") or "",
+            r.get("quantity") or 1,
         )
 
 
@@ -113,20 +115,23 @@ def run(through: dt.date | None = None, out: str | None = None) -> int:
     cat = Catalog()
     shop = _shopify(cfg)
     titles: dict[str, str] = {}
+    catalog: dict = {}
     store = None if out else default_store()
     try:
         if shop:
-            titles = shop.catalog().get("variant_titles", {})
+            catalog = shop.catalog()
     except Exception as exc:
         print(
             json.dumps(
                 {"severity": "WARNING", "message": f"variant titles: {exc}"}
             )
         )
-    if not titles and store:
-        titles = (store.get_json("cache/catalog.json") or {}).get(
-            "variant_titles", {}
-        )
+    if not catalog and store:
+        catalog = store.get_json("cache/catalog.json") or {}
+    titles = catalog.get("variant_titles", {})
+    # combos count the products inside them (config basket.combo_products),
+    # the Basket size tab's rule
+    combos = {str(c["id"]): int(c["products"]) for c in (cfg.get("basket") or {}).get("combo_products") or [] if c.get("id")}
 
     stream = bq.stream(
         "retention_lines",
@@ -140,6 +145,8 @@ def run(through: dt.date | None = None, out: str | None = None) -> int:
         through,
         titles,
         cfg["retention"]["dedupe_hours"],
+        catalog,
+        combos,
     )
     census["built_at"] = now.isoformat(timespec="seconds")
     census["stats"]["variant_titles_known"] = len(titles)

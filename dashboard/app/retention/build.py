@@ -5,7 +5,10 @@ Rules (carried over from the retention artifact):
  - orders by one customer less than 24 hours apart are one order (payment
    retries and COD re-attempts), their baskets merged;
  - a customer is followed from their first ever order;
- - customers with one order are kept as daily counts, the rest as timelines.
+ - customers with one order are kept as daily counts, the rest as timelines;
+ - basket size counts products, the Basket size tab's rule: each counted line
+   is its quantity x the products in one unit of it (a combo counts the
+   products inside it, a pack of N counts N, anything else 1).
 """
 
 from __future__ import annotations
@@ -13,6 +16,7 @@ from __future__ import annotations
 import datetime as dt
 from collections import Counter, defaultdict
 
+from .. import variants
 from .catalog import Catalog, Line, label
 
 IST = dt.timedelta(hours=5, minutes=30)
@@ -25,27 +29,36 @@ def build(
     through: dt.date,
     variant_titles: dict[str, str] | None = None,
     dedupe_hours: int = 24,
+    catalog: dict | None = None,
+    combos: dict[str, int] | None = None,
 ) -> dict:
+    """rows: (order, customer, time, title, sku, product type, revenue[,
+    product id, quantity]). catalog: the Shopify catalog (variant titles per
+    listing, for fragrance, shade and pack); combos: {product id: products
+    inside} from config basket.combo_products."""
     variant_titles = variant_titles or {}
+    combos = combos or {}
+    packs = variants.pack_sizes(catalog)
+    basket_units: dict[str, int] = defaultdict(int)
     customers: dict[str, dict[str, list]] = {}
     order_rev: dict[str, float] = defaultdict(float)
     excluded = defaultdict(lambda: [0, 0.0])
     counted = defaultdict(lambda: [0, 0.0])
     other_titles: Counter = Counter()
     lines_in = 0
-    for order_id, customer_id, ts, title, sku, ptype, revenue in rows:
+    for row in rows:
+        order_id, customer_id, ts, title, sku, ptype, revenue = row[:7]
+        pid = str(row[7] or "") if len(row) > 7 else ""
+        qty = int(row[8] or 1) if len(row) > 8 else 1
         lines_in += 1
         # an order's value is every line on it (so it ties back to GMV), even
         # the lines that do not count as a product
         order_rev[order_id] += revenue or 0.0
-        line, why = cat.classify(
-            title,
-            sku,
-            revenue,
-            ptype,
-            exclude_types,
-            variant_titles.get((sku or "").strip(), ""),
-        )
+        s = (sku or "").strip()
+        vt = (variants.find_title(pid, s, catalog) if pid else None) or variant_titles.get(s, "")
+        pk = (packs.get(f"{pid}|{s}") if s else packs.get(f"{pid}|")) if pid else None
+        pk = pk or (packs.get(f"*|{s}") if s else None)
+        line, why = cat.classify(title, sku, revenue, ptype, exclude_types, vt, pk)
         if line is None:
             e = excluded[why]
             e[0] += 1
@@ -60,10 +73,13 @@ def build(
             order_id, [ts, set(), [order_id]]
         )
         order[1].add(line)
+        # products in the basket: a combo counts what is inside, a pack of N counts N
+        n = combos.get(pid) or (cat.combo_of(title) if line.pack == 1 else None) or line.pack
+        basket_units[order_id] += max(qty, 1) * min(n, 10)
 
     gap = dt.timedelta(hours=dedupe_hours)
     merged_pairs = orders_counted = orders_empty = 0
-    timelines: dict[str, list[tuple[dt.date, set[Line], float]]] = {}
+    timelines: dict[str, list[tuple[dt.date, set[Line], float, int]]] = {}
     revenue_total = 0.0
     for cid, orders in customers.items():
         seq: list[list] = []
@@ -79,13 +95,13 @@ def build(
         for ts, lines, oids in seq:
             rev = sum(order_rev[o] for o in oids)
             revenue_total += rev
-            tl.append(((ts + IST).date(), lines, rev))
+            tl.append(((ts + IST).date(), lines, rev, sum(basket_units[o] for o in oids)))
         timelines[cid] = tl
 
     first = min(tl[0][0] for tl in timelines.values())
     ndays = (through - first).days
 
-    present = {ln for tl in timelines.values() for _, ls, _ in tl for ln in ls}
+    present = {ln for tl in timelines.values() for _, ls, _, _ in tl for ln in ls}
     codes = [c for c in cat.order if any(ln.code == c for ln in present)]
     sku_idx = {c: i for i, c in enumerate(codes)}
     ordered = sorted(
@@ -95,6 +111,8 @@ def build(
     var_idx = {ln: i for i, ln in enumerate(ordered)}
 
     multi: list[str] = []
+    first_basket: list[int] = []  # products in each repeat customer's first order
+    basket_mix: Counter = Counter()  # first orders by products, all customers
     new_cell = lambda: [0, 0.0]  # customers, revenue
     singles: dict[int, dict] = defaultdict(lambda: defaultdict(new_cell))
     singles_s: dict[int, dict] = defaultdict(lambda: defaultdict(new_cell))
@@ -104,7 +122,9 @@ def build(
         if len(tl) >= 2:
             n_multi += 1
             parts = []
-            for d, lines, rev in tl:
+            first_basket.append(tl[0][3])
+            basket_mix[min(tl[0][3], 5)] += 1
+            for d, lines, rev, _n in tl:
                 vids = sorted({var_idx[ln] for ln in lines})
                 parts.append(
                     f"{(d - first).days}:{','.join(map(str, vids))}~{round(rev)}"
@@ -112,7 +132,8 @@ def build(
             multi.append("N" + "|".join(parts))
         else:
             n_single += 1
-            d, lines, rev = tl[0]
+            d, lines, rev, units = tl[0]
+            basket_mix[min(units, 5)] += 1
             day = (d - first).days
             for v in {var_idx[ln] for ln in lines}:
                 cell = singles[v][day]
@@ -123,7 +144,8 @@ def build(
                 cell = singles_s[sk][day]
                 cell[0] += 1
                 cell[1] += rev
-            cell = sbrand[(day, min(len(skus), 3))]
+            # basket size in products (Basket size tab rule), 1, 2 or 3+
+            cell = sbrand[(day, min(max(units, 1), 3))]
             cell[0] += 1
             cell[1] += rev
 
@@ -148,6 +170,8 @@ def build(
             for ln in ordered
         ],
         "multi": multi,
+        # products in each repeat customer's first order, in the order of multi
+        "fbs": first_basket,
         "singles": pack_singles(singles),
         "singles_s": pack_singles(singles_s),
         "sbrand": sorted(
@@ -164,6 +188,7 @@ def build(
             "orders_counted": orders_counted,
             "revenue_total": round(revenue_total),
             "merged_pairs": merged_pairs,
+            "first_order_products": {str(k): v for k, v in sorted(basket_mix.items())},
             "excluded": {
                 k: {"lines": v[0], "revenue": round(v[1])}
                 for k, v in sorted(excluded.items(), key=lambda kv: -kv[1][1])

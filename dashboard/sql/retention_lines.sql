@@ -2,7 +2,9 @@
 -- Valid orders only (same rule as the rest of the dashboard) and only orders
 -- with a Shopify customer id. Only IDs, titles, SKUs and amounts leave this
 -- query: no names, emails or phone numbers are selected anywhere.
--- Lines of the same title in one order are summed (quantity does not matter).
+-- Lines of the same title, SKU and product in one order are summed, with their
+-- quantity: basket size counts products (quantity x the products in one unit,
+-- the Basket size tab's rule), so the quantity and product id come along.
 WITH latest AS (
   SELECT *
   FROM `{{dataset}}.Shopify_All_orders`
@@ -32,6 +34,8 @@ lines AS (
     v.ts,
     IFNULL(i.PRODUCT_NAME, '') AS title,
     IFNULL(i.SKU, '') AS sku,
+    IFNULL(CAST(i.PRODUCT_ID AS STRING), '') AS product_id,
+    IFNULL(i.QUANTITY, 1) AS quantity,
     IF(p.product_id IS NULL, '(no product match)', p.product_type) AS product_type,
     i.TOTAL_SALES AS revenue
   FROM `{{dataset}}.Shopify_All_orders_items` i
@@ -39,6 +43,6 @@ lines AS (
   LEFT JOIN products p ON p.product_id = i.PRODUCT_ID
   QUALIFY ROW_NUMBER() OVER (PARTITION BY i.LINE_ITEM_ID ORDER BY i.ORDER_TIMESTAMP DESC) = 1
 )
-SELECT order_id, customer_id, ts, title, sku, product_type, SUM(revenue) AS revenue
+SELECT order_id, customer_id, ts, title, sku, product_type, SUM(revenue) AS revenue, product_id, SUM(quantity) AS quantity
 FROM lines
-GROUP BY order_id, customer_id, ts, title, sku, product_type
+GROUP BY order_id, customer_id, ts, title, sku, product_type, product_id
