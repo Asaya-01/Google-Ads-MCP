@@ -166,7 +166,13 @@ function retShell(p) {
   $r("r-from").addEventListener("change", (ev) => { const d = e.dateToDay(ev.target.value); if (!isNaN(d)) { RET.A = Math.max(0, Math.min(d, RET.B - 6)); retSync(true); } });
   $r("r-to").addEventListener("change", (ev) => { const d = e.dateToDay(ev.target.value); if (!isNaN(d)) { RET.B = Math.min(e.NDAYS, Math.max(d, RET.A + 6)); retSync(true); } });
   $r("r-sku").addEventListener("change", (ev) => { RET.code = ev.target.value; RET.vsel = "all"; retSyncVariants(); });
-  $r("r-var").addEventListener("change", (ev) => { RET.vsel = ev.target.value; retRender(); });
+  $r("r-var").addEventListener("change", (ev) => {
+    const opt = ev.target.selectedOptions[0];
+    RET.vsel = ev.target.value;
+    // a variant launched after the cohort's last day: show it with No limit
+    if (opt && opt.dataset.late) { RET.HZ = null; retSync(true); return; }
+    retRender();
+  });
   $r("r-tabs").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-tab]"); if (b) retTab(b.dataset.tab); });
   $r("r-panel").addEventListener("click", (ev) => {
     const s = ev.target.closest("th[data-sort]");
@@ -241,9 +247,12 @@ function retSyncVariants() {
   for (let i = 0; i < e.NV; i++) if (e.VARS[i].s === base.i && !have.has(i) && isFinite(e.FIRST_V[i])) absent.push(i);
   if (vs.length + absent.length < 2) { wrap.hidden = true; RET.vsel = "all"; retRender(); return; }
   wrap.hidden = false;
-  const why = (i) => (e.FIRST_V[i] > bE ? `first sold ${rPretty(e.FIRST_V[i])}, after this cohort's last day (${rPretty(bE)}): pick No limit or a shorter return window` : "no buyers in these dates");
+  // launched after the cohort's last day: picking it switches to No limit
+  const late = (i) => e.FIRST_V[i] > bE && e.FIRST_V[i] <= RET.B && RET.HZ != null;
   vsel.innerHTML = `<option value="all">All variants · ${rN(base.base)} buyers</option>` + vs.map((r) => `<option value="${esc(r.code)}">${esc(e.VARS[r.i].label)} · ${rN(r.base)} buyers</option>`).join("")
-    + absent.map((i) => `<option disabled>${esc(e.VARS[i].label)} · 0 buyers: ${esc(why(i))}</option>`).join("");
+    + absent.map((i) => late(i)
+      ? `<option value="V${i}" data-late="1" title="Its buyers have not had ${RET.HZ} days yet; picking it switches the window to No limit">${esc(e.VARS[i].label)} · new ${rPretty(e.FIRST_V[i])}, opens with No limit</option>`
+      : `<option disabled>${esc(e.VARS[i].label)} · no buyers in these dates</option>`).join("");
   if (RET.vsel !== "all" && !vs.find((r) => r.code === RET.vsel)) RET.vsel = "all";
   vsel.value = RET.vsel;
   retRender();
