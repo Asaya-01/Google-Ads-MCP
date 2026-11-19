@@ -234,9 +234,16 @@ function retSyncVariants() {
   const wrap = $r("r-vwrap"), vsel = $r("r-var");
   if (!base) { wrap.hidden = true; retRender(); return; }
   const vs = RET.resV.filter((r) => r.sku === base.i).sort((p, q) => q.base - p.base);
-  if (vs.length < 2) { wrap.hidden = true; RET.vsel = "all"; retRender(); return; }
+  // every variant the product has ever sold in is listed: one with no buyers in
+  // this cohort says why (launched after the cohort's last day, or none bought)
+  const e = RET.eng, have = new Set(vs.map((r) => r.i)), bE = e.acqEnd(RET.B, RET.HZ);
+  const absent = [];
+  for (let i = 0; i < e.NV; i++) if (e.VARS[i].s === base.i && !have.has(i) && isFinite(e.FIRST_V[i])) absent.push(i);
+  if (vs.length + absent.length < 2) { wrap.hidden = true; RET.vsel = "all"; retRender(); return; }
   wrap.hidden = false;
-  vsel.innerHTML = `<option value="all">All variants · ${rN(base.base)} buyers</option>` + vs.map((r) => `<option value="${esc(r.code)}">${esc(RET.eng.VARS[r.i].label)} · ${rN(r.base)} buyers</option>`).join("");
+  const why = (i) => (e.FIRST_V[i] > bE ? `first sold ${rPretty(e.FIRST_V[i])}, after this cohort's last day (${rPretty(bE)}): pick No limit or a shorter return window` : "no buyers in these dates");
+  vsel.innerHTML = `<option value="all">All variants · ${rN(base.base)} buyers</option>` + vs.map((r) => `<option value="${esc(r.code)}">${esc(e.VARS[r.i].label)} · ${rN(r.base)} buyers</option>`).join("")
+    + absent.map((i) => `<option disabled>${esc(e.VARS[i].label)} · 0 buyers: ${esc(why(i))}</option>`).join("");
   if (RET.vsel !== "all" && !vs.find((r) => r.code === RET.vsel)) RET.vsel = "all";
   vsel.value = RET.vsel;
   retRender();
