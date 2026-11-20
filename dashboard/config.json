@@ -939,6 +939,7 @@
     {"id": "cro",       "label": "CRO",       "phase": 1, "enabled": true},
     {"id": "awareness", "label": "Awareness", "phase": 1, "enabled": true},
     {"id": "seo",       "label": "SEO / AEO", "phase": 1, "enabled": true},
+    {"id": "profitability", "label": "Profitability", "phase": 1, "enabled": true},
     {"id": "region",    "label": "Region",    "phase": 1, "enabled": true},
     {"id": "health",    "label": "Data health", "phase": 1, "enabled": true},
     {"id": "d1",        "label": "D-1 Report", "phase": 1, "enabled": true, "report": true},
@@ -1641,6 +1642,56 @@
       "psi_history_days": 120
     },
     "alerts": {"clicks_drop": 0.20, "speed_worse": 0.15, "share_drop_pp": 0.02}
+  },
+
+  "profitability": {
+    "_about": "The Profitability tab: the Website (D2C) slice of finance's channel P&L, by month, using the workbook's own levels (Net revenue, Gross margin, CM1, CM2, CM3; it stops at CM3). Figures never live here: imports go to the dashboard's private bucket (private/pnl/). docs/profitability-audit.md explains the source.",
+    "d2c_channel": "website|shopify",
+    "sales_dump_d2c_tag": "^shopify$",
+    "gst_rate": 0.18,
+    "groups": [
+      {"key": "revenue", "name": "Revenue", "subtotal": "net_rev"},
+      {"key": "cogs", "name": "Cost of goods", "subtotal": "gm"},
+      {"key": "fulfilment", "name": "Fulfilment & fees", "subtotal": "cm1"},
+      {"key": "performance", "name": "Performance marketing", "subtotal": "cm2"},
+      {"key": "brand", "name": "Brand building", "subtotal": "cm3"}
+    ],
+    "lines": [
+      {"key": "gmv", "name": "GMV", "group": "revenue", "kind": "memo", "level": "revenue", "sign": 1, "direction": "higher", "match": ["^gmv$"], "definition": "Units sold at MRP, including GST (finance's GMV)."},
+      {"key": "disc", "name": "Discounts / trade margin", "group": "revenue", "kind": "memo", "level": "revenue", "sign": -1, "direction": "lower", "match": ["^discounts?( / trade margin)?$"], "definition": "GMV − Gross sales."},
+      {"key": "gross", "name": "Gross sales (incl. GST)", "group": "revenue", "kind": "memo", "level": "subtotal", "sign": 1, "direction": "higher", "match": ["^gross sales$"], "definition": "What customers paid, including GST: GMV − Discounts."},
+      {"key": "gst", "name": "GST", "group": "revenue", "kind": "memo", "level": "revenue", "sign": -1, "direction": "neutral", "match": [], "definition": "Gross sales − Net revenue (finance removes GST at 18%)."},
+      {"key": "net_rev", "name": "Net revenue", "group": "revenue", "kind": "subtotal", "level": "subtotal", "sign": 1, "direction": "higher", "match": ["^net revenue$"], "definition": "Finance's net-net revenue, ex-GST: RTO and cancellations are excluded."},
+      {"key": "cogs", "name": "COGS", "group": "cogs", "kind": "line", "level": "cogs", "sign": -1, "direction": "lower", "match": ["^cogs$"], "definition": "Product cost of the units sold (COGS Master per unit × units)."},
+      {"key": "freight", "name": "Primary freight & damages", "group": "cogs", "kind": "line", "level": "cogs", "sign": -1, "direction": "lower", "match": ["primary freight", "damages", "freight & damages"], "definition": "Factory-to-warehouse freight and damages, split to channels by finance. When the source does not list it, it is Gross margin's gap to Net revenue − COGS (derived)."},
+      {"key": "gm", "name": "Gross margin", "group": "cogs", "kind": "subtotal", "level": "subtotal", "sign": 1, "direction": "higher", "match": ["^gross margin$"], "definition": "Net revenue − COGS − Primary freight & damages."},
+      {"key": "fees", "name": "Payment gateway & DPC fees", "group": "fulfilment", "kind": "line", "level": "cm1_cost", "sign": -1, "direction": "lower", "match": ["dpc", "payment gateway", "marketplace fees"], "definition": "EaseBuzz, GoKwik and Snapmint for the Website."},
+      {"key": "packaging", "name": "Packaging", "group": "fulfilment", "kind": "line", "level": "cm1_cost", "sign": -1, "direction": "lower", "match": ["^packaging$"], "definition": "Secondary packaging."},
+      {"key": "storage", "name": "Storage", "group": "fulfilment", "kind": "line", "level": "cm1_cost", "sign": -1, "direction": "lower", "match": ["^storage$"], "definition": "Warehousing."},
+      {"key": "logistics", "name": "Logistics (outward)", "group": "fulfilment", "kind": "line", "level": "cm1_cost", "sign": -1, "direction": "lower", "match": ["^logistics"], "definition": "Last-mile delivery to customers, RTO freight included."},
+      {"key": "cm1", "name": "CM1", "group": "fulfilment", "kind": "subtotal", "level": "subtotal", "sign": 1, "direction": "higher", "match": ["^cm1$"], "definition": "Gross margin − fulfilment & fees: what an order keeps before any marketing."},
+      {"key": "ads", "name": "Performance ads", "group": "performance", "kind": "line", "level": "cm2_cost", "sign": -1, "direction": "lower", "match": ["visibility spends", "^ads$"], "definition": "Finance's 'Visibility spends (ads)' for the Website = Performance marketing (own website): Meta, Google and other sales campaigns."},
+      {"key": "promos", "name": "Consumer promos", "group": "performance", "kind": "line", "level": "cm2_cost", "sign": -1, "direction": "lower", "match": ["consumer promos"], "definition": "Consumer promotions charged as marketing."},
+      {"key": "samples", "name": "Samples", "group": "performance", "kind": "line", "level": "cm2_cost", "sign": -1, "direction": "lower", "match": ["^samples$"], "definition": "Sampling charged to the Website."},
+      {"key": "chan_spend", "name": "Total performance spends", "group": "performance", "kind": "memo", "level": "subtotal", "sign": -1, "direction": "lower", "match": ["total channel & performance spends"], "definition": "Performance ads + promos + samples."},
+      {"key": "cm2", "name": "CM2", "group": "performance", "kind": "subtotal", "level": "subtotal", "sign": 1, "direction": "higher", "match": ["^cm2$"], "definition": "CM1 − performance marketing."},
+      {"key": "influencer", "name": "Influencer & awareness", "group": "brand", "kind": "line", "level": "cm3_cost", "sign": -1, "direction": "lower", "match": ["influencer"], "definition": "Influencer, Meta and Google awareness: the Website's share by net revenue (finance's split)."},
+      {"key": "agency", "name": "Agency fees", "group": "brand", "kind": "line", "level": "cm3_cost", "sign": -1, "direction": "lower", "match": ["agency"], "definition": "Brand agencies: the Website's share by net revenue (finance's split)."},
+      {"key": "brand", "name": "Total brand building", "group": "brand", "kind": "memo", "level": "subtotal", "sign": -1, "direction": "lower", "match": ["total brand building"], "definition": "Influencer & awareness + agency fees."},
+      {"key": "cm3", "name": "CM3", "group": "brand", "kind": "subtotal", "level": "subtotal", "sign": 1, "direction": "higher", "match": ["^cm3$"], "definition": "CM2 − brand building. The workbook's channel P&L stops here: fixed costs and EBITDA are company-level only."}
+    ],
+    "cost_tables": {
+      "cogs_sku": ["sku", "ean", "landed_cost", "packaging_cost", "effective_from", "effective_to"],
+      "logistics": ["weight_slab", "zone", "forward_rate", "rto_rate", "cod_fee", "effective_from", "effective_to"],
+      "payment": ["method", "gateway", "pct_fee", "fixed_fee", "effective_from", "effective_to"],
+      "other_variable": ["item", "basis", "amount", "effective_from", "effective_to"],
+      "allocation_rules": ["cost", "to_d2c", "basis", "effective_from", "effective_to"]
+    },
+    "notes": [
+      "Revenue is finance's net-net: ex-GST, after discounts, RTO and cancellations. Shopify's headline Total sales includes GST and shipping and counts orders when placed, so it runs higher; the bridge is on Data health.",
+      "Monthly figures include sale periods.",
+      "Per-order values divide by the dashboard's headline order count for the month (orders placed); finance's revenue excludes RTO and cancelled orders, so per-order values are slightly understated."
+    ]
   },
 
   "awareness": {
