@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import pathlib
 import time
 import sys
@@ -655,6 +656,17 @@ def _days(start: dt.date, end: dt.date) -> list[str]:
     ]
 
 
+def done_for_the_day(status: dict, build: str, force: bool = False) -> bool:
+    """A complete day is rebuilt only when something can change it: a new
+    deploy (settings such as the spend-sheet ids may have changed) or a spend
+    sheet that could not be read last time (it may be readable now)."""
+    if force or not status.get("complete"):
+        return False
+    if any(k.startswith("sheet_") for k in (status.get("unavailable") or {})):
+        return False
+    return not (build and status.get("build_sha") != build)
+
+
 def run(
     d1: str | None = None,
     force: bool = False,
@@ -667,7 +679,8 @@ def run(
     d1 = d1 or (now.date() - dt.timedelta(days=1)).isoformat()
     status_path = f"status/{d1}.json"
     status = store.get_json(status_path) or {"d1": d1, "attempts": 0}
-    if status.get("complete") and not force:
+    build = os.environ.get("BUILD_SHA") or ""
+    if done_for_the_day(status, build, force):
         alerts.log("D-1 already complete; nothing to do", d1=d1)
         return 0
 
@@ -704,6 +717,7 @@ def run(
     status.update(
         attempts=status["attempts"] + 1,
         last_attempt=generated_at,
+        build_sha=build,
         complete=not missing,
         missing=missing,
         unavailable=data["unavailable"],
