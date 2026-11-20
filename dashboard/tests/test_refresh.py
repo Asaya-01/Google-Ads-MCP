@@ -191,3 +191,16 @@ def test_unknown_google_ids_get_their_names_and_misses_stay_blank(monkeypatch):
     names = refresh._google_id_names(cfg, data, store, {"creds": {}})
     assert names == {"23983075569": "Old Pmax"}
     assert store.saved["cache/google_names.json"] == {"23983075569": "Old Pmax"}
+
+
+def test_a_complete_day_is_rebuilt_after_a_deploy_or_while_a_sheet_is_down():
+    from app.refresh import done_for_the_day
+
+    ok = {"complete": True, "unavailable": {}, "build_sha": "abc123"}
+    assert done_for_the_day(ok, "abc123")
+    assert not done_for_the_day(ok, "def456")  # a new deploy: rebuild once
+    assert not done_for_the_day({**ok, "unavailable": {"sheet_affiliate": "Affiliate sheet: sheet id not set"}}, "abc123")
+    assert done_for_the_day({**ok, "unavailable": {"google_api": "x"}}, "abc123")  # only sheets retry
+    assert not done_for_the_day({"complete": False}, "abc123")
+    assert not done_for_the_day(ok, "abc123", force=True)
+    assert done_for_the_day({"complete": True}, "")  # local runs without a build stamp
