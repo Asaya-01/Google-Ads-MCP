@@ -372,6 +372,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
   /*__PLUS__*/
   /*__AWARENESS__*/
   /*__SEO__*/
+  /*__PROFITABILITY__*/
   /*__ASK__*/
 
   /* Data health: "Can I trust these numbers?" Source status, data checks,
@@ -381,7 +382,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     const hhmm = (iso) => iso ? new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" }) : null;
     $main.innerHTML = '<p class="empty">Loading…</p>';
     const pg = {};
-    for (const t of ["overview", "funnel", "marketing", "products", "region", "d1", "days", "product_days", "meta_ads", "google_ads", "cro", "awareness", "seo"]) { try { pg[t] = await loadPage(t); } catch (e) { pg[t] = null; } }
+    for (const t of ["overview", "funnel", "marketing", "products", "region", "d1", "days", "product_days", "meta_ads", "google_ads", "cro", "awareness", "seo", "profitability"]) { try { pg[t] = await loadPage(t); } catch (e) { pg[t] = null; } }
     if (state.tab !== "health") return;
     const st = state.status || {}, labels = p.source_labels || {};
     // 1. sources
@@ -460,6 +461,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       ${rgSec("Google classification", "tag coverage, the purchase split, validation and the tie-out (Marketing › Google)", gvHealth(pg.google_ads, D), { comp: "google-coverage" })}
       ${rgSec("Cooee (CRO tab)", "the sign-in, the last syncs, and Cooee's numbers against Shopify and GoKwik", croHealth(pg.cro, D), { comp: "cooee-health" })}
       ${pg.awareness ? rgSec("Awareness data", "geo coverage, the acceptance checks, unmapped city names and the job runs (Awareness tab)", awHealth(pg.awareness), { comp: "awareness-health" }) : ""}
+      ${pg.profitability ? rgSec("Profitability data", "finance's imports, the subtotal checks and finance's net revenue against Shopify", pfHealth(pg.profitability), { comp: "pnl-health" }) : ""}
       ${pg.seo ? rgSec("SEO data", "each source of the SEO / AEO tab, read only: whether the last run read it, and the job runs", seoHealth(pg.seo), { comp: "seo-health" }) : ""}
       <div class="cols-2">
         ${rgSec("Sale calendar", "which days are BAU and which are sale", cal)}

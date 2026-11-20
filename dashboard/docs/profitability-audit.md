@@ -1,6 +1,6 @@
 # Profitability tab: audit of the P&L source (step 0)
 
-Status: **for review, nothing built yet.** The repository is public, so this
+Status: **reviewed; Phase 1 built** (decisions at the end). The repository is public, so this
 file holds structure, definitions and findings only. The figures (every line,
 month and check) are in a private file shared with the dashboard owner, not
 committed here.
@@ -210,3 +210,63 @@ Admins to be named by the owner.
    dashboard's service account (Viewer), or upload each month's CSV / XLSX to
    the bucket.
 6. **Who gets access** to this tab.
+
+## Decisions (owner, 20 Nov 2026) and what the MIS showed
+
+1. **Level names:** the workbook's own: Net revenue, Gross margin, CM1, CM2,
+   CM3. The emphasised card is **CM1 %** (after fulfilment, before any
+   marketing).
+2. **The unlisted line inside Gross margin** is **Primary Freight &
+   Damages**. In the monthly MIS (WCPL_MIS_Oct-2026), the expense breakup's
+   Primary Freight rows (factory to warehouse) add up to the "Expense
+   Reclass: Primary Freight & Damages moved from Dist to COGS" note. That
+   same amount separates the MIS COGS from item-level COGS, within rounding,
+   in every month except May. Finance splits it to channels. Where a source
+   does not list it, the tab shows it as a **derived** line (Gross margin's
+   gap to Net revenue − COGS). It is in grey italics with the method in a
+   tooltip, and listed on Data health.
+3. **Revenue basis:** net-net: ex-GST, after discounts, RTO and
+   cancellations. That is why it is below Shopify's net sales; the bridge is
+   on Data health.
+4. **EBITDA:** dropped. The tab stops at CM3, as the channel P&L does.
+5. **Updates:** finance's files are uploaded on the tab ("Upload finance
+   file") into the private bucket, one version per upload, never
+   overwritten. Accepted: the Investor Data Pack (Channel P&L tab), the
+   monthly MIS (COGS Master and Sales Dump) and the review's JSON extract.
+6. **Access:** everyone on the dashboard allowlist.
+
+### What the MIS workbook holds
+
+The MIS is company-level: P&L history, Forecast vs Actuals, an expense
+breakup by vendor and month, Marketing Sheet, COGS Master (COGS per unit by
+EAN) and the month's Sales Dump (sales lines by channel, with COGS). It has
+**no Channel P&L tab**, so the Website P&L comes from the investor pack.
+
+The MIS confirms the pack:
+- the Sales Dump's Shopify lines equal the Website's Net revenue and COGS
+  for October;
+- the payment gateway rows (EaseBuzz, GoKwik, Snapmint) equal the Website's
+  payment / DPC fees line.
+
+From the MIS the tab takes:
+- COGS by SKU: the Phase 2 COGS input;
+- the month's Website SKU margins.
+
+Reading it touches only these three sheets: COGS Master, Sales Dump and
+Marketing Sheet (for the month).
+
+## What is built (Phase 1)
+
+| Piece | Where |
+|---|---|
+| Import (all channels, untouched, versioned) | `app/pnl/importer.py` → `private/pnl/actuals/`, `private/pnl/mis/` |
+| Line map (config) | `config.json` → `profitability.lines` |
+| The Website slice, subtotals recomputed and checked, finance's figures shown as stated | `app/pnl/build.py` → `pages/profitability.json` |
+| Phase 2 cost tables, created empty | `private/pnl/costs/*.json` |
+| Tab: Month · Trend · Unit economics · SKU, cost-input checklist, PDF and CSV | `static/profitability.js` |
+| Data health: imports, arithmetic, Shopify reconciliation, rebuild | same file, `pfHealth` |
+
+Not built yet:
+- **Phase 2 live month-to-date P&L.** It needs the rate card, payment
+  rates, COD and RTO rates.
+- **New vs repeat margins.** The P&L has no new / repeat split.

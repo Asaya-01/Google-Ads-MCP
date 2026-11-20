@@ -596,6 +596,40 @@ def cro_live(start: str, end: str, user: str = Depends(current_user)):
     return res
 
 
+MAX_PNL_UPLOAD = 25 * 1024 * 1024
+
+
+@app.post("/api/pnl/upload")
+async def pnl_upload(request: Request, user: str = Depends(current_user)):
+    """Profitability: import finance's Investor Data Pack (Channel P&L tab), the
+    monthly MIS (COGS Master, Sales Dump) or the review's JSON extract. Each
+    upload is a new version in the private bucket; nothing is overwritten."""
+    from .pnl import build as pnl_build
+    from .pnl import importer
+
+    name = (request.headers.get("x-file-name") or "upload").strip()[:200]
+    data = await request.body()
+    if not data:
+        raise HTTPException(400, "Empty file")
+    if len(data) > MAX_PNL_UPLOAD:
+        raise HTTPException(413, "File over 25 MB")
+    try:
+        parts = importer.read_upload(data, name)
+    except importer.ImportError_ as exc:
+        raise HTTPException(422, str(exc))
+    saved = [importer.save(store(), kind, payload, name, user) for kind, payload in parts]
+    page = pnl_build.build(store())
+    return {"saved": saved, "months": page["months"], "findings": len(page["checks"]["arithmetic"])}
+
+
+@app.post("/api/pnl/rebuild")
+def pnl_rebuild(user: str = Depends(current_user)):
+    from .pnl import build as pnl_build
+
+    page = pnl_build.build(store())
+    return {"months": page["months"], "built_at": page["built_at"]}
+
+
 @app.get("/api/page/{tab}")
 def page(tab: str, user: str = Depends(current_user)):
     if tab not in {t["id"] for t in settings.enabled_tabs()} | {
@@ -627,6 +661,8 @@ def page(tab: str, user: str = Depends(current_user)):
                               "na": "Cooee is not connected yet: click Connect Cooee."}
         payload["connection"] = cooee_mcp.status(store())
         return payload
+    if tab == "profitability" and payload is None:  # the upload button shows before the first import
+        return {"title": "Profitability", "months": [], "lines": [], "versions": [], "cost_inputs": [], "checks": {}, "skus": {}}
     if payload is None:
         return Response(
             content='{"error": "This tab has not been built yet. The refresh job runs from 07:00 IST."}',
