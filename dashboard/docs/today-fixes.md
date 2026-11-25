@@ -23,10 +23,15 @@ Uploading the GoKwik CSV changes what everyone sees on the day's checkout
 panel, so it needs the admin role. The role is a field on the person's
 access-list document in Firestore, never an email in this repository:
 
+Grant it from Cloud Shell (the email lower-case, `@` written as `%40`):
+
 ```bash
-python -m app.features admin name@company.com          # grant
-python -m app.features admin name@company.com --off    # remove
+curl -s -X PATCH -H "Authorization: Bearer $(gcloud auth print-access-token)" -H "Content-Type: application/json" "https://firestore.googleapis.com/v1/projects/asaya-data-room-487110/databases/(default)/documents/dashboard_allowlist/name%40company.com?updateMask.fieldPaths=role" -d '{"fields":{"role":{"stringValue":"admin"}}}'
 ```
+
+Remove it with the same command and `{"fields":{}}` as the body (the role field is cleared).
+`python -m app.features admin …` does the same where the dashboard's Python
+packages are installed (Cloud Shell does not have the Firestore library).
 
 ## What each fix shows
 

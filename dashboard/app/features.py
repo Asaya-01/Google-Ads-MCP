@@ -14,6 +14,9 @@ repository. Today only one action needs it: uploading the GoKwik checkout CSV.
 
   python -m app.features admin name@company.com      # grant
   python -m app.features admin name@company.com --off
+
+(needs google-cloud-firestore; from Cloud Shell use the curl in
+docs/today-fixes.md instead)
 """
 
 from __future__ import annotations
