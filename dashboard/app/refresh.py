@@ -294,13 +294,20 @@ def collect(
     data["phase_calendar"] = labels
     # the media plan's daily targets (Target vs achieved); the last good copy if a read fails
     try:
-        plan, why = sheets.load_plan(cfg)
+        plan, plan_act, why = sheets.load_plan_all(cfg)
     except Exception as exc:  # never fail the refresh over the targets
-        plan, why = {}, f"{type(exc).__name__}: {exc}"
+        plan, plan_act, why = {}, {}, f"{type(exc).__name__}: {exc}"
     if plan:
         store.put_json("cache/media_plan.json", plan)
     else:
         plan = store.get_json("cache/media_plan.json") or {}
+    # the actuals the team types into the same tab: the Today tab compares
+    # past days with these (they are the verified numbers)
+    if plan_act:
+        store.put_json("cache/media_plan_actuals.json", plan_act)
+    else:
+        plan_act = store.get_json("cache/media_plan_actuals.json") or {}
+    data["media_plan_actuals"] = plan_act
     if why:
         data["unavailable"]["media_plan"] = f"Media plan: {why}" + (" (showing the last good copy)" if plan else "")
     data["media_plan"] = plan

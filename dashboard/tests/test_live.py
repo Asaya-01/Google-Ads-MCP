@@ -591,3 +591,63 @@ def test_crm_and_affiliates_today_are_the_sheets_targets_scaled_to_the_hour():
     # a day with no target in the sheet falls back to the old estimates
     est2 = live.estimate_other_spend(manual_days(), "bau", 120000.0, 12.0, CFG, targets=targets, today="2026-11-30")
     assert est2["affiliate"]["value"] == pytest.approx(0.03 * 120000) and est2["crm"]["value"] == pytest.approx(10000 * 12 / 24)
+
+
+# ------------------------------------------- past days: the media plan's actuals
+
+FILLED = {"store": [800000.0, 1600000.0], "meta": [680000.0, 1.0], "google": [80000.0, 1.0]}
+
+
+def test_a_plan_day_counts_only_once_it_is_filled():
+    assert live.plan_actual_day({"2026-11-13": FILLED}, "2026-11-13")["roas"] == 2.0
+    half = {"store": [75000.0, 0.0], "meta": [0.0, 0.0], "google": [75000.0, 1.0]}
+    assert live.plan_actual_day({"2026-11-24": half}, "2026-11-24") is None
+    assert live.plan_actual_day({}, "2026-11-13") is None
+
+
+def test_yesterdays_references_use_the_plan_actuals_when_filled():
+    cfg = settings.config()
+    now = dt.datetime(2026, 10, 31, 14, 30, tzinfo=live.IST)
+    dm = manual_days()
+    plain = live.build(inputs(days_manual=dm), cfg, now)
+    acts = {"2026-10-30": FILLED}
+    withp = live.build(inputs(days_manual=dm, plan_actuals=acts), cfg, now)
+    get = lambda p, k: next(i for g in p["scorecard"]["groups"] for i in g["items"] if i["key"] == k)  # noqa: E731
+    assert get(withp, "total_spend")["ref"]["value"] == 800000.0
+    assert get(withp, "roas")["ref"] == {"label": "yesterday's actual", "value": 2.0}
+    # every number of today itself is unchanged
+    for k in ("orders", "gmv", "aov", "sessions", "total_spend", "roas", "cvr"):
+        assert get(withp, k)["value"] == get(plain, k)["value"]
+
+
+class MemStore:
+    def __init__(self, d=None):
+        self.d = d or {}
+
+    def get_json(self, k):
+        return self.d.get(k)
+
+    def put_json(self, k, v):
+        self.d[k] = v
+
+
+def test_history_publishes_actuals_and_spend_so_far_for_past_days():
+    cfg = settings.config()
+    now = dt.datetime(2026, 11, 25, 10, 0, tzinfo=live.IST)
+    day = day_arrays()
+    days = {"2026-11-13": {k: day[k] for k in ("orders", "gmv", "sessions", "atc")}}
+    st = MemStore({"cache/live/history.json": {"logic": live.SALES_LOGIC, "built": "2026-11-25", "days": days,
+                                              "empty": [(dt.date(2026, 11, 24) - dt.timedelta(days=i)).isoformat() for i in range(1, 420) if i != 11]}})
+    st.d["cache/live/history.json"]["empty"].append("2026-11-24")
+    live.history(cfg, st, None, now, {}, {}, {}, {}, {"2026-11-13": FILLED}, {"2026-11-13": [[10.0, 300000.0]], "2026-11-25": [[9.5, 1.0]]})
+    H = st.d["pages/live_history.json"]
+    assert H["actual"] == {"2026-11-13": [800000.0, 1600000.0]}
+    assert H["spend"] == {"2026-11-13": [[10.0, 300000.0]]}
+
+
+def test_spend_so_far_is_saved_on_each_run():
+    st = MemStore()
+    page = {"scorecard": {"groups": [{"items": [{"key": "total_spend", "value": 12345.678}]}]}}
+    live.save_spend_snapshot(st, settings.config(), dt.datetime(2026, 11, 25, 10, 15, tzinfo=live.IST), page)
+    live.save_spend_snapshot(st, settings.config(), dt.datetime(2026, 11, 25, 10, 30, tzinfo=live.IST), page)
+    assert st.d["cache/live/spend_snaps.json"]["2026-11-25"] == [[10.25, 12345.68], [10.5, 12345.68]]

@@ -51,3 +51,16 @@ def test_the_plan_page_carries_the_days_and_the_achieved_fields():
     for k, a in P["achieved"].items():
         for f in (a["spend"], a["revenue"]):
             assert f is None or f in days["fields"], f
+
+
+def test_the_actuals_are_read_from_the_same_blocks():
+    got = sheets.parse_plan_actuals(sheet([("01-Nov-2026", 1000)]), C["media_plan"])
+    assert got["2026-11-01"]["store"] == [999.0, 999.0]
+    assert set(got["2026-11-01"]) == {"store", "meta", "google", "reddit", "crm_flow", "crm_broadcast", "affiliate"}
+
+
+def test_the_plan_page_carries_the_actuals():
+    data = _dataset(with_meta=True)
+    data["media_plan_actuals"] = {D1: {"store": [800.0, 1600.0]}}
+    pages, _ = build_all(data, CFG, [t["id"] for t in settings.enabled_tabs()])
+    assert pages["plan_days"]["actuals"] == {D1: {"store": [800.0, 1600.0]}}

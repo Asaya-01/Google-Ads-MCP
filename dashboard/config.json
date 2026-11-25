@@ -1269,7 +1269,7 @@
     }
   },
   "media_plan": {
-    "_about": "Target vs achieved: the daily Target Spend and Target GMV of each channel block in the monthly media-plan workbooks ('Target vs Achieved' tab; the same workbooks as SPEND_SHEET_REDDIT). Only targets are read: achieved is the dashboard's own numbers, so it matches every tab. The store row compares Total sales with Performance spend; channel rows compare their performance spend with their platform-attributed revenue (Meta, Google), or the revenue their sheet records (CRM, affiliates). Reddit has no revenue.",
+    "_about": "Target vs achieved: the daily Target Spend and Target GMV of each channel block in the monthly media-plan workbooks ('Target vs Achieved' tab; the same workbooks as SPEND_SHEET_REDDIT). Targets feed the Target vs achieved sections: achieved there is the dashboard's own numbers, so it matches every tab. The Actual Spend / Actual GMV columns the team types in are also read (plan_days.actuals): the Today tab uses them as the verified full-day spend, Total sales and ROAS of past days, once a day is filled (Total sales, total spend, Meta and Google spend all above zero). The store row compares Total sales with Performance spend; channel rows compare their performance spend with their platform-attributed revenue (Meta, Google), or the revenue their sheet records (CRM, affiliates). Reddit has no revenue.",
     "sheet_env": "SPEND_SHEET_REDDIT",
     "tab": "Target vs Achieved",
     "date_format": ["%d-%b-%Y", "%d-%b-%y"],
