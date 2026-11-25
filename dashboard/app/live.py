@@ -29,7 +29,7 @@ import statistics
 import sys
 from zoneinfo import ZoneInfo
 
-from . import alerts, bq, google_ads, meta, rules, secrets, settings
+from . import alerts, bq, features, google_ads, meta, rules, secrets, settings
 from .shopify import Shopify
 from .store import default_store
 
@@ -1231,7 +1231,9 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
         "attribute purchases after the fact, so today's ROAS usually "
         "improves by tomorrow. Compare spend as a share of yesterday's."
     )
+    page_v2 = build_v2(inp, cfg, now, shopify, gk) if inp.get("v2") else None
     return {
+        **({"v2": page_v2} if page_v2 else {}),
         "title": "Today (live)",
         "today": today,
         "weekday": weekday,
@@ -1253,6 +1255,150 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
         "sources": sources,
         "notes": notes,
     }
+
+
+# ---------------------------------------------------- Today fixes (v2)
+
+
+def report_perf_atc(rows: list[dict], day: str, aware: set, known: set, cfg: dict) -> int:
+    """Sessions with an add-to-cart among Perf sessions: the same rows as
+    report_perf_sessions (a UTM source on the team's list, with a UTM
+    campaign, not awareness or social), counting their ATC sessions."""
+    from .pages.common import _report_source
+
+    allowed = {x.lower() for x in cfg["sessions"]["report_perf_sources"]}
+    n = 0
+    for r in rows:
+        kind, _ = rules.session_kind(r["utm_source"], r["utm_campaign"], aware, known, cfg["sessions"], day)
+        if kind == "perf" and (r.get("utm_campaign") or "").strip() and _report_source(r.get("utm_source"), allowed):
+            n += r.get("atc") or 0
+    return n
+
+
+def gokwik_lateness(rows: dict, now: dt.datetime, amber: int, red: int) -> dict:
+    """When the newest GoKwik load landed, and how late that is: ok, amber
+    (more than `amber` minutes ago) or red (more than `red`)."""
+    loads = [r.get("loaded_at") for r in (rows or {}).values() if r.get("loaded_at")]
+    if not loads:
+        return {"last_at": None, "age_minutes": None, "state": "red"}
+    last = max(dt.datetime.fromisoformat(str(x)) for x in loads)
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=dt.timezone.utc)
+    age = max(0, int((now - last).total_seconds() // 60))
+    return {"last_at": last.isoformat(), "age_minutes": age,
+            "state": "red" if age > red else "amber" if age > amber else "ok"}
+
+
+def collect_v2(cfg: dict, store, shop, now: dt.datetime, inp: dict, aware: set, known: set) -> dict:
+    """Order value placed by hour (today, the comparison days and every past
+    day kept for comparison), the comparison day's same minutes of the hour
+    under way, and Perf sessions with ATC so far (saved on each run)."""
+    hc = cfg["live"]["history"]
+    today = now.date()
+    day, yesterday = today.isoformat(), (today - dt.timedelta(days=1)).isoformat()
+    names = [n for n in cfg["orders"]["exclude_name_regex"].split("|") if n]
+    out: dict = {}
+    # order value placed: today fresh; past days once (yesterday re-read each morning)
+    cache = store.get_json("cache/live/placed.json") or {"days": {}, "empty": []}
+    days, empty = cache["days"], set(cache.get("empty") or [])
+    if cache.get("built") != day:
+        days.pop(yesterday, None)
+    first = today - dt.timedelta(days=hc["days"])
+    want = [(first + dt.timedelta(days=i)).isoformat() for i in range((today - first).days)]
+    missing = sorted((d for d in want if d not in days and d not in empty), reverse=True)
+    for _ in range(hc["chunks_per_run"]):
+        if not missing:
+            break
+        end = dt.date.fromisoformat(missing[0])
+        a = max(first, end - dt.timedelta(days=hc["chunk_days"] - 1)).isoformat()
+        got = shop.placed_hourly(a, end.isoformat(), names)
+        for d in [x for x in missing if a <= x <= end.isoformat()]:
+            if d in got:
+                days[d] = got[d]
+            else:
+                empty.add(d)
+        missing = [x for x in missing if not a <= x <= end.isoformat()]
+    keep = {d: v for d, v in days.items() if d >= first.isoformat()}
+    store.put_json("cache/live/placed.json", {"built": day, "days": keep, "empty": sorted(e for e in empty if e >= first.isoformat())})
+    out["placed"] = {**keep, day: shop.placed_hourly(day, day, names).get(day) or [0.0] * 24}
+    # the hour under way: the comparison day's same minutes (yesterday; others are prorated)
+    h, m = now.hour, now.minute
+    if m >= 1:
+        y = f"{yesterday}T{h:02d}"
+        out["partial"] = {"hour": h, "minutes": m,
+                          "yesterday": shop.window(f"{y}:00:00", f"{y}:{m - 1:02d}:59", names)}
+    # Perf sessions with an add-to-cart so far, saved on every run like Perf sessions
+    snaps = store.get_json("cache/live/perf_atc.json") or {}
+    if inp.get("session_rows") is not None:
+        n = report_perf_atc(inp["session_rows"], day, aware, known, cfg)
+        t_now = round(now.hour + now.minute / 60, 3)
+        snaps[day] = [x for x in snaps.get(day, []) if x[0] < t_now] + [[t_now, n]]
+        snaps = {d: snaps[d] for d in sorted(snaps)[-hc["days"]:]}
+        store.put_json("cache/live/perf_atc.json", snaps)
+        out["perf_atc_now"] = n
+    out["perf_atc_snaps"] = snaps
+    # past days for the date picker, beside live_history (which stays as it is)
+    hist = {"title": "Today: past days (fixes)", "as_of": yesterday,
+            "placed": {d: v for d, v in sorted(keep.items()) if d < day},
+            "perf_atc": {d: v for d, v in snaps.items() if d < day}}
+    old = store.get_json("pages/live_history_v2.json") or {}
+    if {k: old.get(k) for k in ("as_of", "placed", "perf_atc")} != {k: hist[k] for k in ("as_of", "placed", "perf_atc")}:
+        store.put_json("pages/live_history_v2.json", {**hist, "generated_at": now.isoformat()})
+    return out
+
+
+def build_v2(inp: dict, cfg: dict, now: dt.datetime, shopify: dict | None, gk: dict | None) -> dict:
+    """The fixes' additions to the live page: ATC and Order value placed by
+    hour against the same comparisons as the existing curves, the partial
+    hour's comparison minutes, Perf ATC rate and GoKwik's load lateness."""
+    v2 = inp["v2"]
+    today = now.date().isoformat()
+    yesterday = (now.date() - dt.timedelta(days=1)).isoformat()
+    t = now.hour + now.minute / 60 + now.second / 3600
+    base = inp["base"]
+    typ_dates = (shopify or {}).get("typical_dates") or []
+    placed = v2.get("placed") or {}
+    upto = now.hour
+    out: dict = {"curves": {}}
+    today_arr = inp.get("today") or {}
+    if today_arr:
+        out["curves"]["atc"] = {
+            "today": curve(today_arr["atc"], upto),
+            "yesterday": curve(base[yesterday]["atc"], None) if yesterday in base else None,
+            "typical": median_curve([base[d] for d in typ_dates if d in base], "atc") if typ_dates else None,
+        }
+    if today in placed:
+        pdays = [{"placed": placed[d]} for d in typ_dates if d in placed]
+        out["curves"]["placed"] = {
+            "today": curve(placed[today], upto),
+            "yesterday": curve(placed[yesterday], None) if yesterday in placed else None,
+            "typical": median_curve(pdays, "placed") if pdays else None,
+        }
+        out["placed_today"] = round(sum(placed[today]), 2)
+        yp = placed.get(yesterday)
+        out["placed_yesterday"] = cum_at(yp, t) if yp else None
+        tv = [cum_at(d["placed"], t) for d in pdays]
+        out["placed_typical"] = statistics.median(tv) if tv else None
+    if v2.get("partial"):
+        out["partial"] = v2["partial"]
+    snaps = v2.get("perf_atc_snaps") or {}
+    perf_now = (inp.get("perf_sessions") or {}).get("value")
+    psnaps = inp.get("perf_snapshots") or {}
+    lcfg = cfg["live"]
+    if v2.get("perf_atc_now") is not None and perf_now:
+        a_y, s_y = snap_at(snaps, yesterday, t), snap_at(psnaps, yesterday, t)
+        rates = [ratio(snap_at(snaps, d, t), snap_at(psnaps, d, t)) for d in typ_dates]
+        rates = [r for r in rates if r is not None]
+        out["perf_atc"] = {
+            "atc": v2["perf_atc_now"], "sessions": perf_now,
+            "value": ratio(v2["perf_atc_now"], perf_now),
+            "yesterday": ratio(a_y, s_y),
+            "typical": statistics.median(rates) if len(rates) >= max(1, lcfg.get("min_typical_days", 2)) else None,
+        }
+    g = cfg.get("today_v2", {}).get("gokwik", {})
+    out["gokwik_load"] = gokwik_lateness((gk or {}).get("rows") if gk else {}, now, g.get("amber_minutes", 60), g.get("red_minutes", 180))
+    out["gokwik_load"]["today_rows"] = bool(gk and (gk.get("rows") or {}).get(today))
+    return out
 
 
 # --------------------------------------------------------------- collection
@@ -1572,6 +1718,7 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
         try:
             sd = shop.sessions_day(day, cfg["sessions"]["breakdown_limit"])
             perf = report_perf_sessions(sd["rows"], day, aware_ids, known_ids, cfg)
+            inp["session_rows"] = sd["rows"]
             t_now = round(now.hour + now.minute / 60, 3)
             snaps[day] = [x for x in snaps.get(day, []) if x[0] < t_now] + [[t_now, perf]]
             keep = sorted(snaps)[-cfg["live"]["history"]["days"]:]
@@ -1588,6 +1735,13 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
             notes["history"] = f"Past days for comparison not updated: {exc}"
     except Exception as exc:
         unavailable["shopify_orders"] = f"Shopify API: {exc}"
+
+    # Today fixes (flag today_fixes_v2): extra reads only when the flag is on
+    if shop is not None and features.on("today_fixes_v2", store):
+        try:
+            inp["v2"] = collect_v2(cfg, store, shop, now, inp, aware_ids, known_ids)
+        except Exception as exc:  # never stops the live page
+            notes["v2"] = f"Today fixes data not updated: {type(exc).__name__}: {exc}"
 
     # GoKwik: latest load per day, last 8 days plus today
     try:

@@ -139,6 +139,42 @@ class Shopify:
             d["gmv"][at.hour] = float(r.get("total_sales") or 0)
         return {k: v for k, v in out.items() if since <= k <= until}
 
+    def placed_hourly(self, since: str, until: str, exclude_names: list[str]) -> dict[str, list[float]]:
+        """Order value placed for each IST hour of the days since..until: the
+        order totals of orders created in the hour, before any return,
+        cancellation or edit processed later (Total sales without the sales
+        reversals). Checked against the orders API: the same to the paisa.
+        {date: [24]}."""
+        cond = " AND ".join(["is_sales_reversal = false"] + [f"order_name NOT CONTAINS '{n}'" for n in exclude_names])
+        rows = self.shopifyql(
+            f"FROM sales SHOW total_sales WHERE {cond} TIMESERIES hour SINCE {since} UNTIL {until}"
+        )
+        out: dict[str, list[float]] = {}
+        for r in rows:
+            at = dt.datetime.fromisoformat(str(r["hour"]).replace("Z", "+00:00")).astimezone(IST)
+            out.setdefault(at.date().isoformat(), [0.0] * 24)[at.hour] = round(float(r.get("total_sales") or 0), 2)
+        return {k: v for k, v in out.items() if since <= k <= until}
+
+    def window(self, start: str, end: str, exclude_names: list[str]) -> dict:
+        """Sessions, sessions with add-to-cart, Orders, Total sales and Order
+        value placed between two local (IST) date-times, e.g.
+        2026-11-24T10:00:00 .. 2026-11-24T10:34:00: the minutes of a partial
+        hour on the comparison day."""
+        names = " AND ".join(f"order_name NOT CONTAINS '{n}'" for n in exclude_names)
+        s = self.shopifyql(f"FROM sessions SHOW sessions, sessions_with_cart_additions SINCE {start} UNTIL {end}")
+        a = self.shopifyql("FROM sales SHOW orders, total_sales " + (f"WHERE {names} " if names else "") + f"SINCE {start} UNTIL {end}")
+        p = self.shopifyql(
+            "FROM sales SHOW total_sales WHERE is_sales_reversal = false" + (f" AND {names}" if names else "") + f" SINCE {start} UNTIL {end}"
+        )
+        s0, a0, p0 = (s or [{}])[0], (a or [{}])[0], (p or [{}])[0]
+        return {
+            "sessions": _int(s0.get("sessions")),
+            "atc": _int(s0.get("sessions_with_cart_additions")),
+            "orders": _int(a0.get("orders")),
+            "gmv": round(float(a0.get("total_sales") or 0), 2),
+            "placed": round(float(p0.get("total_sales") or 0), 2),
+        }
+
     # ------------------------------------------------------------ region
     REGION_LIMIT = 10000
 

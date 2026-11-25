@@ -601,6 +601,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     const items = new Map(); for (const gr of (sc ? sc.groups : [])) for (const it of gr.items) items.set(it.key, it);
     const H = state.pages.live_history;
     if ((LIVE.base === "past" || LIVE.pop) && !H) liveLoadHistory(p);
+    if (TV2() && LIVE.base === "past" && LIVE.date) liveLoadV2(p);
     const past = LIVE.base === "past" && !!LIVE.date, typ = LIVE.base === "typical" || (LIVE.base === "past" && !LIVE.date);
     const t = liveT(p), P = past ? liveDayAt(H, LIVE.date, t) : null, PF = past ? liveDayAt(H, LIVE.date, 24) : null;
     const dLabel = LIVE.date ? liveDay(LIVE.date) : "";
@@ -642,14 +643,24 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       const v = typ ? it.typical : it.yesterday, d = typ ? it.vs_typical : it.vs_yesterday;
       return kpiCard(id, { value: it.value, prev: v ?? null, change: d, small: id !== "cvr" && id !== "perf_cvr" && v != null && (items.get("orders")[typ ? "typical" : "yesterday"] || 0) < METRIC_RULES.min_orders });
     };
-    const strip = `<section class="card"><div class="kpis seven">${LIVE_KPI.map(kpi).join("")}</div><div class="banner" id="live-stale" hidden>This view is more than 30 minutes old, so the live refresh may be failing. The numbers are the last good ones.</div></section>`;
+    const kpiV2 = (pair) => (TV2() && pair[0] === "gmv" && liveSales() === "placed" ? liveSalesCard(p, past, typ, t) : kpi(pair));
+    const cards = LIVE_KPI.map(kpiV2).join("") + (TV2() ? livePerfAtcCard(p, past, t) : "");
+    const salesSeg = TV2() ? `<div class="live-v2-bar"><span class="rg-dim">Sales headline</span><div class="seg" id="live-sales" role="group" aria-label="Sales headline">${[["total", "Total sales", "Shopify's Total sales: returns processed today come off it"], ["placed", "Order value placed", "Order totals of orders placed today, before returns processed today"]].map(([k, l, tt]) => `<button type="button" data-s="${k}" title="${esc(tt)}" aria-pressed="${liveSales() === k}">${l}</button>`).join("")}</div>${liveDiagnose(p, t)}</div>` : "";
+    const strip = `<section class="card">${salesSeg}<div class="kpis ${TV2() ? "eight" : "seven"}">${cards}</div><div class="banner" id="live-stale" hidden>This view is more than 30 minutes old, so the live refresh may be failing. The numbers are the last good ones.</div></section>`;
     // the comparison's running totals: a picked date from the history, else the server's typical day or yesterday
     const cmpCurves = !sh ? null : past ? (H && H.days[LIVE.date] ? Object.fromEntries(["gmv", "orders", "sessions"].map((k) => { let r = 0; return [k, H.days[LIVE.date][LIVE_IX[k]].map((v) => (r += v))]; })) : null)
       : Object.fromEntries(["gmv", "orders", "sessions"].map((k) => [k, sh.curves.series[k][typ ? "typical" : "yesterday"]]));
     const todayCurves = sh ? Object.fromEntries(["gmv", "orders", "sessions"].map((k) => [k, sh.curves.series[k].today])) : null;
+    if (TV2() && liveSales() === "placed" && todayCurves && cmpCurves && p.v2 && p.v2.curves && p.v2.curves.placed) {
+      // the running chart follows the sales headline: Order value placed, against the same comparison
+      const pc = p.v2.curves.placed, H2 = state.pages.live_history_v2;
+      todayCurves.gmv = pc.today;
+      if (past) { const a = H2 && H2.placed && H2.placed[LIVE.date]; let r = 0; cmpCurves.gmv = a ? a.map((v) => (r += v)) : null; }
+      else cmpCurves.gmv = pc[typ ? "typical" : "yesterday"];
+    }
     const chart = sh ? rgSec("Through the day", LIVE.view === "hour" ? "each hour, today against the comparison" : "running total, today against the comparison", `${legend([["--accent", "Today"], ["--muted", baseLabel + " (dashed)"]])}<div class="chart-box"><canvas id="c-live" aria-label="Today through the day"></canvas></div>`,
       { ctl: `<div class="seg" id="live-view">${[["run", "Running total"], ["hour", "By hour"]].map(([k, l]) => `<button type="button" data-v="${k}" aria-pressed="${LIVE.view === k}">${l}</button>`).join("")}</div><div class="seg" id="live-metric">${[["gmv", "Total sales"], ["orders", "Orders"], ["sessions", "Sessions"]].map(([k, l]) => `<button type="button" data-m="${k}" aria-pressed="${LIVE.metric === k}">${l}</button>`).join("")}</div>` }) : "";
-    const hours = sh && cmpCurves ? rgFold("Hour by hour", `today against ${esc(baseLabel)}, as Shopify shows a day`, liveHours(todayCurves, cmpCurves, t, past ? dLabel : typ ? "typical" : "yesterday"), { open: past, comp: "live-hours" }) : "";
+    const hours = sh && cmpCurves ? rgFold("Hour by hour", `today against ${esc(baseLabel)}, as Shopify shows a day`, TV2() ? liveHoursV2(p, t, past, typ, past ? dLabel : typ ? "Typical" : "Yesterday") : liveHours(todayCurves, cmpCurves, t, past ? dLabel : typ ? "typical" : "yesterday"), { open: past, comp: "live-hours" }) : "";
     // spend pacing: sales campaigns against yesterday's full day; the campaign view acts here
     const pace = ["meta_spend", "google_spend", "reddit_spend", "crm_aff_spend"].map((k) => items.get(k)).filter(Boolean).map((it) => kpiCard("channel_spend", {
       label: it.label === "Meta spends" ? "Meta" : it.label, value: it.value, na: it.na, est: it.estimate ? it.note || "estimated" : "",
@@ -677,17 +688,21 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       ], rows, { maxHeight: "50vh", full: true }));
     };
     const gk = p.gokwik;
-    const checkout = gk.na
-      ? rgSec("Checkout (GoKwik)", "", `<div class="ck"><span class="spill late"><i></i>Source late${gk.as_of ? " · last loaded " + esc(liveWhen(gk.as_of)) : ""}</span><span class="why">${esc(gk.na)}</span></div>`)
-      : rgSec("Checkout (GoKwik)", `as loaded ${gk.age_minutes == null ? "" : gk.age_minutes + " min ago"} · against the last ${gk.typical_days} days`, `${gk.stale ? `<div class="ck"><span class="spill late"><i></i>Source late</span><span class="why">The latest GoKwik load is old, so these rates are not current.</span></div>` : ""}
+    const ckQ = gk.na ? "" : `as loaded ${gk.age_minutes == null ? "" : gk.age_minutes + " min ago"} · against the last ${gk.typical_days} days`;
+    const ckBody = gk.na
+      ? `<div class="ck"><span class="spill late"><i></i>Source late${gk.as_of ? " · last loaded " + esc(liveWhen(gk.as_of)) : ""}</span><span class="why">${esc(gk.na)}</span></div>`
+      : `${gk.stale ? `<div class="ck"><span class="spill late"><i></i>Source late</span><span class="why">The latest GoKwik load is old, so these rates are not current.</span></div>` : ""}
         ${table([
           { label: "Step", text: true, render: (r) => esc(r.label) },
           { label: "Customers", render: (r) => esc(fmt(r.count, "int") ?? "n/a") },
           { label: "Step rate", render: (r) => (r.rate === null ? '<span class="na">–</span>' : esc(mFormat("percent", r.rate))) },
           { label: "Typical", render: (r) => (r.typical === null ? '<span class="na">–</span>' : esc(mFormat("percent", r.typical))) },
           { label: "vs typical", render: (r) => (r.delta === null ? '<span class="flat">–</span>' : deltaHtml(r.delta, "rate")) },
-        ], gk.steps)}`);
-    $main.innerHTML = strip + chart + hours + spend + `<div class="cols-2">${adTable("Meta campaigns today", p.meta)}${adTable("Google Ads campaigns today", p.google)}</div>` + checkout;
+        ], gk.steps)}`;
+    const checkout = rgSec("Checkout (GoKwik)", ckQ, ckBody);
+    const checkoutV2 = TV2() ? rgSec("Checkout (GoKwik)", ckQ, liveGokwikV2(p, gk.na ? "" : ckBody)) : checkout;
+    $main.innerHTML = strip + chart + hours + spend + `<div class="cols-2">${adTable("Meta campaigns today", p.meta)}${adTable("Google Ads campaigns today", p.google)}</div>` + checkoutV2;
+    if (TV2()) liveBindV2(p);
     liveTick();
     liveBindDate(p);
     rgScopeBind("live-scope");
@@ -706,6 +721,8 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       ] } }, unit);
     }
   };
+
+  /*__TODAY_V2__*/
 
   // ------------------------------------------------------------ routing
   async function show() {
@@ -771,6 +788,8 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       } else {
         state.config = await getJSON("/api/config");
         if (!state.config.dev_mode) await getJSON("/api/me");
+        // feature flags and the admin role (an older server without the route: all off)
+        try { const f = await getJSON("/api/features"); state.features = f.features || {}; state.admin = !!f.admin; } catch (e) { state.features = {}; state.admin = false; }
         state.status = await getJSON("/api/status").catch(() => null);
       }
     } catch (e) {
