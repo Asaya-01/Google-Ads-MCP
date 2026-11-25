@@ -447,23 +447,81 @@ def parse_plan(rows: list[list], spec: dict) -> dict[str, dict]:
     return out
 
 
-def load_plan(cfg: dict) -> tuple[dict, str | None]:
-    """The monthly targets from every media-plan workbook: ({date: {block:
-    [spend, gmv]}}, reason it could not be read or None). Only the Target
-    columns are read; achieved numbers come from the dashboard's own data."""
+def plan_actual_columns(rows: list[list], label: str, header_row: int) -> tuple[int | None, int | None]:
+    """A channel block's (Actual Spend column, Actual GMV column) on its
+    header row: the yellow columns the team types the day's actuals into."""
+    want = label.strip().upper()
+    for r in range(min(len(rows), 6)):
+        for c, cell in enumerate(rows[r]):
+            if str(cell).strip().upper() != want:
+                continue
+            spend = gmv = None
+            row = rows[header_row] if header_row < len(rows) else []
+            for k in range(c, min(c + 12, len(row))):
+                t = str(row[k]).lower()
+                if "actual" in t and "spend" in t and spend is None:
+                    spend = k
+                if "actual" in t and "gmv" in t and gmv is None:
+                    gmv = k
+            return spend, gmv
+    return None, None
+
+
+def parse_plan_actuals(rows: list[list], spec: dict) -> dict[str, dict]:
+    """{date: {block key: [actual spend, actual GMV]}} as typed into the
+    workbook. Unfilled days read as 0 or blank; which days count as filled
+    is decided where they are used (live.plan_actual_day)."""
+    out: dict[str, dict] = {}
+    for key, label in spec["blocks"].items():
+        found = plan_columns(rows, label)
+        if not found:
+            continue
+        sc, gc = plan_actual_columns(rows, label, found[0])
+        if sc is None and gc is None:
+            continue
+        state: dict = {}
+        for row in rows[found[0] + 1 :]:
+            if not row:
+                continue
+            day = parse_date(row[0], spec["date_format"], state)
+            if not day:
+                continue
+            spend = to_number(row[sc]) if sc is not None and sc < len(row) else None
+            gmv = to_number(row[gc]) if gc is not None and gc < len(row) else None
+            if spend is None and gmv is None:
+                continue
+            out.setdefault(day.isoformat(), {})[key] = [spend, gmv]
+    return out
+
+
+def load_plan_all(cfg: dict) -> tuple[dict, dict, str | None]:
+    """Targets and actuals from every media-plan workbook, one read each:
+    ({date: {block: [target spend, target GMV]}}, {date: {block: [actual
+    spend, actual GMV]}}, reason it could not be read or None)."""
     spec = cfg.get("media_plan")
     if not spec:
-        return {}, None
+        return {}, {}, None
     raw = os.environ.get(spec["sheet_env"]) or ""
     ids = [x.strip() for x in raw.split(",") if x.strip()]
     if not ids:
-        return {}, f"no media-plan workbooks set ({spec['sheet_env']})"
+        return {}, {}, f"no media-plan workbooks set ({spec['sheet_env']})"
     out: dict[str, dict] = {}
+    act: dict[str, dict] = {}
     errors = []
     for i in ids:
         try:
-            for day, blocks in parse_plan(fetch_rows(i, spec["tab"], 1), spec).items():
+            rows = fetch_rows(i, spec["tab"], 1)
+            for day, blocks in parse_plan(rows, spec).items():
                 out.setdefault(day, {}).update(blocks)
+            for day, blocks in parse_plan_actuals(rows, spec).items():
+                act.setdefault(day, {}).update(blocks)
         except Exception as exc:
             errors.append(f"{type(exc).__name__}: {exc}")
-    return out, "; ".join(errors) or None
+    return out, act, "; ".join(errors) or None
+
+
+def load_plan(cfg: dict) -> tuple[dict, str | None]:
+    """The monthly targets from every media-plan workbook: ({date: {block:
+    [spend, gmv]}}, reason it could not be read or None)."""
+    out, _, why = load_plan_all(cfg)
+    return out, why

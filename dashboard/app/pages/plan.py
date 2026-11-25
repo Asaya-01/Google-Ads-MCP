@@ -17,5 +17,8 @@ def build(ctx: Context) -> dict:
         # {date: {block: [target spend, target GMV]}}
         "days": {d: plan[d] for d in sorted(plan)},
         "achieved": mp.get("achieved") or {},
+        # {date: {block: [actual spend, actual GMV]}} as typed into the
+        # workbook (the Today tab's past-day comparison reads these)
+        "actuals": {d: v for d, v in sorted((ctx.data.get("media_plan_actuals") or {}).items())},
         "na": (ctx.data.get("unavailable") or {}).get("media_plan"),
     }

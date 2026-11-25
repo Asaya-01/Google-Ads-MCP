@@ -314,6 +314,21 @@ def snap_at(snaps: dict, day: str, t: float, slack: float = 0.6):
     return None if best is None else best[1]
 
 
+def plan_actual_day(actuals: dict | None, day: str) -> dict | None:
+    """The day's actual Performance spend and Total sales as the team typed
+    them into the media plan's Target vs Achieved tab ("Shopify" block, the
+    all-channel row), or None when the day is not filled in yet. A day counts
+    as filled once its Total sales, its total spend and the Meta and Google
+    spends are all above zero: the sheet is filled channel by channel the
+    next day, and a half-filled row would give a wrong ROAS."""
+    row = (actuals or {}).get(day) or {}
+    store, meta, google = row.get("store") or [None, None], row.get("meta") or [None], row.get("google") or [None]
+    spend, gmv = store[0], store[1]
+    if not (spend and gmv and spend > 0 and gmv > 0 and (meta[0] or 0) > 0 and (google[0] or 0) > 0):
+        return None
+    return {"spend": spend, "gmv": gmv, "roas": gmv / spend}
+
+
 def curve(hourly: list[float], upto: int | None) -> list[float | None]:
     """Running total at the end of each hour; None after hour `upto`."""
     out, run = [], 0.0
@@ -1074,6 +1089,16 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
     final_lbl = f"{day_name(d_f)} final" if d_f else "yesterday's final"
     f_gmv = dm["values"]["gmv"][i_f] if d_f else None
     f_sess = dm["values"]["sessions"][i_f] if d_f else None
+    # a day the team has filled in the media plan uses those actuals: they
+    # are the verified spend (every channel) and Total sales
+    acts = inp.get("plan_actuals") or {}
+    pa_y = plan_actual_day(acts, yesterday)
+    pa_f = plan_actual_day(acts, d_f) if d_f else None
+    if not d_f:  # no finished day in the dashboard's own data: the newest filled one in the plan
+        d_f = next((d for d in sorted(acts, reverse=True) if d <= yesterday and plan_actual_day(acts, d)), None)
+        pa_f = plan_actual_day(acts, d_f) if d_f else None
+    if pa_f:
+        f_spend, f_gmv, final_lbl = pa_f["spend"], pa_f["gmv"], f"{day_name(d_f)} actual"
     orders_now, sess_now = tv("orders"), tv("sessions")
     cvr_perf = ratio(orders_now, perf_now)
     scorecard = {
@@ -1103,7 +1128,8 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
                          note=(f"affiliate Rs {aff['value']:,.0f} + CRM Rs {crm['value']:,.0f}, estimated"
                                if crm_aff is not None else None), est=True),
                     item("total_spend", "Total Spends", "inr", perf_all_t,
-                         "a spend above is missing", ref=full_day(perf_all_t, dmv("perf_all_spend"), "perf_all_spend"),
+                         "a spend above is missing",
+                         ref=full_day(perf_all_t, pa_y["spend"] if pa_y else dmv("perf_all_spend"), "perf_all_spend"),
                          note="Meta + Google + Reddit + CRM + affiliates, sales only", est=True),
                 ],
             },
@@ -1341,7 +1367,8 @@ def baseline(
 
 def history(
     cfg: dict, store, shop, now: dt.datetime, base: dict, phases: dict,
-    perf_snaps: dict, notes: dict,
+    perf_snaps: dict, notes: dict, plan_actuals: dict | None = None,
+    spend_snaps: dict | None = None,
 ) -> int:
     """Hourly Orders, Total sales (Shopify's Sales report, as on D-1),
     sessions and add-to-carts for every past day in the last `days` days, so
@@ -1396,11 +1423,23 @@ def history(
         missing = [x for x in missing if not a <= x <= b]
         changed = True
     days = {d: v for d, v in days.items() if d >= first.isoformat()}
+    # each filled day's actual spend and Total sales from the media plan, and
+    # the spend so far the live tab saved on each run (from 25 Nov 2026 on):
+    # the team fills the sheet the next day, so these change after the day
+    actual = {}
+    for d in sorted(days):
+        a = plan_actual_day(plan_actuals, d)
+        if a:
+            actual[d] = [round(a["spend"], 2), round(a["gmv"], 2)]
+    spend = {d: v for d, v in (spend_snaps or {}).items() if d in days}
+    extra = {"actual": actual, "spend": spend}
+    if extra != cache.get("extra"):
+        changed = True
     if changed or cache.get("built") != today.isoformat():
         store.put_json(
             "cache/live/history.json",
             {"logic": SALES_LOGIC, "built": today.isoformat(), "days": days,
-             "empty": sorted(e for e in empty if e >= first.isoformat())},
+             "empty": sorted(e for e in empty if e >= first.isoformat()), "extra": extra},
         )
         store.put_json(
             "pages/live_history.json",
@@ -1412,11 +1451,18 @@ def history(
                 "days": {d: [v["orders"], v["gmv"], v["sessions"], v["atc"]] for d, v in sorted(days.items())},
                 "phases": {d: phases[d] for d in days if d in phases},
                 "perf": {d: v for d, v in perf_snaps.items() if d in days},
+                # {date: [actual Performance spend, actual Total sales]}: the
+                # media plan's Target vs Achieved, days the team has filled
+                "actual": actual,
+                # {date: [[hour, Performance spend so far], ...]} as the live tab showed it
+                "spend": spend,
                 "pending_days": len(missing),
                 "notes": [
                     "Orders and Total sales: Shopify's Sales report by hour, as on D-1 (influencer and sample orders left out).",
                     "Sessions and add-to-carts: Shopify sessions by hour.",
-                    "Perf sessions so far exist only for days the live tab ran on (kept from now on); spend so far is not kept for past days.",
+                    "Perf sessions so far exist only for days the live tab ran on (kept from now on).",
+                    "Full-day Performance spend and Total sales: the actuals typed into the media plan's Target vs Achieved tab, once the day is filled.",
+                    "Spend so far (for a same-time ROAS) exists only for days the live tab saved it on, from 25 Nov 2026.",
                 ],
             },
         )
@@ -1473,8 +1519,9 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
     # (read by the refresh into pages/plan_days.json): CRM is flow +
     # broadcast. Reddit falls back to its block's Target Spend column.
     ms = store.get_json("cache/manual_spends.json") or {}
-    inp["spend_targets"] = spend_targets(store.get_json("pages/plan_days.json") or {},
-                                         (ms.get("reddit") or {}).get("targets") or {})
+    plan_days = store.get_json("pages/plan_days.json") or {}
+    inp["spend_targets"] = spend_targets(plan_days, (ms.get("reddit") or {}).get("targets") or {})
+    inp["plan_actuals"] = plan_days.get("actuals") or {}
     inp["phases_eff"] = {
         d: p
         for d, p in zip(days.get("dates", []), days.get("phase_eff", []))
@@ -1535,7 +1582,8 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
             unavailable["perf_sessions"] = f"Shopify sessions by UTM: {exc}"
         inp["perf_snapshots"] = snaps
         try:  # past days for "compare with a past day"; never stops the live page
-            history(cfg, store, shop, now, inp["base"], inp["phases"], snaps, notes)
+            history(cfg, store, shop, now, inp["base"], inp["phases"], snaps, notes,
+                    inp.get("plan_actuals"), store.get_json("cache/live/spend_snaps.json") or {})
         except Exception as exc:
             notes["history"] = f"Past days for comparison not updated: {exc}"
     except Exception as exc:
@@ -1585,6 +1633,24 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
     return inp
 
 
+def save_spend_snapshot(store, cfg: dict, now: dt.datetime, page: dict) -> None:
+    """Performance spend so far, kept on every run (as Perf sessions are), so
+    a later day can be compared with this one at the same time of day."""
+    try:
+        it = next((i for g in (page.get("scorecard") or {}).get("groups", []) for i in g["items"]
+                   if i["key"] == "total_spend"), None)
+        if not it or it.get("value") is None:
+            return
+        day = now.date().isoformat()
+        t_now = round(now.hour + now.minute / 60, 3)
+        snaps = store.get_json("cache/live/spend_snaps.json") or {}
+        snaps[day] = [x for x in snaps.get(day, []) if x[0] < t_now] + [[t_now, round(it["value"], 2)]]
+        keep = sorted(snaps)[-cfg["live"]["history"]["days"]:]
+        store.put_json("cache/live/spend_snaps.json", {d: snaps[d] for d in keep})
+    except Exception:  # never fail the live page over the comparison store
+        pass
+
+
 def run() -> int:
     cfg = settings.config()
     store = default_store()
@@ -1592,6 +1658,7 @@ def run() -> int:
     inp = collect(cfg, store, now)
     page = build(inp, cfg, now)
     store.put_json("pages/live.json", page)
+    save_spend_snapshot(store, cfg, now, page)
     alerts.log(
         "Live refresh finished",
         unavailable=list(page["unavailable"]),
