@@ -281,3 +281,23 @@ tr.gv-panelrow > td { background: var(--surface-2, var(--accent-wash)); padding:
 .mv-dot.learn { background: var(--series-1); }
 .gv-copy { margin-left: 4px; }
 #gv-x tr.mv-row[data-dr] { cursor: pointer; }
+
+/* Today fixes (today_fixes_v2) */
+.kpis.eight { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .kpis.eight { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .kpis.eight { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.live-v2-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+.live-diag { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none; }
+.spill.down { background: var(--bad-bg); color: var(--bad); }
+.spill.pending { background: var(--warn-bg); color: var(--warn-ink); }
+.gk-load { flex-wrap: wrap; }
+.gk-load .pf-btn { margin-left: auto; }
+.lh2 { overflow: auto; }
+.lh2 table { font-size: 12.5px; }
+.lh2 thead th { position: sticky; top: 0; z-index: 2; background: var(--surface, var(--bg)); }
+.lh2 thead tr:nth-child(2) th { top: 29px; }
+.lh2 th.grp-h { text-align: center; border-bottom: 1px solid var(--line); }
+.lh2 td.cmp { color: var(--muted); }
+.lh2 td.dl { min-width: 58px; }
+.lh2 tr.partial td { color: var(--muted); background: var(--bg); }
+.lh2 tr.partial .chip { margin-left: 4px; }

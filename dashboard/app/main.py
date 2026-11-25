@@ -11,6 +11,7 @@ removing someone takes effect without a redeploy.
 from __future__ import annotations
 
 import json
+import re
 import time
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
@@ -161,6 +162,8 @@ def public_config():
         "sold_in_packs": settings.config().get("product_map", {}).get("sold_in_packs", []),
         "phase_overrides": settings.config().get("phases", {}).get("overrides", {}),
         "live_flag": settings.config().get("live", {}).get("flag_spend_without_return", {}),
+        "today_v2": {"amber": (settings.config().get("today_v2") or {}).get("gokwik", {}).get("amber_minutes"),
+                     "red": (settings.config().get("today_v2") or {}).get("gokwik", {}).get("red_minutes")},
         "checkout": {
             k: settings.config().get("pulse", {}).get(k)
             for k in ("watch_drop", "problem_drop", "baseline_days", "min_baseline_days")
@@ -299,6 +302,50 @@ def sign_out():
 @app.get("/api/me")
 def me(user: str = Depends(current_user)):
     return {"email": user}
+
+
+@app.get("/api/features")
+def feature_flags(user: str = Depends(current_user)):
+    """The feature flags in force and whether this person is an admin."""
+    from . import features
+
+    return {"features": features.flags(store()), "admin": features.is_admin(user)}
+
+
+MAX_GOKWIK_UPLOAD = 10 * 1024 * 1024
+
+
+@app.post("/api/gokwik/upload")
+async def gokwik_upload(request: Request, user: str = Depends(current_user)):
+    """Today fixes (A6): an admin uploads GoKwik's checkout export while the
+    automated load is late. Kept as its own snapshot; never mixed in."""
+    from . import features, gokwik_csv
+
+    if not features.on("today_fixes_v2", store()):
+        raise HTTPException(404, "Not enabled")
+    if not features.is_admin(user):
+        raise HTTPException(403, "Only admins can upload the GoKwik file")
+    data = await request.body()
+    if not data:
+        raise HTTPException(400, "Empty file")
+    if len(data) > MAX_GOKWIK_UPLOAD:
+        raise HTTPException(413, "File over 10 MB")
+    name = (request.headers.get("x-file-name") or "gokwik.csv").strip()[:200]
+    try:
+        return gokwik_csv.save(store(), data, name, user)
+    except gokwik_csv.UploadError as exc:
+        raise HTTPException(422, str(exc))
+
+
+@app.get("/api/gokwik/csv")
+def gokwik_csv_day(date: str, user: str = Depends(current_user)):
+    from . import features, gokwik_csv
+
+    if not features.on("today_fixes_v2", store()):
+        raise HTTPException(404, "Not enabled")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date or ""):
+        raise HTTPException(400, "date must be YYYY-MM-DD")
+    return gokwik_csv.summary(store(), date) or {"day": date, "none": True}
 
 
 @app.get("/api/status")
@@ -651,6 +698,7 @@ def page(tab: str, user: str = Depends(current_user)):
         "google_products",
         "google_assets",
         "plan_days",
+        "live_history_v2",
     }:
         raise HTTPException(404, "No such tab")
     payload = store().get_json(f"pages/{tab}.json")

@@ -969,6 +969,17 @@
     "required_sources": ["shopify_orders", "shopify_order_items", "gokwik_funnel", "gokwik_orders", "google_ads", "shopify_sessions"]
   },
 
+  "features": {
+    "_about": "Feature flags, all off until switched on. config/flags.json in the dashboard bucket overrides these at run time (app/features.py), so a feature goes off in seconds without a deploy. Off means the page and the jobs behave exactly as before.",
+    "today_fixes_v2": false,
+    "atc_drilldown": false
+  },
+  "today_v2": {
+    "_about": "Today tab fixes (flag today_fixes_v2). GoKwik: the card says when the last load landed; amber after amber_minutes, red after red_minutes. Uploaded CSVs (admin only) are shown for a day only when the automated BigQuery load has no rows for it, labelled as uploads.",
+    "gokwik": {"amber_minutes": 60, "red_minutes": 180, "max_upload_mb": 10},
+    "gokwik_csv_columns": ["Date", "UTM Source", "UTM Medium", "UTM Campaign", "UTM Term", "UTM Content", "Landing Page", "Origin Referrer", "Checkout Started", "Address Landed", "Payment Step Reached", "Payment Method Selected", "Sessions Converted", "Conversion %"],
+    "tagged_excludes": ["", "direct", "(direct)", "null", "none"]
+  },
   "live": {
     "flag_spend_without_return": {"_about": "Today's campaign tables flag a campaign with at least min_spend rupees spent and no platform value yet, once it is after_hour (IST). Platforms attribute late: a watch flag, not a verdict.", "min_spend": 3000, "after_hour": 14},
     "history": {
