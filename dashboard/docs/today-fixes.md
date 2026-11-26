@@ -45,6 +45,21 @@ packages are installed (Cloud Shell does not have the Firestore library).
 | A6 | The GoKwik card shows when the last load landed, turning amber after 60 minutes and red after 180 (`today_v2.gokwik`). When the automated load has no rows for today, an admin's CSV upload is shown instead, labelled "From CSV upload, HH:MM". It never mixes with the automated load. Two uploads on one day show the increase between them ("since last snapshot"). Uploads are stored in `private/atc/gokwik_csv/`, deduplicated by SHA-256. | `gk_conv_tagged`, `gk_method_to_order`, `gk_payment_to_method` |
 | A7 | A Perf ATC rate tile. "Diagnose →" links appear once `atc_drilldown` is on. | `perf_atc_rate` = Perf sessions with an add-to-cart ÷ Perf Sessions (same sessions as Perf Sessions; saved on each run for same-time comparisons) |
 
+## Hour by hour, today only (the team's sheet columns)
+
+The table opens on **Today only**: one row per hour so far, in the sheet's
+columns. **Against …** switches to the comparison table above.
+
+| Column | Hour rows | So far row |
+|---|---|---|
+| Overall Sessions, ATC, Orders, Revenue, AOV, Sessions to ATC %, CVR % (on sessions) | Shopify, by hour | sums / rates of the hours |
+| Perf. Sessions, CVR % (on perf) | Shopify sessions by hour × UTM source × campaign, with the Perf Sessions rule | sums / rates |
+| IC, ATC to IC %, IC to orders % | – (GoKwik gives one total per day) | GoKwik checkouts started: the automated load when it has today, else the newest upload |
+| Spends, RoAS, CPS | Meta and Google sales campaigns from their hourly reports, plus the estimated Reddit and CRM (by the clock) and affiliate (by each hour's sales) spend. The latest hour fills in late. | the Performance spend card, so RoAS is the Blended ROAS card |
+
+Revenue follows the sales headline switch (Total sales or Order value placed).
+The rate columns are coloured against the day's middle hour so far.
+
 ## Integrity check (before and after a deploy)
 
 ```bash

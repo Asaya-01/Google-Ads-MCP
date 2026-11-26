@@ -301,3 +301,5 @@ tr.gv-panelrow > td { background: var(--surface-2, var(--accent-wash)); padding:
 .lh2 td.dl { min-width: 58px; }
 .lh2 tr.partial td { color: var(--muted); background: var(--bg); }
 .lh2 tr.partial .chip { margin-left: 4px; }
+.lht table { font-size: 12px; }
+.lht th, .lht td { padding-left: 7px; padding-right: 7px; }
