@@ -105,6 +105,20 @@ def fetch_daily(cfg: dict, creds: dict, since: str, until: str) -> list[dict]:
     return out
 
 
+def fetch_hourly(cfg: dict, creds: dict, day: str) -> list[dict]:
+    """Spend per campaign per hour of one day (the account's time zone)."""
+    query = (
+        "SELECT segments.hour, campaign.id, campaign.name, metrics.cost_micros "
+        f"FROM campaign WHERE segments.date = '{day}' AND metrics.cost_micros > 0"
+    )
+    return [
+        {"campaign_id": str(r["campaign"]["id"]), "campaign_name": r["campaign"].get("name") or "",
+         "hour": int((r.get("segments") or {}).get("hour") or 0),
+         "spend": int((r.get("metrics") or {}).get("costMicros") or 0) / 1_000_000}
+        for r in _search_stream(cfg, creds, query)
+    ]
+
+
 def fetch_campaigns(cfg: dict, creds: dict) -> list[dict]:
     """Every campaign with its current name, paused ones included, so the
     Awareness set is built from names and never hard-coded."""

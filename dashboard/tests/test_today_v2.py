@@ -112,3 +112,24 @@ def test_gokwik_csv_checks_columns_dedupes_and_diffs():
 def test_gokwiks_serial_number_column_is_ignored():
     rows = gokwik_csv.parse(("S.no," + HEAD.replace("\n", "") + "\n1,2026-11-26,facebook,cpc,C,,,/,blank,3,3,3,2,1,33.33\n").encode())
     assert rows[0]["checkout_started"] == 3 and rows[0]["converted"] == 1 and rows[0]["date"] == "2026-11-26"
+
+
+def test_hourly_spend_is_sales_campaigns_plus_the_estimates_spread():
+    cfg = settings.config()
+    now = dt.datetime(2026, 10, 31, 2, 30, tzinfo=live.IST)
+    inp = {"today": {"gmv": [100.0, 300.0, 0.0] + [0.0] * 21},
+           "google_aware_ids": ["99"],
+           "v2": {"ads_hourly": {"errors": {},
+                                 "meta": [{"campaign_name": "WOA_MOF_Sales", "campaign_id": "1", "hour": 0, "spend": 50.0},
+                                          {"campaign_name": "WOA_Awareness_TOF_Traffic", "campaign_id": "2", "hour": 0, "spend": 999.0}],
+                                 "google": [{"campaign_name": "WOA_Pmax_Brand", "campaign_id": "7", "hour": 1, "spend": 20.0},
+                                            {"campaign_name": "WOA_DemandGen", "campaign_id": "99", "hour": 1, "spend": 888.0}]}}}
+    est = {"reddit": {"value": 25.0}, "crm": {"value": 0.0}, "affiliate": {"value": 40.0}}
+    sh = live.hourly_spend(inp, cfg, now, est)
+    assert sh["meta"][0] == 50.0 and sh["google"][1] == 20.0  # awareness left out
+    # Reddit by the clock (1 : 1 : 0.5 of 2.5 hours), affiliates by sales (100 : 300 : 0)
+    assert sh["total"][0] == pytest.approx(50 + 25 * 1 / 2.5 + 40 * 0.25)
+    assert sh["total"][1] == pytest.approx(20 + 25 * 1 / 2.5 + 40 * 0.75)
+    assert sh["total"][2] == pytest.approx(25 * 0.5 / 2.5)
+    assert sh["total"][3] is None
+    assert live.hourly_spend(inp, cfg, now, {"reddit": None, "crm": {"value": 0}, "affiliate": {"value": 1}})["total"] is None

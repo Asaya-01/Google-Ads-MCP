@@ -113,6 +113,42 @@ def fetch_insights(
     return rows
 
 
+def fetch_hourly(token: str, cfg: dict, day: str) -> list[dict]:
+    """Spend per campaign per hour of one day (the account's time zone,
+    IST), for the two allowlisted accounts. Meta allows no other breakdown
+    with the hourly one."""
+    rows: list[dict] = []
+    for account_id in cfg["accounts"]:
+        url = f"https://graph.facebook.com/{cfg['graph_api_version']}/{account_id}/insights"
+        params = {
+            "level": "campaign",
+            "time_range": json.dumps({"since": day, "until": day}),
+            "breakdowns": "hourly_stats_aggregated_by_advertiser_time_zone",
+            "fields": "campaign_id,campaign_name,spend",
+            "limit": 500,
+            "access_token": token,
+        }
+        while url:
+            for attempt in range(5):
+                resp = requests.get(url, params=params, timeout=120)
+                if resp.status_code < 500 and resp.status_code != 429:
+                    break
+                time.sleep(2**attempt)
+            body = resp.json()
+            if "error" in body:
+                raise MetaError(body["error"].get("message", "Meta API error"))
+            for r in body.get("data", []):
+                slot = str(r.get("hourly_stats_aggregated_by_advertiser_time_zone") or "")
+                if not slot[:2].isdigit():
+                    continue
+                rows.append({"account_id": account_id, "campaign_id": r.get("campaign_id"),
+                             "campaign_name": r.get("campaign_name") or "", "hour": int(slot[:2]),
+                             "spend": float(r.get("spend") or 0)})
+            url = (body.get("paging") or {}).get("next")
+            params = None
+    return rows
+
+
 def fetch_all(
     token: str, cfg: dict, since: str, until: str, level: str = "ad"
 ) -> list[dict]:

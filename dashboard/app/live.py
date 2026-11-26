@@ -1231,7 +1231,7 @@ def build(inp: dict, cfg: dict, now: dt.datetime) -> dict:
         "attribute purchases after the fact, so today's ROAS usually "
         "improves by tomorrow. Compare spend as a share of yesterday's."
     )
-    page_v2 = build_v2(inp, cfg, now, shopify, gk) if inp.get("v2") else None
+    page_v2 = build_v2(inp, cfg, now, shopify, gk, est) if inp.get("v2") else None
     return {
         **({"v2": page_v2} if page_v2 else {}),
         "title": "Today (live)",
@@ -1358,7 +1358,50 @@ def collect_v2(cfg: dict, store, shop, now: dt.datetime, inp: dict, aware: set, 
     return out
 
 
-def build_v2(inp: dict, cfg: dict, now: dt.datetime, shopify: dict | None, gk: dict | None) -> dict:
+def hourly_spend(inp: dict, cfg: dict, now: dt.datetime, est: dict | None) -> dict:
+    """Performance spend per hour today, as the Performance spend card counts
+    it: Meta and Google sales campaigns from their hourly reports (awareness
+    and Reach left out), plus the estimated Reddit, CRM and affiliate spend
+    spread the way it is estimated (Reddit and CRM by the clock, affiliates
+    by each hour's Total sales)."""
+    ah = (inp.get("v2") or {}).get("ads_hourly") or {}
+    errs = dict(ah.get("errors") or {})
+    t = now.hour + now.minute / 60
+    h_now = min(23, int(t))
+    scfg = cfg["sessions"]
+    aware = set(inp.get("google_aware_ids") or [])
+
+    def perf(rows, ids):
+        out = [0.0] * 24
+        for r in rows or []:
+            if _kind(r.get("campaign_name") or "", r.get("campaign_id"), scfg, ids) == "perf" and 0 <= r["hour"] <= 23:
+                out[r["hour"]] += r["spend"]
+        return out
+
+    m = perf(ah.get("meta"), set()) if "meta" in ah else None
+    g = perf(ah.get("google"), aware) if "google" in ah else None
+    clock = [1.0 if h < h_now else (t - h_now if h == h_now else 0.0) for h in range(24)]
+    cs = sum(clock) or 1.0
+    gmv = (inp.get("today") or {}).get("gmv") or [0.0] * 24
+    gs = sum(gmv[: h_now + 1]) or 0.0
+    other = [0.0] * 24
+    missing = []
+    for ch, by in (("reddit", "clock"), ("crm", "clock"), ("affiliate", "sales")):
+        v = ((est or {}).get(ch) or {}).get("value")
+        if v is None:
+            missing.append(ch)
+            continue
+        for h in range(h_now + 1):
+            other[h] += v * (clock[h] / cs if by == "clock" or not gs else gmv[h] / gs)
+    total = None
+    if m is not None and g is not None and not missing:
+        total = [round(m[h] + g[h] + other[h], 2) if h <= h_now else None for h in range(24)]
+    cut = lambda a: [round(x, 2) if h <= h_now else None for h, x in enumerate(a)] if a else None  # noqa: E731
+    return {"meta": cut(m), "google": cut(g), "estimated": cut(other), "total": total,
+            "missing": missing, "errors": errs}
+
+
+def build_v2(inp: dict, cfg: dict, now: dt.datetime, shopify: dict | None, gk: dict | None, est: dict | None = None) -> dict:
     """The fixes' additions to the live page: ATC and Order value placed by
     hour against the same comparisons as the existing curves, the partial
     hour's comparison minutes, Perf ATC rate and GoKwik's load lateness."""
@@ -1411,6 +1454,8 @@ def build_v2(inp: dict, cfg: dict, now: dt.datetime, shopify: dict | None, gk: d
             "yesterday": ratio(a_y, s_y),
             "typical": statistics.median(rates) if len(rates) >= max(1, lcfg.get("min_typical_days", 2)) else None,
         }
+    if v2.get("ads_hourly") is not None:
+        out["spend_hours"] = hourly_spend(inp, cfg, now, est)
     g = cfg.get("today_v2", {}).get("gokwik", {})
     out["gokwik_load"] = gokwik_lateness((gk or {}).get("rows") if gk else {}, now, g.get("amber_minutes", 60), g.get("red_minutes", 180))
     out["gokwik_load"]["today_rows"] = bool(gk and (gk.get("rows") or {}).get(today))
@@ -1800,6 +1845,24 @@ def collect(cfg: dict, store, now: dt.datetime) -> dict:
             )
         except Exception as exc:
             unavailable["google"] = f"Google Ads API: {exc}"
+    # Today fixes: spend per hour today (Meta and Google, from their APIs)
+    if "v2" in inp:
+        ah: dict = {"errors": {}}
+        if token:
+            try:
+                ah["meta"] = meta.fetch_hourly(token, mcfg, day)
+            except Exception as exc:
+                ah["errors"]["meta"] = f"Meta API: {exc}"
+        else:
+            ah["errors"]["meta"] = "Meta token not in Secret Manager"
+        if all(creds.values()):
+            try:
+                ah["google"] = google_ads.fetch_hourly(gcfg, creds, day)
+            except Exception as exc:
+                ah["errors"]["google"] = f"Google Ads API: {exc}"
+        else:
+            ah["errors"]["google"] = "Google Ads credentials not in Secret Manager"
+        inp["v2"]["ads_hourly"] = ah
     return inp
 
 
