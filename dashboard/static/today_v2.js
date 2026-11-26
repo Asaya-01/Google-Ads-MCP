@@ -172,6 +172,7 @@ function liveGokwikV2(p, oldPanel) {
     <p class="legend-note">Tagged = a UTM source other than direct. Flags: method selected → order under 85%, payment step → method selected under 62%.${inc ? ` Since last snapshot: ${esc(new Date(inc.from).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }))} → ${esc(up)}.` : ""}</p>`;
 }
 function liveBindV2(p) {
+  document.getElementById("live-hview")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-h]"); if (b) { liveSetHview(b.dataset.h); destroyCharts(); R.live(p); } });
   document.getElementById("live-sales")?.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-s]"); if (b) { liveSetSales(b.dataset.s); destroyCharts(); R.live(p); } });
   const btn = document.getElementById("gk-up"), inp = document.getElementById("gk-file");
   if (btn && inp) {
@@ -189,4 +190,71 @@ function liveBindV2(p) {
       } catch (e) { btn.disabled = false; btn.textContent = "Upload GoKwik CSV"; alert(`Not uploaded: ${e.message}`); }
     });
   }
+}
+
+/* Today only, hour by hour, in the team's sheet's columns (up to Sessions → ATC %):
+   what is working and what is not, hour against hour of the same day. */
+const liveHview = () => (liveQ().get("hours") === "cmp" ? "cmp" : "today");
+function liveSetHview(v) {
+  const q = liveQ();
+  if (v === "cmp") q.set("hours", "cmp"); else q.delete("hours");
+  history.replaceState(null, "", "#live" + (q.toString() ? "?" + q.toString() : ""));
+}
+function liveIcToday(p) {
+  // IC = GoKwik checkouts started (all traffic), as in the team's sheet: the automated
+  // load when it has today, else the newest upload; GoKwik gives one total per day
+  const gk = p.gokwik, v2 = p.v2 || {};
+  if (gk && !gk.na && v2.gokwik_load && v2.gokwik_load.today_rows && gk.steps) return { v: gk.steps[0].count, src: "GoKwik load" };
+  const S = LIVE.gkcsv;
+  if (S && S.day === p.today && S.data && !S.data.none) {
+    const at = new Date(S.data.upload.uploaded_at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" });
+    return { v: S.data.all.checkout_started, src: `GoKwik upload, ${at}` };
+  }
+  return null;
+}
+function liveHoursToday(p, t) {
+  const T = liveTodayHours(p), v2 = p.v2 || {}, ph = v2.perf_hours;
+  const hNow = Math.min(23, Math.floor(t)), mins = Math.round((t - hNow) * 60);
+  const sales = liveSales() === "placed" ? "placed" : "gmv";
+  const v = (k, h) => (T[k] ? T[k][h] : null);
+  const rows = [];
+  for (let h = 0; h <= hNow; h++) {
+    const n = v("sessions", h), a = v("atc", h), o = v("orders", h), r = v(sales, h);
+    rows.push({ h, partial: h === hNow && mins > 0, label: `${String(h).padStart(2, "0")}:00 · ${h % 12 || 12} ${h < 12 ? "am" : "pm"}`,
+      n, perf: ph ? ph.sessions[h] : null, a, o, r, aov: o ? r / o : null, atcR: n ? a / n : null });
+  }
+  const sum = (k) => rows.reduce((x, r) => (r[k] == null ? x : (x ?? 0) + r[k]), null);
+  const tot = { label: `So far (to ${String(hNow).padStart(2, "0")}:${String(mins).padStart(2, "0")})`, total: true,
+    n: sum("n"), perf: ph ? sum("perf") : null, a: sum("a"), o: sum("o"), r: sum("r") };
+  tot.aov = tot.o ? tot.r / tot.o : null; tot.atcR = tot.n ? tot.a / tot.n : null;
+  const ic = liveIcToday(p);
+  // the sheet's colouring: each column against the day's full hours so far (green above, red below)
+  const done = rows.filter((r) => !r.partial && r.n >= 200);
+  const tint = (k, val) => {
+    if (val == null || done.length < 3) return "";
+    const xs = done.map((r) => r[k]).filter((x) => x != null).sort((a, b) => a - b);
+    const med = xs[Math.floor(xs.length / 2)];
+    if (!med) return "";
+    const d = val / med - 1;
+    if (Math.abs(d) < 0.1) return "";
+    const s = Math.min(0.45, Math.abs(d) * 0.9).toFixed(2);
+    return ` style="background:${d > 0 ? `rgba(46,160,67,${s})` : `rgba(207,34,46,${s})`}"`;
+  };
+  const f = (val, fm) => (val == null ? '<span class="na">–</span>' : esc(mFormat(fm, val)));
+  const cell = (r, k, fm, heat) => `<td${heat && !r.partial && !r.total ? tint(k, r[k]) : ""}>${f(r[k], fm)}</td>`;
+  const body = [...rows, tot].map((r) => `<tr class="${r.total ? "total" : ""}${r.partial ? " partial" : ""}">
+    <td class="text">${esc(r.label)}${r.partial ? ` <span class="chip pending" title="The hour under way">partial · ${mins} min</span>` : ""}</td>
+    ${cell(r, "n", "count")}${cell(r, "perf", "count")}${cell(r, "a", "count")}
+    <td>${r.total ? (ic ? `${esc(mFormat("count", ic.v))} <span class="sub" title="${esc(ic.src)}">day total</span>` : '<span class="na" title="No GoKwik numbers for today yet: upload the export on the Checkout card">–</span>') : '<span class="na" title="GoKwik gives checkouts started as one total per day">–</span>'}</td>
+    ${cell(r, "o", "count")}${cell(r, "r", "currency")}${cell(r, "aov", "currency", true)}${cell(r, "atcR", "percent", true)}</tr>`).join("");
+  const H = (id, l, tip) => `<th>${id ? mHead(id, l) : `${esc(l)}${tip ? ` <span class="tip" tabindex="0" role="note" data-tip="${esc(tip)}" aria-label="${esc(tip)}">i</span>` : ""}`}</th>`;
+  return `<div class="table-wrap lh2 lht" style="max-height:66vh"><table><thead><tr><th class="text">Hour (IST)</th>
+    ${H("sessions", "Overall Sessions")}${H(null, "Perf. Sessions", "The team's paid, affiliate and CRM sources with a UTM campaign; awareness and Reach left out: the Perf Sessions card, hour by hour.")}${H("atc", "ATC")}${H(null, "IC", "Checkouts started in GoKwik (all traffic), as in the team's sheet. GoKwik gives one total per day, so it shows on the So far row only: from the automated load when it has today, else the newest uploaded export.")}
+    ${H("orders", "Orders")}${H(sales === "placed" ? "order_value_placed" : "total_sales", sales === "placed" ? "Order value placed" : "Revenue")}${H("aov", "AOV")}${H("atc_rate", "Sessions to ATC %")}</tr></thead>
+    <tbody>${body}</tbody></table></div>
+    <p class="legend-note">Today only. AOV and Sessions to ATC % are coloured against the day's middle hour so far (hours with at least 200 sessions): green above, red below; the hour under way is never coloured. Volumes are not coloured: nights are always quieter.${ph ? "" : " Perf. Sessions by hour: " + esc(v2.perf_hours_error || "not read yet (the next live run reads them)") + "."}${ph && ph.truncated ? " Perf. Sessions may be slightly low: the breakdown hit Shopify's row limit." : ""} Revenue follows the sales headline switch above.</p>`;
+}
+function liveHoursBlock(p, t, past, typ, cmpLabel) {
+  const seg = `<div class="seg" id="live-hview" role="group" aria-label="Hour table">${[["today", "Today only"], ["cmp", `Against ${cmpLabel}`]].map(([k, l]) => `<button type="button" data-h="${k}" aria-pressed="${liveHview() === k}">${esc(l)}</button>`).join("")}</div>`;
+  return `<div class="live-v2-bar">${seg}</div>` + (liveHview() === "cmp" ? liveHoursV2(p, t, past, typ, cmpLabel) : liveHoursToday(p, t));
 }

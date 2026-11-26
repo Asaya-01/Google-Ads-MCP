@@ -73,6 +73,9 @@ def parse(data: bytes) -> list[dict]:
     if not rows:
         raise UploadError("the file is empty")
     head = [h.strip() for h in rows[0]]
+    # GoKwik's download starts with a serial-number column ("S.no"): ignored
+    if head and head[0].lower().replace(" ", "").replace(".", "") in ("sno", "srno", "serialno", "#"):
+        head, rows = head[1:], [r[1:] for r in rows]
     if head != want:
         missing = [c for c in want if c not in head]
         extra = [c for c in head if c not in want]
