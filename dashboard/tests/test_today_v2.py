@@ -52,6 +52,11 @@ class FakeShop:
         d0, d1 = dt.date.fromisoformat(since), dt.date.fromisoformat(until)
         return {(d0 + dt.timedelta(days=i)).isoformat(): [1.0] * 24 for i in range((d1 - d0).days + 1)}
 
+    def sessions_by_hour_utm(self, day):
+        return [{"hour": 9, "utm_source": "facebook", "utm_campaign": "WOA_MOF_Sales", "sessions": 30, "atc": 4},
+                {"hour": 9, "utm_source": "", "utm_campaign": "", "sessions": 50, "atc": 2},
+                {"hour": 10, "utm_source": "facebook", "utm_campaign": "WOA_MOF_Sales", "sessions": 20, "atc": 1}]
+
     def window(self, start, end, names):
         self.calls.append(("window", start, end))
         return {"sessions": 5, "atc": 1, "orders": 0, "gmv": 0.0, "placed": 0.0}
@@ -64,6 +69,8 @@ def test_collect_v2_reads_past_days_once_and_the_same_minutes_yesterday():
     out = live.collect_v2(cfg, st, shop, NOW, {"session_rows": rows}, set(), set())
     assert ("window", "2026-10-30T14:00:00", "2026-10-30T14:33:59") in shop.calls
     assert out["perf_atc_now"] == 2
+    assert out["perf_hours"]["sessions"][9] == 30 and out["perf_hours"]["sessions"][10] == 20
+    assert out["perf_hours"]["atc"][9] == 4
     n = len([c for c in shop.calls if c[0] == "placed"])
     shop.calls.clear()
     live.collect_v2(cfg, st, shop, NOW, {"session_rows": rows}, set(), set())
@@ -100,3 +107,8 @@ def test_gokwik_csv_checks_columns_dedupes_and_diffs():
     assert s["since_last"]["tagged"]["converted"] == 20 and s["since_last"]["tagged"]["method_to_order"] == pytest.approx(20 / 30)
     assert s["uploads_for_day"] == 2
     assert gokwik_csv.summary(st, "2026-11-23") is None
+
+
+def test_gokwiks_serial_number_column_is_ignored():
+    rows = gokwik_csv.parse(("S.no," + HEAD.replace("\n", "") + "\n1,2026-11-26,facebook,cpc,C,,,/,blank,3,3,3,2,1,33.33\n").encode())
+    assert rows[0]["checkout_started"] == 3 and rows[0]["converted"] == 1 and rows[0]["date"] == "2026-11-26"

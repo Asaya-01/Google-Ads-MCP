@@ -155,6 +155,19 @@ class Shopify:
             out.setdefault(at.date().isoformat(), [0.0] * 24)[at.hour] = round(float(r.get("total_sales") or 0), 2)
         return {k: v for k, v in out.items() if since <= k <= until}
 
+    def sessions_by_hour_utm(self, day: str, limit: int = 5000) -> list[dict]:
+        """Sessions and sessions with add-to-cart for one IST day by hour of
+        day, UTM source and UTM campaign: enough to count Perf sessions hour
+        by hour with the same rule as the Perf Sessions card."""
+        rows = self.shopifyql(
+            "FROM sessions SHOW sessions, sessions_with_cart_additions "
+            f"GROUP BY hour_of_day, utm_source, utm_campaign SINCE {day} UNTIL {day} "
+            f"ORDER BY sessions DESC LIMIT {limit}"
+        )
+        return [{"hour": _int(r.get("hour_of_day")), "utm_source": r.get("utm_source") or "",
+                 "utm_campaign": r.get("utm_campaign") or "", "sessions": _int(r.get("sessions")),
+                 "atc": _int(r.get("sessions_with_cart_additions"))} for r in rows]
+
     def window(self, start: str, end: str, exclude_names: list[str]) -> dict:
         """Sessions, sessions with add-to-cart, Orders, Total sales and Order
         value placed between two local (IST) date-times, e.g.

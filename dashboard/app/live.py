@@ -1327,6 +1327,17 @@ def collect_v2(cfg: dict, store, shop, now: dt.datetime, inp: dict, aware: set, 
         y = f"{yesterday}T{h:02d}"
         out["partial"] = {"hour": h, "minutes": m,
                           "yesterday": shop.window(f"{y}:00:00", f"{y}:{m - 1:02d}:59", names)}
+    # Perf sessions and their add-to-carts hour by hour today (the today-only table)
+    try:
+        hrs = shop.sessions_by_hour_utm(day)
+        ps, pa = [0] * 24, [0] * 24
+        for h in range(24):
+            rows_h = [r for r in hrs if r["hour"] == h]
+            ps[h] = report_perf_sessions(rows_h, day, aware, known, cfg)
+            pa[h] = report_perf_atc(rows_h, day, aware, known, cfg)
+        out["perf_hours"] = {"sessions": ps, "atc": pa, "truncated": len(hrs) >= 5000}
+    except Exception as exc:  # the table shows the column as unavailable
+        out["perf_hours_error"] = f"{type(exc).__name__}: {exc}"
     # Perf sessions with an add-to-cart so far, saved on every run like Perf sessions
     snaps = store.get_json("cache/live/perf_atc.json") or {}
     if inp.get("session_rows") is not None:
@@ -1381,6 +1392,11 @@ def build_v2(inp: dict, cfg: dict, now: dt.datetime, shopify: dict | None, gk: d
         out["placed_typical"] = statistics.median(tv) if tv else None
     if v2.get("partial"):
         out["partial"] = v2["partial"]
+    if v2.get("perf_hours"):
+        out["perf_hours"] = {k: (v[: upto + 1] + [None] * (23 - upto) if isinstance(v, list) else v)
+                             for k, v in v2["perf_hours"].items()}
+    elif v2.get("perf_hours_error"):
+        out["perf_hours_error"] = v2["perf_hours_error"]
     snaps = v2.get("perf_atc_snaps") or {}
     perf_now = (inp.get("perf_sessions") or {}).get("value")
     psnaps = inp.get("perf_snapshots") or {}
