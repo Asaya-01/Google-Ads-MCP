@@ -341,8 +341,15 @@ function rgKpi(id, g, o = {}) {
   const perDay = o.perDay && v != null && w.days > 1 ? `${mVal(id, v / w.days, true)} a day` : "";
   return kpiCard(id, {
     value: v, prev: pw ? (pw[k] ?? null) : null, change: pw ? g.change(k) : null, small: mSmall(id, pw),
-    na: v == null ? rgNa(w, k) : null, est: rgEstFor(k, w), sub: perDay, ...o,
+    na: v == null ? rgNa(w, k) : null, est: rgEstFor(k, w), sub: perDay, abs: rgAbs(id, k, w, pw), ...o,
   });
+}
+/* The absolute change on the engine's own basis: rates directly; counts and
+   sums per day when the two periods differ in length (as the % does). */
+function rgAbs(id, k, w, pw) {
+  if (!pw || w[k] == null || pw[k] == null) return false;
+  if (RG.eng.isRate(k) || w.days === pw.days) return mAbsDelta(id, w[k], pw[k]) || false;
+  return mAbsDelta(id, w[k] / Math.max(w.days, 1), pw[k] / Math.max(pw.days, 1), " a day") || false;
 }
 /* A section: title, one line saying what it answers, optional controls and link. */
 const rgSec = (title, q, body, o = {}) => `<section class="card${o.cls ? " " + o.cls : ""}" ${o.id ? `id="${o.id}"` : ""} ${o.comp ? `data-component="${o.comp}"` : ""}><div class="sec-head"><h2>${esc(title)}</h2>${q ? `<span class="q">${q}</span>` : ""}${o.ctl || o.link ? `<span class="ctl">${o.ctl || ""}${o.link || ""}</span>` : ""}</div>${body}</section>`;
@@ -445,6 +452,7 @@ const OV_KPIS = [
   ["total_sales", null, { perDay: true }], ["orders", null, {}], ["aov", null, {}],
   ["blended_roas", "marketing", {}], ["perf_spend", "marketing", { perDay: true }], ["cvr", "funnel", {}], ["perf_cvr", "funnel", {}],
 ];
+const OV_TRENDS = ["aov", "cvr", "perf_cvr", "atc_rate", "blended_roas"];
 /* What changed: deterministic, ranked by how much each moved Total sales. */
 function rgWhatChanged(g) {
   if (!g.pw) return [];
@@ -505,10 +513,13 @@ R.overview = (p) => {
     const mseg = `<div class="seg" id="ov-metric" role="group" aria-label="Chart metric">${[["gmv", "Total sales"], ["orders", "Orders"]].map(([k, l]) => `<button type="button" data-m="${k}" aria-pressed="${OV.metric === k}">${l}</button>`).join("")}</div>`;
     host.innerHTML = `
       <section class="card" data-component="overview-kpis"><div class="kpis seven">${kpis}</div>${g.note ? `<p class="legend-note">${esc(g.note)}</p>` : ""}</section>
+      ${rgSec("Why it moved", "what the numbers say is driving the change, against the comparison", insOverview(g), { comp: "overview-insights" })}
+      ${rgSec("Trends", `each day of ${esc(rgSpan(RG.from, RG.to))} against the comparison: the rates that decide sales and return`, rgTrends(g, OV_TRENDS), { comp: "overview-trends" })}
       ${rgSec("What changed", "the biggest movers behind the change, each linked to its detail", changed, { comp: "what-changed" })}
       ${rgSec(OV.metric === "gmv" ? "Total sales per day" : "Orders per day", "each day of the picked dates", `${rgDayLegend()}<div class="chart-box"><canvas id="c-ov" aria-label="${OV.metric === "gmv" ? "Total sales" : "Orders"} per day"></canvas></div>`, { ctl: mseg, comp: "sales-per-day-chart" })}
       ${rgSec("Target vs achieved", `the media plan for ${esc(rgSpan(RG.from, RG.to))}, every day picked`, rgTargets(RG.from, RG.to), { comp: "targets" })}`;
     rgDayChart("c-ov", OV.metric, OV.metric === "gmv" ? "inr" : "int", OV.metric === "gmv" ? "Total sales" : "Orders");
+    rgTrendCharts(g, OV_TRENDS);
     document.getElementById("ov-metric").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-m]"); if (b && b.dataset.m !== OV.metric) { OV.metric = b.dataset.m; destroyCharts(); R.overview(p); } });
   });
 };

@@ -61,6 +61,7 @@ function rgCpp(g) {
   const v = r ? s / r : null, pv = g.pw && pr ? ps / pr : null;
   return { value: v, prev: g.pw ? pv : null, change: v != null && pv ? v / pv - 1 : null, small: ps < METRIC_RULES.min_spend };
 }
+const MK_TRENDS = ["blended_roas", "cps", "perf_cvr", "aov"];
 R.marketing = (p) => {
   const metaNA = p.unavailable?.meta;
   const sheetNA = Object.entries(p.unavailable || {}).filter(([k]) => k.startsWith("sheet_")).map(([, v]) => v);
@@ -87,6 +88,8 @@ R.marketing = (p) => {
         kpiCard("cpp", { ...cpp, ...tag })];
     host.innerHTML = filters + `
       <section class="card" data-component="marketing-kpis"><div class="kpis${kpis.length === 6 ? " six" : ""}">${kpis.join("")}</div></section>
+      ${sc === "aw" ? "" : rgSec("Why it moved", "return on spend, cost of traffic and platform claims, against the comparison", insMarketing(g), { comp: "marketing-insights" })}
+      ${sc === "aw" ? "" : rgSec("Trends", "each day against the comparison", rgTrends(g, MK_TRENDS), { comp: "marketing-trends" })}
       ${rgSec("Channels: spend, platform claims and Shopify", "what each channel cost, what its platform claims, and what Shopify credits it with (last click); Meta and Google open in their own sub-tabs", trReconHtml(g, { maxHeight: "70vh" }), { comp: "channel-reconciliation" })}
       <div class="cols-2">
         ${rgSec("Spend per day", "by channel", `${legend([["--series-1", "Meta"], ["--series-2", "Google"], ...(sc === "aw" ? [] : [["--good", "Affiliate"], ["--accent", "CRM"], ["--bad", "Reddit"]])])}<div class="chart-box"><canvas id="c-mk-spend" aria-label="Spend per day by channel"></canvas></div>`, { comp: "spend-per-day-chart" })}
@@ -94,6 +97,7 @@ R.marketing = (p) => {
       </div>`;
     rgScopeBind("mk-scope");
     rgSpendCharts();
+    if (sc !== "aw") rgTrendCharts(g, MK_TRENDS);
   });
 };
 

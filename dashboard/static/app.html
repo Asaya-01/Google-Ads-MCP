@@ -158,6 +158,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     <div class="brand"><h1>asaya</h1><span>D2C</span></div>
     <nav class="tabs" id="tabs" aria-label="Dashboard tabs"></nav>
     <div class="bar-right">
+      <span class="today-chip" id="today-chip" title="Today's date (IST)"></span>
       <span id="status-pill"></span>
       <span id="ask-slot"></span>
       <button type="button" class="theme-toggle" id="theme-toggle" aria-pressed="false"></button>
@@ -363,6 +364,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
   /*__RANGE_FUNNEL__*/
   /*__RANGE_TABS__*/
   /*__RANGE_TREE__*/
+  /*__INSIGHTS__*/
   /*__META_VIEW__*/
   /*__GOOGLE_VIEW__*/
   /*__RANGE_BASKET__*/
@@ -798,6 +800,7 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
       return;
     }
     Object.assign(METRIC_RULES, state.config.display || {});
+    paintToday();
     askMount();
     if (!location.hash) { try { const t = localStorage.getItem("asaya-dash-tab"); if (t) history.replaceState(null, "", "#" + t); } catch (e) { /* storage blocked */ } }
     show();
@@ -811,6 +814,17 @@ td .cell-na { color: var(--muted); cursor: help; border-bottom: 1px dotted var(-
     if (window.ResizeObserver) new ResizeObserver(setBarH).observe(headerEl);
   }
   window.addEventListener("hashchange", show);
+  /* today's date in the header on every tab (IST), and the last complete day the
+     reports run to; updated each minute so it turns over at midnight */
+  function paintToday() {
+    const el = document.getElementById("today-chip");
+    if (!el) return;
+    const now = new Date(), ist = (o) => now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", ...o });
+    const d1 = state.status && state.status.d1;
+    el.innerHTML = `<b>${esc(ist({ weekday: "short", day: "numeric", month: "short", year: "numeric" }))}</b>${d1 ? `<span class="rg-dim"> · reports to ${esc(new Date(d1 + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" }))}</span>` : ""}`;
+    el.title = `Today (IST). Range tabs report complete days up to ${d1 || "the last refresh"}; the Today tab is live.`;
+  }
+  paintToday(); setInterval(paintToday, 60000);
   const rerender = () => { if (state.tab && state.pages[state.tab]) { destroyCharts(); R[state.tab](state.pages[state.tab]); } };
   const themeBtn = document.getElementById("theme-toggle");
   const paintToggle = () => {
