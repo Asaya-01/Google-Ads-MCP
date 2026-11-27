@@ -129,6 +129,7 @@ MODES = {
 }
 
 RATE_FIELDS = [
+    "cpnc",
     "roas",
     "aov",
     "cvr",
@@ -222,6 +223,7 @@ def derive(w: dict) -> dict:
     w["perf_overall_roas"] = ratio(g("gmv"), g("perf_all_spend"))
     # the team's one ROAS: store GMV / performance spend on every channel
     w["roas"] = ratio(g("store_gmv"), g("perf_all_spend"))
+    w["cpnc"] = ratio(g("perf_all_spend"), g("new_orders"))
     w["address_rate"] = ratio(g("gk_address"), g("ic"))
     w["payment_rate"] = ratio(g("gk_payment"), g("gk_address"))
     w["paid_rate"] = ratio(g("gk_converted"), g("gk_payment"))

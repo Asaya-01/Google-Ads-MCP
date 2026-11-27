@@ -324,3 +324,13 @@ tr.gv-panelrow > td { background: var(--surface-2, var(--accent-wash)); padding:
 .trend-v { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .trend-d { font-size: 12px; margin: 2px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trend-c { height: 120px; position: relative; }
+/* month pacing */
+.paces { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); }
+.pace { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.pace-l { font-size: 12.5px; color: var(--ink-2); }
+.pace-v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pace-v.up { color: var(--good); } .pace-v.down { color: var(--bad); }
+.pace-s { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.pace-s b.up { color: var(--good); } .pace-s b.down { color: var(--bad); }
+.rg-ch-note { margin: 0 0 8px; }
+.trend-na { font-size: 12.5px; margin: 6px 0 0; }

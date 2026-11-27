@@ -465,3 +465,35 @@ def test_a_new_variant_is_known_even_when_a_window_has_no_buyers_of_it(tmp_path)
     out = dict(json.loads(subprocess.run(["node", "-e", script, str(f)], capture_output=True, text=True, check=True).stdout))
     epoch = dt.date.fromisoformat(c["epoch"])
     assert out["Aqua Rush"] == (dt.date(2026, 3, 20) - epoch).days and out["Fresh"] == 0
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node is not installed")
+def test_why_it_moved_compares_the_cohort_with_the_one_before(tmp_path):
+    """100 new customers in each of two 30-day windows; 30 of the earlier and
+    10 of the later buy again 20 days after their first order."""
+    rows, n = [], 0
+    start = dt.date(2025, 1, 1)
+    for w, back in ((0, 30), (1, 10)):
+        for i in range(100):
+            n += 1
+            d = start + dt.timedelta(days=w * 30 + i % 30)
+            rows.append(line(f"o{n}", f"c{w}-{i}", d.isoformat(), UAS))
+            if i < back:
+                rows.append(line(f"r{n}", f"c{w}-{i}", (d + dt.timedelta(days=20)).isoformat(), UAS))
+    f = tmp_path / "census.json"
+    f.write_text(json.dumps(census_for(rows)))
+    static = pathlib.Path(__file__).resolve().parents[1] / "static"
+    script = r"""
+const vm = require("vm"), fs = require("fs"), P = JSON.parse(fs.readFileSync(process.argv[1]));
+const E = require(process.argv[2] + "/retention_engine.js")(P);
+const ctx = { console, Intl, Math, Number, Object, JSON, Array, String, Set, Map, Date, E };
+vm.createContext(ctx);
+vm.runInContext(fs.readFileSync(process.argv[2] + "/metrics.js", "utf8"), ctx);
+vm.runInContext(`const esc = (s) => String(s ?? ""); const dayLabel = (d) => d; const inGroup = new Intl.NumberFormat("en-IN"); var RG = { channel: "all" };`
+  + fs.readFileSync(process.argv[2] + "/insights.js", "utf8") + `globalThis.out = insRetention(E, 30, 59);`, ctx);
+console.log(JSON.stringify(ctx.out));
+"""
+    out = json.loads(subprocess.run(["node", "-e", script, str(f), str(static)], capture_output=True, text=True, check=True).stdout)
+    assert "10.0% of customers new to Asaya came back within 90 days, against 30.0%" in out
+    assert "−20.0 pp" in out
+    assert "about 20 fewer repeat buyers" in out

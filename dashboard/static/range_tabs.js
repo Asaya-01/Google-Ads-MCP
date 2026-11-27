@@ -88,6 +88,7 @@ R.marketing = (p) => {
         kpiCard("cpp", { ...cpp, ...tag })];
     host.innerHTML = filters + `
       <section class="card" data-component="marketing-kpis"><div class="kpis${kpis.length === 6 ? " six" : ""}">${kpis.join("")}</div></section>
+      ${rgChannelNote("Spend is not split by app vs web, so spend, ROAS and CPS show only under All; the channel table counts all orders (last click).")}
       ${sc === "aw" ? "" : rgSec("Why it moved", "return on spend, cost of traffic and platform claims, against the comparison", insMarketing(g), { comp: "marketing-insights" })}
       ${sc === "aw" ? "" : rgSec("Trends", "each day against the comparison", rgTrends(g, MK_TRENDS), { comp: "marketing-trends" })}
       ${rgSec("Channels: spend, platform claims and Shopify", "what each channel cost, what its platform claims, and what Shopify credits it with (last click); Meta and Google open in their own sub-tabs", trReconHtml(g, { maxHeight: "70vh" }), { comp: "channel-reconciliation" })}
@@ -282,7 +283,9 @@ R.products = (p) => {
       const [prodTbl, catTbl] = prTables(pd, g);
       const days = RG.eng.rangeOf(RG.from, RG.to);
       host.innerHTML = `
+        ${rgChannelNote("Product sales count all orders: product lines are not split by app vs web yet.")}
         <section class="card" data-component="product-kpis"><div class="kpis">${prKpis(pd, state.pages.slab_days, g)}</div>${p.mrp_check && p.mrp_check.na ? `<p class="legend-note">Landed discount: data unavailable. ${esc(p.mrp_check.na)}.</p>` : ""}</section>
+        ${rgSec("Why it moved", "which products drove the change in product revenue, against the comparison", insProducts(pd, g), { comp: "products-insights" })}
         ${rgSec("Products", "parent products by house code; open one for its variants (shade, scent, size, pack)", prodTbl, { comp: "products-table" })}
         ${rgSec("Basket size", "orders by number of products bought: a combo counts each product inside it, a pack of 2 counts 2 (freebies, merch, books and gummies are not counted)", bkHtml(g), { comp: "basket-size" })}
         ${rgSec("Categories", "Shopify product type", catTbl, { comp: "categories" })}

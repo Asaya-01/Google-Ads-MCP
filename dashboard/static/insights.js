@@ -63,6 +63,18 @@ function insRoas(g) {
   }
   return { tag: "Return on spend", tone, html };
 }
+/* Cost per new customer: acquisition getting dearer can hide behind a healthy ROAS. */
+function insCac(g) {
+  const w = g.w, p = g.pw;
+  if (!w.cpnc || !p.cpnc || !w.roas || !p.roas) return null;
+  const c = w.cpnc / p.cpnc - 1, r = w.roas / p.roas - 1;
+  if (Math.abs(c) < 0.08) return null;
+  const sh = w.new_orders && w.orders ? w.new_orders / w.orders : null, shp = p.new_orders && p.orders ? p.new_orders / p.orders : null;
+  const why = c > 0 && r >= -0.03 ? "ROAS held while each new customer cost more: sales are leaning on repeat buyers, which does not grow the customer base."
+    : c > 0 ? "Each new customer costs more and ROAS fell too: acquisition is getting less efficient; check audiences and offers on the prospecting campaigns."
+    : "Acquisition got cheaper: if it holds, there is room to put more into prospecting.";
+  return { tag: "New customers", tone: c > 0 ? "bad" : "good", html: `Cost per new customer ${esc(mFormat("currency", w.cpnc))} against ${esc(mFormat("currency", p.cpnc))} (${insPct(c)})${sh != null && shp != null ? `; first-time customers are ${esc(mFormat("percent", sh))} of orders against ${esc(mFormat("percent", shp))}` : ""}. ${esc(why)}` };
+}
 /* Mix: a CVR drop with a steady Perf CVR is cheaper traffic, not a worse site. */
 function insMix(g, onFunnel) {
   const w = g.w, p = g.pw;
@@ -94,10 +106,21 @@ function insAnomaly(g) {
   const a = out[0], m = METRICS[a.id];
   return { tag: "Outlier day", tone: "warn", html: `<b>${esc(dayLabel(a.d))}</b>: ${esc(m.label)} ${esc(mVal(a.id, a.v))} against a ${a.ph === "sale" ? "sale" : "BAU"}-day average of ${esc(mVal(a.id, a.mean))} in these dates (${a.z > 0 ? "high" : "low"}, ${Math.abs(a.z).toFixed(1)}σ). One-off days distort period averages: check that day's campaigns, stock and site changes before reading the trend.${out.length > 1 ? ` ${out.length - 1} more outlier${out.length > 2 ? "s" : ""} in the period.` : ""}` };
 }
+/* App views have no sessions: sales a day = orders × AOV instead. */
+function insOrderBridge(g) {
+  const w = g.w, p = g.pw, o1 = insPerDay(w, "orders"), o0 = insPerDay(p, "orders"), a1 = w.aov, a0 = p.aov, g1 = insPerDay(w, "gmv"), g0 = insPerDay(p, "gmv");
+  if (![o1, o0, a1, a0, g1, g0].every((x) => x != null && x > 0)) return null;
+  const lt = Math.log(g1 / g0);
+  if (Math.abs(lt) < 0.005) return null;
+  const oi = (g1 - g0) * (Math.log(o1 / o0) / lt), ai = (g1 - g0) * (Math.log(a1 / a0) / lt);
+  const nw = w.new_orders != null && w.orders ? w.new_orders / w.orders : null, np = p.new_orders != null && p.orders ? p.new_orders / p.orders : null;
+  return { tag: "Sales bridge", tone: g1 >= g0 ? "good" : "bad",
+    html: `Total sales ${esc(mCompactInr(g1))} a day against ${esc(mCompactInr(g0))} (${insPct(g1 / g0 - 1)}): more or fewer orders <b>${esc(insInr(oi))}</b>, basket size <b>${esc(insInr(ai))}</b> a day.${nw != null ? ` ${esc(mFormat("percent", nw))} of these orders are first-time customers${np != null ? ` (against ${esc(mFormat("percent", np))})` : ""}.` : ""} Shopify records no app sessions, so app conversion needs the app's own analytics.` };
+}
 function insOverview(g) {
   if (!g.pw) return insList([{ tag: "Comparison", tone: "info", html: "Pick a comparison period in the date bar to see what is driving the numbers." }], TAB_WHY.overview);
   const items = insSmall(g) ? [{ tag: "Comparison", tone: "warn", html: `The comparison has only ${esc(String(g.pw.orders || 0))} orders: too few for the changes to mean much.` }]
-    : [insSalesBridge(g), insRoas(g), insMix(g), insAnomaly(g)];
+    : [RG.channel.startsWith("app") ? insOrderBridge(g) : insSalesBridge(g), insRoas(g), insCac(g), insMix(g), insAnomaly(g)];
   if (g.note) items.push({ tag: "Basis", tone: "info", html: esc(g.note) });
   return insList(items, TAB_WHY.overview);
 }
@@ -145,6 +168,7 @@ function rgTrends(g, ids) {
     const m = METRICS[id], k = m.field, v = g.w[k], pv = g.pw ? g.pw[k] : null;
     const ch = g.pw ? g.change(k) : null, small = mSmall(id, g.pw);
     const abs = g.pw ? rgAbs(id, k, g.w, g.pw) : "";
+    if (v == null) return `<div class="trend"><div class="trend-h"><span class="trend-n">${mHead(id)}</span><span class="trend-v">n/a</span></div><p class="na trend-na">${esc(rgNa(g.w, k) || "not available for these dates")}</p></div>`;
     return `<div class="trend"><div class="trend-h"><span class="trend-n">${mHead(id)}</span><span class="trend-v">${esc(mVal(id, v, true) ?? "n/a")}</span></div>
       <div class="trend-d">${pv != null ? `${mDeltaHtml(id, ch, { small })} <span class="kpi-vs">vs ${esc(mVal(id, pv, true))}</span>${abs && !small ? ` <span class="kpi-vs">· ${esc(abs)}</span>` : ""}` : '<span class="kpi-vs">no comparison</span>'}</div>
       <div class="trend-c"><canvas id="tr-${id}" aria-label="${esc(m.label)} by day"></canvas></div></div>`;
@@ -163,4 +187,111 @@ function rgTrendCharts(g, ids) {
     const unit = { percent: "pct", ratio: "x", currency: "inr", currency2: "inr2" }[METRICS[id].format] || "int";
     baseChart(el, { type: "line", data: { labels: cur.map((d) => dayLabel(d)), datasets: ds } }, unit);
   }
+}
+
+/* Month pacing: where the store will land this month against the media
+   plan. Actuals are Shopify's Total sales and the dashboard's Performance
+   spend (as on the cards); targets are the plan's daily Total sales and
+   spend. The projection keeps the plan's own shape for the days left (sale
+   bursts stay big) at the month-to-date achievement rate. Whole store only:
+   the plan is not split by app vs web. */
+function rgPacing() {
+  const P = state.pages.plan_days, D = RG.raw;
+  if (!P || !P.days || !D) return null;
+  const di = new Map(D.dates.map((d, i) => [d, i])), val = (f, d) => (di.has(d) && D.values[f] ? D.values[f][di.get(d)] : null);
+  // the last day with Shopify's Total sales in
+  let last = null;
+  for (let i = D.dates.length - 1; i >= 0 && !last; i--) if (D.values.sh_sales && D.values.sh_sales[i] != null) last = D.dates[i];
+  if (!last) return null;
+  const month = last.slice(0, 7), mDays = Object.keys(P.days).filter((d) => d.startsWith(month)).sort();
+  if (!mDays.length) return { html: `<p class="na">The media plan has no targets for ${esc(new Date(month + "-01T00:00:00Z").toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" }))}.</p>` };
+  const done = mDays.filter((d) => d <= last), left = mDays.filter((d) => d > last);
+  const tgt = (list, j) => list.reduce((a, d) => a + (((P.days[d] || {}).store || [])[j] || 0), 0);
+  const act = (f, list) => { let t = 0; for (const d of list) { const v = val(f, d); if (v == null) return null; t += v; } return t; };
+  const tS = tgt(mDays, 1), tSdone = tgt(done, 1), tSleft = tS - tSdone, tP = tgt(mDays, 0), tPdone = tgt(done, 0), tPleft = tP - tPdone;
+  const aS = act("sh_sales", done), aP = act("perf_all_spend", done);
+  if (!tS || aS == null || !tSdone) return null;
+  const ach = aS / tSdone, projS = aS + ach * tSleft;
+  const achP = aP != null && tPdone ? aP / tPdone : null, projP = achP != null ? aP + achP * tPleft : null;
+  const needDay = left.length ? Math.max(0, tS - aS) / left.length : null, planDay = left.length ? tSleft / left.length : null;
+  const mName = new Date(month + "-01T00:00:00Z").toLocaleString("en-IN", { month: "long", timeZone: "UTC" });
+  const card = (label, v, sub, tone) => `<div class="pace"><span class="pace-l">${esc(label)}</span><span class="pace-v ${tone || ""}">${esc(v)}</span><span class="pace-s">${sub}</span></div>`;
+  const pr = projS / tS, tone = pr >= 0.98 ? "up" : pr >= 0.9 ? "flat" : "down";
+  const proasT = tP ? tS / tP : null, proas = projP ? projS / projP : null;
+  const cards = [
+    card(`Projected ${mName} Total sales`, mCompactInr(projS), `against the <b>${esc(mCompactInr(tS))}</b> plan: <b class="${tone}">${esc(mFormat("percent", pr))}</b>`, tone),
+    card("Month to date", mCompactInr(aS), `${esc(mFormat("percent", ach))} of the plan to ${esc(dayLabel(last))} (${esc(mCompactInr(tSdone))})`, ach >= 0.98 ? "up" : ach >= 0.9 ? "flat" : "down"),
+    left.length ? card("Needed a day from here", mCompactInr(needDay), `against ${esc(mCompactInr(planDay))} a day planned for the ${left.length} day${left.length === 1 ? "" : "s"} left`, needDay > planDay * 1.05 ? "down" : "up") : card("Month", "complete", "every planned day has actuals", ""),
+    projP != null ? card("Projected spend", mCompactInr(projP), `against the ${esc(mCompactInr(tP))} plan (${esc(mFormat("percent", projP / tP))})${proas && proasT ? `; ROAS ${esc(mFormat("ratio", proas))} against ${esc(mFormat("ratio", proasT))} planned` : ""}`, "") : "",
+  ].join("");
+  const verdict = pr >= 0.98 ? `On track: at the month-to-date rate the store lands at ${esc(mCompactInr(projS))}, ${esc(mFormat("percent", pr))} of the ${esc(mCompactInr(tS))} plan.`
+    : `Behind plan: at the month-to-date rate the store lands at ${esc(mCompactInr(projS))}, ${esc(mCompactInr(tS - projS))} short of the ${esc(mCompactInr(tS))} plan. Closing the gap needs ${esc(mCompactInr(needDay))} a day for the ${left.length} day${left.length === 1 ? "" : "s"} left, ${esc(mFormat("percent", planDay ? needDay / planDay - 1 : null))} above the plan for those days.`;
+  const spendNote = achP != null && ach ? (achP > ach + 0.05 ? ` Spend is running at ${esc(mFormat("percent", achP))} of its plan while sales are at ${esc(mFormat("percent", ach))}: more is being spent per rupee of sales than planned.` : achP < ach - 0.05 ? ` Spend is at ${esc(mFormat("percent", achP))} of its plan against sales at ${esc(mFormat("percent", ach))}: sales are coming cheaper than planned, so there is room to spend.` : "") : "";
+  return { html: `<div class="paces">${cards}</div><p class="ins-why" style="margin-top:10px">${verdict}${spendNote}</p>
+    <p class="legend-note">Whole store (the plan is not split by app vs web). Actuals: Shopify's Total sales and Performance spend to ${esc(dayLabel(last))}; plan: the media plan's Target vs Achieved tab. The projection applies the month-to-date achievement rate to the plan's remaining days, so planned sale days stay big.</p>` };
+}
+
+/* Products: which products drove the change in product revenue a day, and
+   whether through volume or price. product_days rows: [date, product index,
+   units, revenue, ...]; products grouped by house code (product map). */
+TAB_WHY.products = "Which products are carrying the business, and which are slipping? A product's revenue moves with units sold and price per unit (offers, packs, discounts), and a product that suddenly drops to nothing usually means stock or a listing problem, not demand.";
+function insProducts(pd, g) {
+  if (!pd || !g.pw) return insList([], TAB_WHY.products);
+  const keyOf = (i) => { const n = pd.names[i], pm = n && typeof pmProduct === "function" ? pmProduct(n.id) : null; return pm ? `${pm.code} · ${pm.name}` : (n ? n.label : "a product"); };
+  const agg = (days) => { const set = new Set(days), m = new Map(); for (const r of pd.rows) { if (!set.has(r[0])) continue; const k = keyOf(r[1]); const a = m.get(k) || m.set(k, { u: 0, r: 0 }).get(k); a.u += r[2] || 0; a.r += r[3] || 0; } return m; };
+  const A = agg(g.cur), B = agg(g.prev || []), dc = Math.max(g.cur.length, 1), dp = Math.max((g.prev || []).length, 1);
+  const tot = (m, d) => [...m.values()].reduce((x, a) => x + a.r, 0) / d;
+  const t1 = tot(A, dc), t0 = tot(B, dp);
+  if (!t0) return insList([], TAB_WHY.products);
+  const rows = [...new Set([...A.keys(), ...B.keys()])].map((k) => { const a = A.get(k) || { u: 0, r: 0 }, b = B.get(k) || { u: 0, r: 0 }; return { k, r1: a.r / dc, r0: b.r / dp, u1: a.u / dc, u0: b.u / dp }; })
+    .map((x) => ({ ...x, d: x.r1 - x.r0 })).sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
+  const items = [], net = t1 - t0;
+  const movers = rows.filter((x) => Math.abs(x.d) >= Math.max(500, t0 * 0.01)).slice(0, 3);
+  if (movers.length) {
+    items.push({ tag: "Biggest movers", tone: net >= 0 ? "good" : "bad", html: `Product revenue ${esc(mCompactInr(t1))} a day against ${esc(mCompactInr(t0))} (${insPct(t1 / t0 - 1)}). ${movers.map((x) => `<b>${esc(x.k)}</b> ${esc(insInr(x.d))} a day`).join(", ")}${Math.abs(net) > 1 ? `: together ${esc(mFormat("percent", Math.abs(movers.reduce((s, x) => s + x.d, 0) / net)))} of the net change` : ""}.` });
+    const m = movers[0];
+    if (m.u0 && m.u1 && m.r0 && m.r1) {
+      const uv = m.u1 / m.u0 - 1, pv = (m.r1 / m.u1) / (m.r0 / m.u0) - 1;
+      items.push({ tag: "Volume or price", tone: "info", html: `<b>${esc(m.k)}</b>: units ${insPct(uv)} a day, revenue per unit ${insPct(pv)}. ${Math.abs(uv) >= Math.abs(pv) ? "Volume drove it: look at traffic and ads behind this product." : "Price per unit drove it: offer depth, packs and bundles changed what each sale is worth."}` });
+    }
+  }
+  const gone = rows.filter((x) => x.r0 >= Math.max(1000, t0 * 0.02) && x.r1 < x.r0 * 0.1).slice(0, 2);
+  if (gone.length) items.push({ tag: "Dropped away", tone: "bad", html: `${gone.map((x) => `<b>${esc(x.k)}</b> (${esc(mCompactInr(x.r0))} a day before, ${esc(mCompactInr(x.r1))} now)`).join(", ")} nearly stopped selling. A drop this sharp is usually stock, a paused listing or a removed ad, not demand: check inventory and the product page.` });
+  const top = [...rows].sort((x, y) => y.r1 - x.r1)[0];
+  if (top && t1) {
+    const s1 = top.r1 / t1, s0 = t0 ? top.r0 / t0 : null;
+    if (s1 >= 0.35) items.push({ tag: "Concentration", tone: "warn", html: `<b>${esc(top.k)}</b> is ${esc(mFormat("percent", s1))} of product revenue${s0 != null ? ` (against ${esc(mFormat("percent", s0))})` : ""}. One product carrying this much makes the month depend on its stock, ads and reviews.` });
+  }
+  if (g.note) items.push({ tag: "Basis", tone: "info", html: esc(g.note) });
+  return insList(items, TAB_WHY.products);
+}
+
+/* Retention: is the share of new customers who come back moving, and which
+   first products drive it? The picked cohort against the same number of days
+   just before, each at a milestone both have fully had time to reach. */
+TAB_WHY.retention = "Repeat buying decides what a customer is worth: acquisition is paid once, repeats are mostly free. A falling repeat rate quietly raises the true cost of every new customer, so it is read here against the cohort just before, at the same milestone.";
+function insRetention(e, A, B) {
+  const len = B - A + 1, pA = A - len, pB = A - 1;
+  if (pA < 0) return insList([{ tag: "Comparison", tone: "info", html: "There is no earlier cohort of the same length in the data to compare with." }], TAB_WHY.retention);
+  const x1 = e.computeBrand(A, B, null), x0 = e.computeBrand(pA, pB, null);
+  const h = [90, 60, 30].find((m) => x1.cb[m] >= 50 && x0.cb[m] >= 50);
+  if (!h) return insList([{ tag: "Too early", tone: "info", html: "The customers in these dates have not all had 30 days to come back yet: pick earlier dates to compare repeat rates." }], TAB_WHY.retention);
+  const r1 = x1.ch[h] / x1.cb[h], r0 = x0.ch[h] / x0.cb[h], d = r1 - r0;
+  const items = [{ tag: "Repeat rate", tone: Math.abs(d) < 0.005 ? "info" : d > 0 ? "good" : "bad",
+    html: `${esc(mFormat("percent", r1))} of customers new to Asaya came back within ${h} days, against ${esc(mFormat("percent", r0))} for the ${len} days before (${esc(mFormat("pp", d))}; ${inGroup.format(x1.cb[h])} and ${inGroup.format(x0.cb[h])} customers who have each had ${h} days).` }];
+  // first products: who moved the rate, and did the mix shift toward products people re-buy less?
+  const at = (rows) => new Map(rows.map((r) => { const m = (r.miles || []).find((z) => z.h === h); return [r.code, { name: r.name, base: m ? m.base : 0, hit: m ? m.hit : 0 }]; }));
+  const P1 = at(e.compute(A, B, "sku", null)), P0 = at(e.compute(pA, pB, "sku", null));
+  const B1 = [...P1.values()].reduce((s, x) => s + x.base, 0), B0 = [...P0.values()].reduce((s, x) => s + x.base, 0);
+  if (B1 && B0) {
+    const rows = [...P1.keys()].filter((k) => P0.has(k)).map((k) => {
+      const a = P1.get(k), b = P0.get(k), ra = a.base ? a.hit / a.base : null, rb = b.base ? b.hit / b.base : null;
+      return { k, name: a.name, base: a.base, ra, rb, eff: ra != null && rb != null && a.base >= 30 && b.base >= 30 ? a.base * (ra - rb) : 0, sa: a.base / B1, sb: b.base / B0 };
+    });
+    const mv = rows.filter((x) => Math.abs(x.eff) >= 3).sort((p, q) => Math.abs(q.eff) - Math.abs(p.eff)).slice(0, 3);
+    if (mv.length) items.push({ tag: "By first product", tone: mv[0].eff < 0 ? "bad" : "good", html: mv.map((x) => `<b>${esc(x.name)}</b> ${esc(mFormat("percent", x.rb))} → ${esc(mFormat("percent", x.ra))} (about ${Math.abs(Math.round(x.eff))} ${x.eff < 0 ? "fewer" : "more"} repeat buyers)`).join("; ") + `, within ${h} days of first buying that product. A product's repeat rate moves with how well it works and how long a pack lasts, so a sharp drop is worth checking against reviews and pack size.` });
+    const mix = rows.reduce((s, x) => s + (x.rb != null ? (x.sa - x.sb) * x.rb : 0), 0);
+    if (Math.abs(mix) >= 0.005) items.push({ tag: "Product mix", tone: mix < 0 ? "warn" : "good", html: `New buyers' first products shifted toward products that are re-bought ${mix < 0 ? "less" : "more"} often: on its own that moves the repeat rate by about ${esc(mFormat("pp", mix))}. ${mix < 0 ? "Acquisition is leaning on products with weaker repeat: worth weighing in which products the ads push." : ""}` });
+  }
+  return insList(items, TAB_WHY.retention);
 }
