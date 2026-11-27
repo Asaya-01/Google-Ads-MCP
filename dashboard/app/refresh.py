@@ -197,6 +197,17 @@ def collect(
                 start.isoformat(), d1, names
             )
             store.put_json("cache/shopify_sales.json", data["shopify_sales"])
+            # the same report for app orders (tagged by the app), per platform
+            try:
+                data["shopify_sales_app"] = {
+                    plat: shop.sales_daily(start.isoformat(), d1, names, tag=tag)
+                    for plat, tag in (cfg.get("app_channel") or {}).get("tags", {}).items()
+                }
+                store.put_json("cache/shopify_sales_app.json", data["shopify_sales_app"])
+            except Exception as exc:
+                data["shopify_sales_app"] = store.get_json("cache/shopify_sales_app.json")
+                data["unavailable"]["shopify_sales_app"] = f"Shopify app sales pull failed: {exc}" + (
+                    " (showing the last good copy)" if data["shopify_sales_app"] else "")
         except Exception as exc:
             data["shopify_sales"] = store.get_json("cache/shopify_sales.json")
             data["unavailable"]["shopify_sales"] = (

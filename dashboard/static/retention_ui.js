@@ -139,6 +139,7 @@ function retShell(p) {
       <p class="ret-sum" id="r-sum"></p>
       <div class="banner" id="r-warn" hidden></div>
     </section>
+    <section class="card" id="r-why"></section>
     <section class="card" id="r-hero"></section>
     <div class="ret-tabs" role="tablist" id="r-tabs">${retTabs().map(([k, l]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${RET.tab === k}">${l}</button>`).join("")}</div>
     <section class="card ret-panel" id="r-panel" role="tabpanel"></section>`;
@@ -265,8 +266,17 @@ function retCurrent() {
   return { base, r };
 }
 function retRender() {
+  retWhy();
   retHero();
   retRenderPanel();
+}
+/* Why it moved: the picked cohort against the one just before (insights.js) */
+function retWhy() {
+  const host = $r("r-why");
+  if (!host || !RET.eng) return;
+  let body;
+  try { body = insRetention(RET.eng, RET.A, RET.B); } catch (err) { body = `<p class="na">Could not compare cohorts: ${esc(err.message || String(err))}</p>`; }
+  host.innerHTML = `<div class="sec-head"><h2>Why it moved</h2><span class="q">customers won in these dates against those won in the same number of days just before</span></div>${body}`;
 }
 function retHero() {
   const e = RET.eng, hz = RET.HZ, host = $r("r-hero");

@@ -115,6 +115,8 @@
       w.sh_roas = ratio(w.sh_sales, w.perf_all_spend);
       w.perf_overall_roas = ratio(w.gmv, w.perf_all_spend);
       w.roas = ratio(w.store_gmv, w.perf_all_spend);
+      // cost per new customer: performance spend over first orders (customers with a Shopify ID)
+      w.cpnc = ratio(w.perf_all_spend, w.new_orders);
       w.address_rate = ratio(w.gk_address, w.ic);
       w.payment_rate = ratio(w.gk_payment, w.gk_address);
       w.paid_rate = ratio(w.gk_converted, w.gk_payment);
@@ -158,7 +160,7 @@
     }
 
     /* Per-day change: counts compare averages, rates compare directly. */
-    const RATE_FIELDS = new Set(["roas", "aov", "cvr", "atc_rate", "atc_to_ic", "ic_to_order", "perf_cvr", "cps", "cps_all", "cps_ad", "sh_roas_all", "perf_overall_roas", "sh_aov", "sh_cvr", "sh_perf_cvr", "sh_ic_to_order", "sh_roas", "address_rate", "payment_rate", "paid_rate", "meta_sales_roas", "google_sales_roas", "mer", "perf_roas", "overall_roas", "affiliate_roas", "crm_roas", "crm_flow_roas", "crm_broadcast_roas", "new_share"]);
+    const RATE_FIELDS = new Set(["cpnc", "roas", "aov", "cvr", "atc_rate", "atc_to_ic", "ic_to_order", "perf_cvr", "cps", "cps_all", "cps_ad", "sh_roas_all", "perf_overall_roas", "sh_aov", "sh_cvr", "sh_perf_cvr", "sh_ic_to_order", "sh_roas", "address_rate", "payment_rate", "paid_rate", "meta_sales_roas", "google_sales_roas", "mer", "perf_roas", "overall_roas", "affiliate_roas", "crm_roas", "crm_flow_roas", "crm_broadcast_roas", "new_share"]);
     function change(cur, prev, key) {
       if (!prev) return null;
       let c = cur[key], p = prev[key];
@@ -310,6 +312,37 @@
     };
   }
 
-  root.createRangeEngine = (D, mode) => createEngine(applyMode(D, mode));
-  if (typeof module !== "undefined" && module.exports) module.exports = (D, mode) => createEngine(applyMode(D, mode));
+  /* App vs Web (sales channel), applied before the view: the store's
+     numbers (Shopify's Orders and Total sales, orders, GMV, new and repeat)
+     read from their channel's own fields. App orders are the ones the app
+     tags; Shopify records no app sessions and spend is not split by channel,
+     so in an App view those fields are blank with the reason, and in the Web
+     view spend (and so ROAS and CPS) is blank too. Never mixed or added. */
+  const CH_BASES = ["sh_orders", "sh_sales", "orders", "gmv", "new_orders", "repeat_orders", "new_gmv", "repeat_gmv"];
+  const CH_SPEND = /spend|_value$|revenue|reach|impressions|clicks|^roas|mer$/;
+  const CHANNEL_WHY = {
+    app: "Shopify records no app sessions, funnel or app-only spend: this needs the app's own analytics",
+    web: "spend is not split between app and web: ROAS and spend show in the All view",
+  };
+  function applyChannel(D, channel) {
+    if (!channel || channel === "all") return D;
+    const app = channel.startsWith("app"), why = CHANNEL_WHY[app ? "app" : "web"];
+    const n = D.dates.length, values = {}, na = {};
+    const reasons = D.reasons.concat([why, "this page was built before the App vs Web split: it fills in on the next refresh"]);
+    const wi = reasons.length - 2, old = reasons.length - 1;
+    const bases = new Set(CH_BASES), chField = new RegExp(`_(${["app_ios", "app_android", "app", "web"].join("|")})$`);
+    for (const k of D.fields) {
+      if (bases.has(k)) {
+        const src = `${k}_${channel}`;
+        values[k] = D.values[src] || new Array(n).fill(null);
+        na[k] = D.values[src] ? D.na[src] || {} : { "*": old };
+        continue;
+      }
+      if (chField.test(k) || (!app && !CH_SPEND.test(k))) { values[k] = D.values[k]; na[k] = D.na[k] || {}; continue; }
+      values[k] = new Array(n).fill(null); na[k] = { "*": wi };
+    }
+    return { ...D, values, na, reasons, channel };
+  }
+  root.createRangeEngine = (D, mode, channel) => createEngine(applyMode(applyChannel(D, channel), mode));
+  if (typeof module !== "undefined" && module.exports) module.exports = (D, mode, channel) => createEngine(applyMode(applyChannel(D, channel), mode));
 })(typeof window !== "undefined" ? window : globalThis);

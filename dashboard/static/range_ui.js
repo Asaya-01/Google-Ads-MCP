@@ -3,7 +3,7 @@
    dayLabel(), deltaHtml(), baseChart(), the R registry and $main. The numbers
    come from range_engine.js, over the per-day "days" page. */
 
-const RG = { eng: null, raw: null, mode: "perf", scope: "perf", from: null, to: null, preset: "mtd", cmp: { mode: "month" }, cmpAuto: true, pop: null, draft: null, view: null, error: null };
+const RG = { eng: null, raw: null, mode: "perf", scope: "perf", channel: "all", from: null, to: null, preset: "mtd", cmp: { mode: "month" }, cmpAuto: true, pop: null, draft: null, view: null, error: null };
 try {
   const savedMode = (JSON.parse(sessionStorage.getItem("asaya-range") || "null") || {}).mode;
   if (["perf", "aw", "all"].includes(savedMode)) RG.scope = savedMode;
@@ -18,7 +18,7 @@ const RG_CMP = [
 ];
 const RG_RATES = ["roas", "cps_all", "cps_ad", "sh_roas_all", "aov", "cvr", "sh_aov", "sh_cvr", "sh_perf_cvr", "sh_ic_to_order", "sh_roas", "perf_cvr", "ic_to_order", "cps", "perf_overall_roas", "atc_rate", "mer", "perf_roas", "meta_sales_roas", "google_sales_roas", "new_share", "overall_roas", "affiliate_roas", "crm_roas", "crm_flow_roas", "crm_broadcast_roas"];
 const RG_DEP = {
-  roas: ["store_gmv", "perf_all_spend"], aov: ["gmv", "orders"], cvr: ["orders", "sessions"], atc_rate: ["atc", "sessions"], mer: ["gmv", "spend"],
+  roas: ["store_gmv", "perf_all_spend"], cpnc: ["perf_all_spend", "new_orders"], aov: ["gmv", "orders"], cvr: ["orders", "sessions"], atc_rate: ["atc", "sessions"], mer: ["gmv", "spend"],
   perf_roas: ["gmv", "perf_spend"], meta_sales_roas: ["meta_perf_value", "meta_perf_spend"],
   google_sales_roas: ["google_perf_value", "google_perf_spend"], new_share: ["new_orders", "repeat_orders"], atc_to_ic: ["atc", "ic"], ic_to_order: ["orders", "ic"], perf_cvr: ["orders", "report_perf_sessions"], cps: ["perf_all_spend", "sessions"], cps_all: ["all_spend", "sessions"], cps_ad: ["spend", "sessions"], sh_roas_all: ["sh_sales", "all_spend"], sh_aov: ["sh_sales", "sh_orders"], sh_cvr: ["sh_orders", "sessions"], sh_perf_cvr: ["sh_orders", "report_perf_sessions"], sh_ic_to_order: ["sh_orders", "ic"], sh_roas: ["sh_sales", "perf_all_spend"], perf_overall_roas: ["gmv", "perf_all_spend"],
   overall_roas: ["gmv", "all_spend"], affiliate_roas: ["affiliate_revenue", "affiliate_spend"], crm_roas: ["crm_revenue", "crm_spend"],
@@ -37,7 +37,8 @@ async function rgEnsure() {
   let saved = null;
   try { saved = JSON.parse(sessionStorage.getItem("asaya-range") || "null"); } catch (err) { /* storage blocked */ }
   if (saved && ["perf", "aw", "all"].includes(saved.mode)) RG.scope = saved.mode;
-  RG.eng = createRangeEngine(p, RG.mode);
+  if (saved && RG_CHANNELS.some(([k]) => k === saved.channel)) RG.channel = saved.channel;
+  RG.eng = createRangeEngine(p, RG.mode, RG.channel);
   const e = RG.eng, pre = e.presets().find((x) => x.id === "mtd");
   RG.from = pre.from; RG.to = pre.to;
   if (saved && saved.from >= e.first && saved.to <= e.last && saved.from <= saved.to) {
@@ -45,7 +46,7 @@ async function rgEnsure() {
   }
 }
 function rgSave() {
-  try { sessionStorage.setItem("asaya-range", JSON.stringify({ from: RG.from, to: RG.to, preset: RG.preset, cmp: RG.cmp, cmpAuto: RG.cmpAuto, mode: RG.scope })); } catch (e) { /* storage blocked */ }
+  try { sessionStorage.setItem("asaya-range", JSON.stringify({ from: RG.from, to: RG.to, preset: RG.preset, cmp: RG.cmp, cmpAuto: RG.cmpAuto, mode: RG.scope, channel: RG.channel })); } catch (e) { /* storage blocked */ }
 }
 const rgCmpLabel = () => {
   const m = RG.cmp.mode;
@@ -95,8 +96,23 @@ const RG_MODES = [["perf", "Performance"], ["aw", "Awareness"], ["all", "All cam
 function rgUseMode(m) {
   if (RG.mode === m && RG.eng) return;
   RG.mode = m;
-  if (RG.raw) RG.eng = createRangeEngine(RG.raw, m);
+  if (RG.raw) RG.eng = createRangeEngine(RG.raw, m, RG.channel);
 }
+/* App vs Web: which orders the store numbers count. App = orders the app tags
+   (mobile_app_ios / mobile_app_android); Web = every other order. Never added
+   together or mixed: a number with no split for the view shows the reason. */
+const RG_CHANNELS = [["all", "All", "App and web together, as Shopify's reports show the store"], ["web", "Web", "Orders placed on the website only"], ["app", "App", "Orders placed in the app (iOS and Android)"], ["app_ios", "iOS app", "App orders on iPhone"], ["app_android", "Android app", "App orders on Android"]];
+const rgChannelSeg = () => `<div class="seg rg-ch" id="rg-channel" role="group" aria-label="Sales channel" title="Which orders the store numbers count. Shopify records no app sessions and spend is not split by channel, so App views show orders, sales, AOV and customers; the Web view leaves out spend and ROAS.">${RG_CHANNELS.map(([k, l, t]) => `<button type="button" data-ch="${k}" title="${esc(t)}" aria-pressed="${RG.channel === k}">${esc(l)}</button>`).join("")}</div>`;
+function rgSetChannel(ch) {
+  if (ch === RG.channel || !RG_CHANNELS.some(([k]) => k === ch)) return;
+  RG.channel = ch; rgSave();
+  if (RG.raw) RG.eng = createRangeEngine(RG.raw, RG.mode, ch);
+  destroyCharts();
+  R[state.tab](state.pages[state.tab]);
+}
+document.addEventListener("click", (ev) => { const b = ev.target.closest("#rg-channel button[data-ch]"); if (b) rgSetChannel(b.dataset.ch); });
+/* a line under a tab whose own breakdown is not split by channel */
+const rgChannelNote = (what) => (RG.channel === "all" ? "" : `<p class="legend-note rg-ch-note">Showing <b>${esc((RG_CHANNELS.find(([k]) => k === RG.channel) || [])[1])}</b> orders in the store totals. ${esc(what)}</p>`);
 function rgSetMode(m) {
   if (m === RG.scope) return;
   RG.scope = m;
@@ -132,6 +148,7 @@ function rgBar() {
         <button type="button" class="rg-chip alt" id="rg-open-cmp" aria-haspopup="dialog" aria-expanded="${RG.pop === "cmp"}"><span aria-hidden="true">⇄</span> ${esc(rgCmpLabel())} <span aria-hidden="true" class="rg-caret">▾</span></button>
       </div>
       ${phase}
+      ${rgChannelSeg()}
       ${info}
       ${RG.pop ? rgPopover() : ""}
     </div></section>`;
@@ -335,6 +352,14 @@ function rgEstFor(k, w) {
   return `Estimated ${hit.map((f) => RG_EST_FIELDS[f]).join(", ")} spend for ${rgListDays(days)}: the sheets are not filled yet`;
 }
 /* One KPI card for a registry metric over a phase block g (from engine.compare). */
+/* the new-customer count under Cost per new customer, and how many orders
+   could not be classed (no Shopify customer ID), so the base is visible */
+function rgNewSub(g) {
+  const w = g.w, n = w.new_orders, k = (w.new_orders || 0) + (w.repeat_orders || 0), un = w.orders != null && n != null ? w.orders - k : null;
+  if (n == null) return {};
+  const sub = `${inGroup.format(n)} new customer${n === 1 ? "" : "s"}${un && w.orders ? ` · ${mFormat("percent", un / w.orders)} of orders unclassed` : ""}`;
+  return { sub, tipExtra: un ? `${inGroup.format(un)} orders had no Shopify customer ID, so they are neither new nor repeat and are left out of the count.` : "" };
+}
 function rgKpi(id, g, o = {}) {
   const m = METRICS[id], k = m.field, w = g.w, pw = g.pw;
   const v = w[k];
@@ -450,7 +475,7 @@ async function rgShell(render) {
 const OV = { metric: "gmv" };
 const OV_KPIS = [
   ["total_sales", null, { perDay: true }], ["orders", null, {}], ["aov", null, {}],
-  ["blended_roas", "marketing", {}], ["perf_spend", "marketing", { perDay: true }], ["cvr", "funnel", {}], ["perf_cvr", "funnel", {}],
+  ["blended_roas", "marketing", {}], ["cpnc", "marketing", { newSub: true }], ["perf_spend", "marketing", { perDay: true }], ["cvr", "funnel", {}], ["perf_cvr", "funnel", {}],
 ];
 const OV_TRENDS = ["aov", "cvr", "perf_cvr", "atc_rate", "blended_roas"];
 /* What changed: deterministic, ranked by how much each moved Total sales. */
@@ -505,17 +530,18 @@ R.overview = (p) => {
     const e = RG.eng, c = e.compare(RG.from, RG.to, RG.cmp), g = rgPick(c);
     const host = document.getElementById("rg-body");
     if (!g) { host.innerHTML = rgNone(); return; }
-    const kpis = OV_KPIS.map(([id, href, o]) => rgKpi(id, g, { ...o, ...(href ? { href: "#" + href, hrefLabel: href === "funnel" ? "Funnel" : "Marketing" } : {}) })).join("");
+    const kpis = OV_KPIS.map(([id, href, o]) => rgKpi(id, g, { ...(o.newSub ? rgNewSub(g) : o), ...(href ? { href: "#" + href, hrefLabel: href === "funnel" ? "Funnel" : "Marketing" } : {}) })).join("");
     const ch = rgWhatChanged(g);
     const changed = !g.pw ? '<p class="na">Pick a comparison above to see what changed.</p>'
       : ch.length ? `<ul class="changed">${ch.map((x) => `<li><span class="ic ${x.dir}">${x.dir === "up" ? "▲" : x.dir === "down" ? "▼" : "!"}</span><span>${x.html}</span><a href="${x.link}">${esc(x.lab)} →</a></li>`).join("")}</ul>`
       : '<p class="na">Nothing moved enough to call out.</p>';
     const mseg = `<div class="seg" id="ov-metric" role="group" aria-label="Chart metric">${[["gmv", "Total sales"], ["orders", "Orders"]].map(([k, l]) => `<button type="button" data-m="${k}" aria-pressed="${OV.metric === k}">${l}</button>`).join("")}</div>`;
     host.innerHTML = `
-      <section class="card" data-component="overview-kpis"><div class="kpis seven">${kpis}</div>${g.note ? `<p class="legend-note">${esc(g.note)}</p>` : ""}</section>
+      <section class="card" data-component="overview-kpis"><div class="kpis eight">${kpis}</div>${g.note ? `<p class="legend-note">${esc(g.note)}</p>` : ""}</section>
+      ${(() => { const pc = rgPacing(); return pc ? rgSec("Month pacing", "where the store lands this month against the media plan, at today's rate", pc.html, { comp: "month-pacing" }) : ""; })()}
       ${rgSec("Why it moved", "what the numbers say is driving the change, against the comparison", insOverview(g), { comp: "overview-insights" })}
       ${rgSec("Trends", `each day of ${esc(rgSpan(RG.from, RG.to))} against the comparison: the rates that decide sales and return`, rgTrends(g, OV_TRENDS), { comp: "overview-trends" })}
-      ${rgSec("What changed", "the biggest movers behind the change, each linked to its detail", changed, { comp: "what-changed" })}
+      ${rgSec("What changed", "the biggest movers behind the change, each linked to its detail", changed + rgChannelNote("The channel and product movers here count all orders: their sources are not split by app vs web."), { comp: "what-changed" })}
       ${rgSec(OV.metric === "gmv" ? "Total sales per day" : "Orders per day", "each day of the picked dates", `${rgDayLegend()}<div class="chart-box"><canvas id="c-ov" aria-label="${OV.metric === "gmv" ? "Total sales" : "Orders"} per day"></canvas></div>`, { ctl: mseg, comp: "sales-per-day-chart" })}
       ${rgSec("Target vs achieved", `the media plan for ${esc(rgSpan(RG.from, RG.to))}, every day picked`, rgTargets(RG.from, RG.to), { comp: "targets" })}`;
     rgDayChart("c-ov", OV.metric, OV.metric === "gmv" ? "inr" : "int", OV.metric === "gmv" ? "Total sales" : "Orders");

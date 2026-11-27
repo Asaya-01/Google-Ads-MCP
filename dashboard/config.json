@@ -979,6 +979,10 @@
     "gokwik_csv_columns": ["Date", "UTM Source", "UTM Medium", "UTM Campaign", "UTM Term", "UTM Content", "Landing Page", "Origin Referrer", "Checkout Started", "Address Landed", "Payment Step Reached", "Payment Method Selected", "Sessions Converted", "Conversion %"],
     "tagged_excludes": ["", "direct", "(direct)", "null", "none"]
   },
+  "app_channel": {
+    "_about": "App vs Web. Orders the mobile app places carry the order tag mobile_app_ios or mobile_app_android (and the attributes source=app, platform, tag). App = those orders; Web = every other valid order. Shopify records no app sessions (the app's browsing is not an online-store session), so app CVR, funnel and sessions are not available; spend is not split between app and web, so ROAS and spend show only in the All view.",
+    "tags": {"ios": "mobile_app_ios", "android": "mobile_app_android"}
+  },
   "live": {
     "flag_spend_without_return": {"_about": "Today's campaign tables flag a campaign with at least min_spend rupees spent and no platform value yet, once it is after_hour (IST). Platforms attribute late: a watch flag, not a verdict.", "min_spend": 3000, "after_hour": 14},
     "history": {

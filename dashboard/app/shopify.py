@@ -90,14 +90,16 @@ class Shopify:
         return (data.get("tableData") or {}).get("rows") or []
 
     def sales_daily(
-        self, since: str, until: str, exclude_names: list[str]
+        self, since: str, until: str, exclude_names: list[str], tag: str | None = None
     ) -> dict[str, dict]:
         """Shopify's own "Orders" and "Total sales" per IST day, as its Sales
         report shows them: cancelled orders still count as orders and Total
         sales nets off returns. Only the named order types (influencer and
         sample orders) are left out. {date: {"orders", "sales"}}."""
         cond = " AND ".join(
-            f"order_name NOT CONTAINS '{n}'" for n in exclude_names
+            [f"order_name NOT CONTAINS '{n}'" for n in exclude_names]
+            # one order tag, e.g. the app's mobile_app_ios: that channel only
+            + ([f"order_tags CONTAINS '{tag}'"] if tag else [])
         )
         rows = self.shopifyql(
             "FROM sales SHOW orders, total_sales TIMESERIES day "

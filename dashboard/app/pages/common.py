@@ -76,6 +76,14 @@ COUNT_FIELDS = [
     "perf_all_spend",
 ]
 
+# App vs Web: every store number below, per sales channel. App = orders the
+# app tags mobile_app_ios / mobile_app_android; web = the store's totals minus
+# those (config app_channel). Sessions, funnel and spend have no such split.
+CHANNEL_BASES = ["sh_orders", "sh_sales", "orders", "gmv", "new_orders", "repeat_orders", "new_gmv", "repeat_gmv"]
+CHANNELS = ["app_ios", "app_android", "app", "web"]
+COUNT_FIELDS += [f"{b}_{c}" for c in CHANNELS for b in CHANNEL_BASES]
+
+
 NA = {
     "sessions": "Shopify sessions were not pulled for this day",
     "ic": "GoKwik funnel not in BigQuery for this day yet (a bot loads it each morning)",
@@ -474,10 +482,43 @@ class Context:
                     self.unavailable.get("shopify_sales")
                     or "Shopify's sales report has nothing for this day yet"
                 )
+            self._channel_split(f, day, o, d.get("shopify_sales_app"))
             self._kind_split(f, day, maps)
             self._manual_spends(f, day)
             facts[day] = derive(f)
         return facts
+
+    def _channel_split(self, f: dict, day: str, o: dict | None, sh_app: dict | None) -> None:
+        """App (per platform) and Web numbers for one day. A number is only
+        given when its source has the split for the day; web is the total
+        minus the app, so web + app always add up to the store's total."""
+        why = "App vs Web split not available for this day"
+        app = {"ios": "app_ios", "android": "app_android"}
+        vals: dict[str, dict] = {c: {} for c in CHANNELS}
+        # Shopify's sales report (Orders, Total sales): one pull per app tag
+        for plat, ch in app.items():
+            rep = (sh_app or {}).get(plat)
+            if rep is not None and f.get("sh_orders") is not None:
+                r = rep.get(day) or {"orders": 0, "sales": 0.0}  # no row = no app orders that day
+                vals[ch]["sh_orders"], vals[ch]["sh_sales"] = r["orders"], r["sales"]
+        # BigQuery orders (orders, GMV, new and repeat): the query's per-platform columns
+        for plat, ch in app.items():
+            for b in ("orders", "gmv", "new_orders", "repeat_orders", "new_gmv", "repeat_gmv"):
+                k = f"{b}_app_{plat}"
+                if o is not None and k in o and o[k] is not None:
+                    vals[ch][b] = o[k]
+        for b in CHANNEL_BASES:
+            a, i = vals["app_android"].get(b), vals["app_ios"].get(b)
+            if a is not None and i is not None:
+                vals["app"][b] = a + i
+                if f.get(b) is not None:
+                    vals["web"][b] = round(f[b] - a - i, 2)
+        for c in CHANNELS:
+            for b in CHANNEL_BASES:
+                k = f"{b}_{c}"
+                f[k] = vals[c].get(b)
+                if f[k] is None:
+                    f["na"][k] = why
 
     def _kind_maps(self) -> dict:
         """Per-day sums split by campaign type, from the classified rows."""
