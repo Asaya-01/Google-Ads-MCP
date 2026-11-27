@@ -305,7 +305,7 @@
 
     return {
       first, last, N, dates, FIELDS,
-      phaseOf, noteOf, hasAll, windowOf, change, compare, presets, derive, inData,
+      phaseOf, noteOf, hasAll, windowOf, change, compare, presets, derive, inData, isRate: (k) => RATE_FIELDS.has(k),
       addDays, diffDays, rangeOf, shiftMonths, monthStart, daysInMonth, iso, toMs, runsOf,
     };
   }

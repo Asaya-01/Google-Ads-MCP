@@ -116,6 +116,7 @@ function fnCsv(p, rows) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+const FN_TRENDS = ["atc_rate", "atc_to_ic", "ic_to_order", "cvr", "perf_cvr"];
 R.funnel = (p) => {
   RG.tab = "funnel";
   $main.innerHTML = `<div id="rg-body"><p class="empty">Loading…</p></div>`;
@@ -134,6 +135,8 @@ R.funnel = (p) => {
     const dseg = `<div class="seg" id="fn-drill" role="group" aria-label="Funnel by">${drills.map(([k, l]) => `<button type="button" data-d="${k}" aria-pressed="${FN.drill === k}">${l}</button>`).join("")}</div>`;
     host.innerHTML = `
       <section class="card" data-component="funnel-kpis"><div class="kpis seven">${FN_KPIS.map((id) => rgKpi(id, g)).join("")}</div></section>
+      ${rgSec("Why it moved", "which step won or lost orders against the comparison", insFunnel(g), { comp: "funnel-insights" })}
+      ${rgSec("Trends", "each day against the comparison", rgTrends(g, FN_TRENDS), { comp: "funnel-trends" })}
       <div class="cols-2">
         ${rgSec("The funnel", "how many sessions reach each step", fnBars(g), { comp: "funnel-bars" })}
         ${rgSec("Checkout steps", "GoKwik's checkout, step by step, against the comparison", fnCheckout(g), { comp: "checkout-steps" })}
@@ -141,6 +144,7 @@ R.funnel = (p) => {
       ${rgSec("Funnel rates by channel", "Shopify last click; rates only (spend and sales are on Marketing)", fnRates(g, "channel", "Channel"), { link: rgLink("marketing", "Spend and sales by channel"), comp: "funnel-rates-by-channel" })}
       ${rgSec("Funnel by source, campaign or landing page", "sessions through to orders; pick which", `<div id="fn-drill-body">${fnRates(g, FN.drill, drills.find((d) => d[0] === FN.drill)[1])}</div>`, { ctl: dseg, comp: "funnel-drill" })}
       ${rgSec("Day by day", `${rows.length} day${rows.length === 1 ? "" : "s"}, newest first; hover “n/a” for the reason`, table(cols, rows, { maxHeight: "60vh", full: true }), { ctl: '<button type="button" class="rg-btn" id="fn-csv">Download full daily CSV</button>', comp: "daily-table" })}`;
+    rgTrendCharts(g, FN_TRENDS);
     document.getElementById("fn-csv").addEventListener("click", () => fnCsv(p, rows));
     document.getElementById("fn-drill").addEventListener("click", (ev) => {
       const b = ev.target.closest("button[data-d]"); if (!b) return;

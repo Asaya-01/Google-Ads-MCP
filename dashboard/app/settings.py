@@ -41,6 +41,7 @@ def app_fragment() -> str:
         ("/*__RANGE_FUNNEL__*/", "range_funnel.js"),
         ("/*__RANGE_TABS__*/", "range_tabs.js"),
         ("/*__RANGE_TREE__*/", "range_tree.js"),
+        ("/*__INSIGHTS__*/", "insights.js"),
         ("/*__META_VIEW__*/", "meta_view.js"),
         ("/*__GOOGLE_VIEW__*/", "google_view.js"),
         ("/*__RANGE_BASKET__*/", "range_basket.js"),

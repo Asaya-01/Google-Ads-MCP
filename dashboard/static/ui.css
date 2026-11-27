@@ -303,3 +303,24 @@ tr.gv-panelrow > td { background: var(--surface-2, var(--accent-wash)); padding:
 .lh2 tr.partial .chip { margin-left: 4px; }
 .lht table { font-size: 12px; }
 .lht th, .lht td { padding-left: 7px; padding-right: 7px; }
+.kpi-a { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+/* header date */
+.today-chip { display: inline-flex; align-items: baseline; gap: 2px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); font-size: 12.5px; white-space: nowrap; background: var(--surface); }
+@media (max-width: 900px) { .today-chip .rg-dim { display: none; } }
+/* insights */
+.ins-why { margin: 0 0 10px; color: var(--ink-2); font-size: 13.5px; }
+.ins { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ins li { display: grid; grid-template-columns: 118px 1fr; gap: 10px; align-items: baseline; padding: 9px 12px; border-radius: 10px; background: var(--bg); border-left: 3px solid var(--line); font-size: 13.5px; line-height: 1.5; }
+.ins li.ins-good { border-left-color: var(--good); }
+.ins li.ins-bad { border-left-color: var(--bad); }
+.ins li.ins-warn { border-left-color: var(--warn, #c98a00); }
+.ins-tag { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+@media (max-width: 640px) { .ins li { grid-template-columns: 1fr; gap: 2px; } }
+/* trend lines */
+.trends { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.trend { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--surface); min-width: 0; }
+.trend-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.trend-n { font-size: 12.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trend-v { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.trend-d { font-size: 12px; margin: 2px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trend-c { height: 120px; position: relative; }

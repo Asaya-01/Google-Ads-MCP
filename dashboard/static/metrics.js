@@ -194,6 +194,28 @@ const METRICS = {
 };
 
 // What the colours and the "base too small" rule use (config.json "display" overrides these).
+/* Why each headline metric matters: one line, shown with its definition, so
+   every number says what it is for and what a move in it means. */
+const METRIC_WHY = {
+  total_sales: "The top line every plan is set against. Read it with Orders and AOV: the same sales can come from more buyers or bigger baskets, and they need different fixes.",
+  orders: "The count of buying decisions. Orders move with traffic × conversion; if orders fall while sessions hold, the site or the offer is converting worse.",
+  aov: "Revenue per order. It moves with bundles, offers and discount depth: a rise from bundles is healthy, a rise because cheap single-unit orders fell away is not.",
+  cvr: "How well the site turns visits into orders. It falls when cheap or awareness traffic rises, so read it with Perf CVR before blaming the site.",
+  perf_cvr: "Conversion of the paid, affiliate and CRM sessions only: the traffic that is bought to convert. A drop here is a real selling problem, not a traffic-mix effect.",
+  atc_rate: "The first sign of intent. A fall usually points at the landing page, the offer or the traffic quality, hours before orders show it.",
+  atc_to_ic: "Carts that start checkout. A drop points at the cart, shipping cost or offer messaging rather than the ads.",
+  ic_to_order: "Checkouts that pay. A drop points at checkout itself: payment failures, COD rules or GoKwik changes.",
+  blended_roas: "Store-level return on every performance rupee, using Shopify's sales, not platform claims. The number that decides whether to scale spend.",
+  perf_spend: "What the store paid to bring buyers in. Spend is neither good nor bad on its own: judge it with ROAS and CPS.",
+  cps: "Cost of one session. Rising CPS with flat CVR means paying more for the same buyers: an auction or creative problem.",
+  cpp: "Ad spend per platform-reported purchase. Lower is better; platforms count generously, so compare it over time, not with Shopify orders.",
+  sessions: "Store visits from every source. More visits only help if they convert: read it with CVR and the Perf share.",
+  perf_sessions: "Visits the team paid or worked for (ads, affiliates, CRM). Their share of all sessions shows how much growth is bought.",
+  meta_platform_roas: "What Meta claims for its sales campaigns. Use it to rank Meta campaigns against each other, not to judge Meta against the store.",
+  google_platform_roas: "What Google claims for its sales campaigns. Same rule: compare Google campaigns with each other; the store-level truth is Blended ROAS.",
+};
+for (const [k, v] of Object.entries(METRIC_WHY)) if (METRICS[k]) METRICS[k].why = v;
+
 const METRIC_RULES = { flat_below: 0.02, min_orders: 20, min_spend: 5000 };
 
 const mDef = (id) => METRICS[id] || { label: id, format: "count", dir: "neutral" };
@@ -250,6 +272,23 @@ function mPpHtml(diff, dir = "neutral") {
   const cls = dir === "neutral" || d === 0 ? "flat" : (dir === "higher" ? d > 0 : d < 0) ? "up" : "down";
   return `<span class="${cls}">${mFormat("pp", d)}</span>`;
 }
+/* The absolute change between two values of one metric, in its own unit:
+   percentage points for rates, "x" for ratios, ₹ or a count otherwise. */
+function mAbsDelta(id, v, p, suffix) {
+  if (v == null || p == null || !Number.isFinite(v - p)) return "";
+  const f = mDef(id).format, raw = v - p;
+  // round first, so a change too small to show reads as zero, never as "−0.0"
+  const d = f === "percent" ? Math.round(raw * 1000) / 1000 : f === "ratio" || f === "currency2" ? Math.round(raw * 100) / 100 : Math.round(raw);
+  const sign = d > 0 ? "+" : d < 0 ? "−" : "";
+  let t;
+  if (f === "percent") t = d === 0 ? "0.0 pp" : mFormat("pp", d);
+  else if (f === "ratio") t = `${sign}${Math.abs(d).toFixed(2)}x`;
+  else if (f === "currency") t = sign + mCompactInr(Math.abs(d)).replace(/^−/, "");
+  else if (f === "currency2") t = `${sign}₹${Math.abs(d).toFixed(2)}`;
+  else if (f === "count") t = sign + M_INT.format(Math.abs(Math.round(d)));
+  else return "";
+  return `Δ ${t}${suffix || ""}`;
+}
 /* Is the comparison base too small for a change to mean anything? */
 function mSmall(id, pw) {
   if (!pw) return false;
@@ -264,7 +303,7 @@ const mEsc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", 
 /* The (i) next to a label: the registry's definition on hover or focus. */
 function mTip(id, extra) {
   const m = mDef(id);
-  const text = [m.def, m.formula ? `Formula: ${m.formula}.` : "", extra || ""].filter(Boolean).join(" ");
+  const text = [m.def, m.formula ? `Formula: ${m.formula}.` : "", m.why ? `Why it matters: ${m.why}` : "", extra || ""].filter(Boolean).join(" ");
   return text ? `<span class="tip" tabindex="0" role="note" aria-label="${mEsc(text)}" data-tip="${mEsc(text)}">i</span>` : "";
 }
 /* A column header with the metric's name and its (i). */
@@ -284,11 +323,13 @@ function kpiCard(id, o = {}) {
   } else if (!o.loading) {
     const vs = o.prev === undefined ? "" : o.prev === null ? '<span class="kpi-vs">no comparison</span>'
       : `${mDeltaHtml(id, o.change, { small: o.small })}<span class="kpi-vs">vs ${mEsc(mVal(id, o.prev, true) ?? "n/a")}${o.vsLabel ? " " + mEsc(o.vsLabel) : ""}</span>`;
-    body = `<div class="kpi-v">${mEsc(mVal(id, o.value, true))}</div><div class="kpi-d">${vs}</div>${o.sub || scope ? `<div class="kpi-s">${o.sub ? mEsc(o.sub) : ""}${scope}</div>` : ""}`;
+    // the absolute change beside the %: pp for rates, x for ratios, ₹ or a count otherwise
+    const abs = o.small || o.abs === false || o.prev == null || o.change == null ? "" : typeof o.abs === "string" ? o.abs : mAbsDelta(id, o.value, o.prev);
+    body = `<div class="kpi-v">${mEsc(mVal(id, o.value, true))}</div><div class="kpi-d">${vs}</div>${abs ? `<div class="kpi-a">${mEsc(abs)}</div>` : ""}${o.sub || scope ? `<div class="kpi-s">${o.sub ? mEsc(o.sub) : ""}${scope}</div>` : ""}`;
   }
   if (o.spark) body += `<div class="kpi-spark">${o.spark}</div>`;
   const tag = o.href ? "a" : "div";
   return `<${tag} class="kpi${o.hero ? " hero" : ""}" ${o.href ? `href="${o.href}" title="Open ${mEsc(o.hrefLabel || "its tab")}"` : ""} data-metric="${mEsc(id)}">${head}${body}</${tag}>`;
 }
 
-if (typeof module !== "undefined" && module.exports) module.exports = { METRICS, METRIC_RULES, mFormat, mDeltaHtml, mPpHtml, mSmall, kpiCard };
+if (typeof module !== "undefined" && module.exports) module.exports = { METRICS, METRIC_RULES, mFormat, mDeltaHtml, mPpHtml, mSmall, kpiCard, mAbsDelta };
